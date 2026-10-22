@@ -249,7 +249,8 @@
         "type": "specification",
         "link": "entity:spec:adr-061",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role expands ADR to 'architecture decision record', which is not stated in the quote"
       }
     },
     {
@@ -268,7 +269,8 @@
         "type": "specification",
         "link": "new",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'IETF HTTP Semantics' and 'governing status codes', which are not stated in the quote"
       }
     },
     {
@@ -306,7 +308,8 @@
         "type": "software",
         "link": "entity:software:kubernetes",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: quote states pods are scheduled across Kubernetes (K8s) clusters but does not state K8s is a 'container orchestrator'"
       }
     },
     {
@@ -325,7 +328,8 @@
         "type": "software",
         "link": "entity:software:eclipse-mosquitto",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'lightweight C MQTT broker', which is not stated in the quote"
       }
     },
     {
@@ -344,7 +348,8 @@
         "type": "repository",
         "link": "entity:repo:c360studio/semteams",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'program manager', which is not stated in the quote"
       }
     },
     {
@@ -382,7 +387,8 @@
         "type": "software",
         "link": "entity:software:playwright",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'end-to-end browser test framework', whereas the quote only states it drives headless Chromium browser journeys"
       }
     },
     {
@@ -401,7 +407,8 @@
         "type": "specification",
         "link": "entity:spec:mqtt",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'OASIS', which is not stated in the quote"
       }
     },
     {
@@ -420,7 +427,8 @@
         "type": "software",
         "link": "entity:software:mercury-decide",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'System One' and 'Labs', which are not stated in the quote"
       }
     },
     {
@@ -439,7 +447,8 @@
         "type": "organization",
         "link": "entity:org:mercury-bank",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'fintech' and 'operating accounts', which are not stated in the quote"
       }
     },
     {
@@ -648,7 +657,8 @@
         "type": "software",
         "link": "entity:software:semsparql",
         "mention": true,
-        "support": false
+        "support": false,
+        "support_note": "explicit_contradiction: quote states graph-ingest is the sole writer and semsparql is a read-only query consumer"
       }
     },
     {
@@ -667,7 +677,8 @@
         "type": "software",
         "link": "entity:software:semvocab",
         "mention": true,
-        "support": false
+        "support": false,
+        "support_note": "explicit_contradiction: quote states semvocab compiles SHACL shapes offline and runs no inference server"
       }
     },
     {
@@ -686,7 +697,8 @@
         "type": "software",
         "link": "entity:software:playwright",
         "mention": true,
-        "support": false
+        "support": false,
+        "support_note": "explicit_contradiction: quote states Playwright is used only for browser E2E tests and never runs inside the production SemEngine broker"
       }
     },
     {
@@ -705,7 +717,8 @@
         "type": "software",
         "link": "entity:software:semengine",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role claims 'graph ingest' whereas quote states 'graph, transport, mutation, rule engine' without 'ingest'"
       }
     },
     {
@@ -724,7 +737,8 @@
         "type": "software",
         "link": "entity:software:semvocab",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role calls semvocab an 'ontology catalog' whereas quote says it compiles SHACL shapes against the CCO catalog"
       }
     },
     {
@@ -781,7 +795,8 @@
         "type": "organization",
         "link": "entity:org:zurich-instruments",
         "mention": true,
-        "support": true
+        "support": false,
+        "support_note": "unstated_gloss: role claims 'Swiss instrumentation company' which is not stated in the quote"
       }
     },
     {

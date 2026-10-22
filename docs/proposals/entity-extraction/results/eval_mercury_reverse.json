@@ -1,7 +1,16 @@
 {
   "arm": "mercury",
   "order": "reverse",
-  "elapsed_s": 14.97,
+  "gate_thresholds": {
+    "coverage_floor": 0.8,
+    "wrong_confident_ceiling": 0.05,
+    "false_merge_ceiling": 0.0,
+    "confidence_threshold_mercury": 0.55,
+    "confidence_threshold_semselect": 0.55,
+    "support_threshold_yes": 0.6,
+    "support_threshold_no": 0.4
+  },
+  "elapsed_s": 0.01,
   "rows": [
     {
       "case": "b1-01-repo-exact",
@@ -18,7 +27,7 @@
       "support_strict": true,
       "input_tokens": 706,
       "latency_ms": 724,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b1-02-software-portfolio",
@@ -35,7 +44,7 @@
       "support_strict": true,
       "input_tokens": 551,
       "latency_ms": 364,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b1-03-alias-exact",
@@ -52,7 +61,7 @@
       "support_strict": true,
       "input_tokens": 535,
       "latency_ms": 302,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b1-04-adr-pattern",
@@ -69,7 +78,7 @@
       "support_strict": false,
       "input_tokens": 553,
       "latency_ms": 329,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b1-05-rfc-pattern-new",
@@ -86,7 +95,7 @@
       "support_strict": false,
       "input_tokens": 534,
       "latency_ms": 424,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b1-06-org-exact",
@@ -103,7 +112,7 @@
       "support_strict": true,
       "input_tokens": 558,
       "latency_ms": 434,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b2-01-k8s-abbrev",
@@ -116,11 +125,11 @@
       "link_raw": "entity:software:kubernetes",
       "link_conf": 0.9954681330893586,
       "p_support": 0.4378234991142019,
-      "support_mention": false,
-      "support_strict": false,
+      "support_mention": "unsure",
+      "support_strict": "unsure",
       "input_tokens": 545,
       "latency_ms": 259,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b2-02-mosquitto-bm25",
@@ -137,7 +146,7 @@
       "support_strict": false,
       "input_tokens": 611,
       "latency_ms": 285,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b2-03-repo-punct-variant",
@@ -150,11 +159,11 @@
       "link_raw": "entity:repo:c360studio/semteams",
       "link_conf": 0.9965039931552186,
       "p_support": 0.4073334000459302,
-      "support_mention": false,
-      "support_strict": false,
+      "support_mention": "unsure",
+      "support_strict": "unsure",
       "input_tokens": 704,
       "latency_ms": 365,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b2-04-otel-collector",
@@ -171,7 +180,7 @@
       "support_strict": true,
       "input_tokens": 565,
       "latency_ms": 411,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b2-05-playwright-e2e",
@@ -188,7 +197,7 @@
       "support_strict": false,
       "input_tokens": 553,
       "latency_ms": 509,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b2-06-mqtt-spec-variant",
@@ -205,7 +214,7 @@
       "support_strict": false,
       "input_tokens": 567,
       "latency_ms": 360,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b3-01-mercury-model",
@@ -214,7 +223,7 @@
       "type": "software",
       "type_raw": "software",
       "type_conf": 0.9994333107470136,
-      "link": "entity:software:mercury-decide",
+      "link": "unsure",
       "link_raw": "entity:software:mercury-decide",
       "link_conf": 0.5420639850457593,
       "p_support": 0.01798620588257211,
@@ -222,7 +231,7 @@
       "support_strict": false,
       "input_tokens": 596,
       "latency_ms": 307,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b3-02-mercury-bank",
@@ -239,7 +248,7 @@
       "support_strict": false,
       "input_tokens": 584,
       "latency_ms": 578,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b3-03-vault-hashicorp",
@@ -256,7 +265,7 @@
       "support_strict": true,
       "input_tokens": 580,
       "latency_ms": 353,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b3-04-person-novel",
@@ -273,7 +282,7 @@
       "support_strict": true,
       "input_tokens": 512,
       "latency_ms": 261,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b3-05-event-novel",
@@ -290,7 +299,7 @@
       "support_strict": true,
       "input_tokens": 550,
       "latency_ms": 280,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b3-06-concept-novel",
@@ -307,7 +316,7 @@
       "support_strict": true,
       "input_tokens": 549,
       "latency_ms": 354,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b4-01-unmentioned-k8s",
@@ -324,7 +333,7 @@
       "support_strict": false,
       "input_tokens": 531,
       "latency_ms": 362,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b4-02-unmentioned-kafka",
@@ -341,7 +350,7 @@
       "support_strict": false,
       "input_tokens": 517,
       "latency_ms": 282,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b4-03-unmentioned-postgres",
@@ -358,7 +367,7 @@
       "support_strict": false,
       "input_tokens": 507,
       "latency_ms": 289,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b4-04-unmentioned-redis",
@@ -375,7 +384,7 @@
       "support_strict": false,
       "input_tokens": 501,
       "latency_ms": 393,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b4-05-unmentioned-person",
@@ -392,7 +401,7 @@
       "support_strict": false,
       "input_tokens": 517,
       "latency_ms": 320,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b4-06-unmentioned-graphql",
@@ -409,7 +418,7 @@
       "support_strict": false,
       "input_tokens": 510,
       "latency_ms": 293,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b5-01-role-contradicted-semsparql",
@@ -426,7 +435,7 @@
       "support_strict": false,
       "input_tokens": 549,
       "latency_ms": 303,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b5-02-role-contradicted-semvocab",
@@ -443,7 +452,7 @@
       "support_strict": false,
       "input_tokens": 558,
       "latency_ms": 371,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b5-03-role-contradicted-playwright",
@@ -460,7 +469,7 @@
       "support_strict": false,
       "input_tokens": 561,
       "latency_ms": 357,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b5-04-role-supported-semengine",
@@ -477,7 +486,7 @@
       "support_strict": false,
       "input_tokens": 599,
       "latency_ms": 466,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b5-05-role-supported-semvocab",
@@ -490,11 +499,11 @@
       "link_raw": "entity:software:semvocab",
       "link_conf": 0.9940541512452612,
       "p_support": 0.4073334000459302,
-      "support_mention": false,
-      "support_strict": false,
+      "support_mention": "unsure",
+      "support_strict": "unsure",
       "input_tokens": 554,
       "latency_ms": 439,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b5-06-role-supported-jetstream",
@@ -511,7 +520,7 @@
       "support_strict": true,
       "input_tokens": 558,
       "latency_ms": 311,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b6-01-unicode-goedel",
@@ -528,7 +537,7 @@
       "support_strict": true,
       "input_tokens": 554,
       "latency_ms": 520,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b6-02-unicode-zurich",
@@ -545,7 +554,7 @@
       "support_strict": false,
       "input_tokens": 554,
       "latency_ms": 525,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b6-03-unicode-angstrom",
@@ -562,7 +571,7 @@
       "support_strict": true,
       "input_tokens": 561,
       "latency_ms": 1647,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b6-04-unicode-chollet-folded",
@@ -579,7 +588,7 @@
       "support_strict": true,
       "input_tokens": 584,
       "latency_ms": 314,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b6-05-unicode-cafe-mesh",
@@ -596,7 +605,7 @@
       "support_strict": true,
       "input_tokens": 553,
       "latency_ms": 492,
-      "cached": false
+      "cached": true
     },
     {
       "case": "b6-06-unicode-nfd-repo",
@@ -613,7 +622,7 @@
       "support_strict": true,
       "input_tokens": 549,
       "latency_ms": 281,
-      "cached": false
+      "cached": true
     }
   ],
   "by_band": {
@@ -626,8 +635,8 @@
       "link_ok": "6/6",
       "false_merge_rate": 0.0,
       "support_coverage": 1.0,
-      "support_ok": "4/6",
-      "support_wrong_confident": 0.333,
+      "support_ok": "6/6",
+      "support_wrong_confident": 0.0,
       "input_tokens": 3437,
       "median_ms": 424
     },
@@ -639,9 +648,9 @@
       "link_coverage": 1.0,
       "link_ok": "6/6",
       "false_merge_rate": 0.0,
-      "support_coverage": 1.0,
-      "support_ok": "1/6",
-      "support_wrong_confident": 0.833,
+      "support_coverage": 0.667,
+      "support_ok": "4/6",
+      "support_wrong_confident": 0.0,
       "input_tokens": 3545,
       "median_ms": 365
     },
@@ -650,12 +659,12 @@
       "type_coverage": 1.0,
       "type_ok": "5/6",
       "type_wrong_confident": 0.167,
-      "link_coverage": 1.0,
-      "link_ok": "6/6",
+      "link_coverage": 0.833,
+      "link_ok": "5/6",
       "false_merge_rate": 0.0,
       "support_coverage": 1.0,
-      "support_ok": "4/6",
-      "support_wrong_confident": 0.333,
+      "support_ok": "6/6",
+      "support_wrong_confident": 0.0,
       "input_tokens": 3371,
       "median_ms": 353
     },
@@ -681,9 +690,9 @@
       "link_coverage": 0.833,
       "link_ok": "5/6",
       "false_merge_rate": 0.0,
-      "support_coverage": 1.0,
-      "support_ok": "4/6",
-      "support_wrong_confident": 0.333,
+      "support_coverage": 0.833,
+      "support_ok": "5/6",
+      "support_wrong_confident": 0.0,
       "input_tokens": 3379,
       "median_ms": 371
     },
@@ -696,8 +705,8 @@
       "link_ok": "6/6",
       "false_merge_rate": 0.0,
       "support_coverage": 1.0,
-      "support_ok": "5/6",
-      "support_wrong_confident": 0.167,
+      "support_ok": "6/6",
+      "support_wrong_confident": 0.0,
       "input_tokens": 3355,
       "median_ms": 520
     }

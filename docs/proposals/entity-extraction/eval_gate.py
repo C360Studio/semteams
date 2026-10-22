@@ -24,7 +24,8 @@ import urllib.request
 HERE = pathlib.Path(__file__).resolve().parent
 CORPUS_PATH = HERE / "corpus_v1.json"
 CACHE_DIR = HERE / "eval_cache"
-LEDGER_PATH = HERE / "mercury_ledger.json"
+RESULTS_DIR = HERE / "results"
+LEDGER_PATH = RESULTS_DIR / "mercury_ledger.json"
 
 MERCURY_PRICE_PER_M = 0.04
 MERCURY_LEDGER_TOKEN_CAP = 2_000_000
@@ -328,7 +329,15 @@ def load_ledger() -> dict:
     return {"input_tokens": 0, "requests": 0, "runs": []}
 
 
-def call_decider(backend: str, order: str, case: dict, algo: AlgoFloor, base_url: str) -> dict:
+def call_decider(
+    backend: str,
+    order: str,
+    case: dict,
+    algo: AlgoFloor,
+    base_url: str,
+    thresholds: dict,
+    run_state: dict,
+) -> dict:
     req_body = build_decider_request(case, algo, order, backend)
     req_hash = hashlib.sha256(json.dumps(req_body, sort_keys=True).encode()).hexdigest()[:16]
     cache_file = CACHE_DIR / backend / order / f"{case['id']}_{req_hash}.json"
@@ -336,7 +345,14 @@ def call_decider(backend: str, order: str, case: dict, algo: AlgoFloor, base_url
 
     if cache_file.exists():
         cached = json.loads(cache_file.read_text())
-        return parse_decider_response(case, cached["response"], cached.get("latency_ms", 0), cached_hit=True)
+        return parse_decider_response(
+            case,
+            cached["response"],
+            cached.get("latency_ms", 0),
+            cached_hit=True,
+            backend=backend,
+            thresholds=thresholds,
+        )
 
     if backend == "semselect":
         url = base_url.rstrip("/") + "/v1/systemone"
@@ -350,6 +366,8 @@ def call_decider(backend: str, order: str, case: dict, algo: AlgoFloor, base_url
         ledger = load_ledger()
         if ledger["input_tokens"] >= MERCURY_LEDGER_TOKEN_CAP:
             sys.exit(f"Mercury ledger token cap ({MERCURY_LEDGER_TOKEN_CAP}) reached")
+        if run_state["run_tokens"] >= MERCURY_RUN_TOKEN_CAP:
+            sys.exit(f"Mercury per-run token cap ({MERCURY_RUN_TOKEN_CAP}) reached")
     else:
         sys.exit(f"Unknown backend: {backend}")
 
@@ -363,8 +381,15 @@ def call_decider(backend: str, order: str, case: dict, algo: AlgoFloor, base_url
             status, raw = r.status, r.read()
     except urllib.error.HTTPError as e:
         status, raw = e.code, e.read()
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"{backend} network error on {case['id']}: {e}") from e
     ms = round((time.monotonic() - t0) * 1000)
-    resp = json.loads(raw.decode("utf-8", errors="replace"))
+    try:
+        resp = json.loads(raw.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError as e:
+        raise RuntimeError(
+            f"{backend} invalid JSON (HTTP {status}) on {case['id']}: {raw.decode('utf-8', errors='replace')[:500]}"
+        ) from e
 
     if status != 200:
         raise RuntimeError(f"{backend} HTTP {status} on {case['id']}: {resp}")
@@ -374,9 +399,11 @@ def call_decider(backend: str, order: str, case: dict, algo: AlgoFloor, base_url
         if "input_tokens" not in usage:
             raise RuntimeError(f"Missing usage.input_tokens on {case['id']} (budget guard)")
         used = usage["input_tokens"]
+        run_state["run_tokens"] += used
         ledger = load_ledger()
         ledger["input_tokens"] += used
         ledger["requests"] += 1
+        RESULTS_DIR.mkdir(parents=True, exist_ok=True)
         LEDGER_PATH.write_text(json.dumps(ledger, indent=2))
 
     cache_file.write_text(
@@ -386,10 +413,19 @@ def call_decider(backend: str, order: str, case: dict, algo: AlgoFloor, base_url
             ensure_ascii=False,
         )
     )
-    return parse_decider_response(case, resp, ms, cached_hit=False)
+    return parse_decider_response(
+        case, resp, ms, cached_hit=False, backend=backend, thresholds=thresholds
+    )
 
 
-def parse_decider_response(case: dict, resp: dict, ms: int, cached_hit: bool) -> dict:
+def parse_decider_response(
+    case: dict,
+    resp: dict,
+    ms: int,
+    cached_hit: bool,
+    backend: str,
+    thresholds: dict,
+) -> dict:
     ans = resp.get("answers") or {}
     t_ans = ans.get("type") or {}
     l_ans = ans.get("link") or {}
@@ -401,14 +437,19 @@ def parse_decider_response(case: dict, resp: dict, ms: int, cached_hit: bool) ->
     l_conf = l_ans.get("confidence")
     p_yes = s_ans.get("noul", s_ans.get("probability", s_ans.get("p_yes")))
 
-    # Apply confidence thresholds (§6.2 / §7.1): low confidence falls back to unsure
-    type_pred = t_choice if (t_conf is not None and t_conf >= 0.45) else "unsure"
-    link_pred = l_choice if (l_conf is not None and l_conf >= 0.45) else "unsure"
+    # Apply declared gate thresholds from corpus_v1.json.gate_thresholds (§6.2 / §7.1):
+    # low confidence or deadband support falls back to unsure.
+    conf_thresh = thresholds[f"confidence_threshold_{backend}"]
+    supp_yes = thresholds["support_threshold_yes"]
+    supp_no = thresholds["support_threshold_no"]
+
+    type_pred = t_choice if (t_conf is not None and t_conf >= conf_thresh) else "unsure"
+    link_pred = l_choice if (l_conf is not None and l_conf >= conf_thresh) else "unsure"
     if p_yes is None:
         support_pred = "unsure"
-    elif p_yes >= 0.55:
+    elif p_yes >= supp_yes:
         support_pred = True
-    elif p_yes <= 0.45:
+    elif p_yes <= supp_no:
         support_pred = False
     else:
         support_pred = "unsure"
@@ -433,7 +474,12 @@ def parse_decider_response(case: dict, resp: dict, ms: int, cached_hit: bool) ->
     }
 
 
-def grade_arm(cases: list[dict], rows: list[dict], support_field: str = "support_mention") -> dict:
+def grade_arm(
+    cases: list[dict],
+    rows: list[dict],
+    support_field: str = "support_strict",
+    expect_support_key: str = "support",
+) -> dict:
     by_id = {c["id"]: c for c in cases}
     bands: dict[str, list[dict]] = {}
     for r in rows:
@@ -461,13 +507,16 @@ def grade_arm(cases: list[dict], rows: list[dict], support_field: str = "support
             if r.get("latency_ms"):
                 latencies.append(r["latency_ms"])
 
-            # In B4 (unsupported claim), if support is correctly False, the extractor writes NO entity,
-            # so type/link are gated off by support=False. Still grade type/link on B1,B2,B3,B5,B6;
-            # on B4, if support==False, count type/link as safely suppressed (ok).
+            # Grade support_field against expect[expect_support_key]
+            # ("mention" for mention-level support, "support" for strict text-only role entailment)
             s_val = r[support_field]
+            if expect_support_key == "not_contradicted":
+                exp_s = exp["mention"] and not str(exp.get("support_note", "")).startswith("explicit_contradiction:")
+            else:
+                exp_s = exp[expect_support_key]
             if s_val != "unsure":
                 supp_cov += 1
-                if s_val == exp["support"]:
+                if s_val == exp_s:
                     supp_ok += 1
                 else:
                     supp_wrong_conf += 1
@@ -528,46 +577,75 @@ def main():
     order = sys.argv[2] if len(sys.argv) > 2 else "forward"
     base_url = sys.argv[3] if len(sys.argv) > 3 else "http://127.0.0.1:8084"
 
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     corpus = json.loads(CORPUS_PATH.read_text())
+    thresholds = corpus["gate_thresholds"]
     algo = AlgoFloor(corpus["seed_catalog"])
     cases = corpus["cases"]
 
     if mode == "algo":
         rows = [algo.evaluate_case(c) for c in cases]
-        summary_mention = grade_arm(cases, rows, support_field="support_mention")
-        summary_strict = grade_arm(cases, rows, support_field="support_strict")
+        summary_mention_vs_mention = grade_arm(
+            cases, rows, support_field="support_mention", expect_support_key="mention"
+        )
+        summary_mention_vs_strict = grade_arm(
+            cases, rows, support_field="support_mention", expect_support_key="support"
+        )
+        summary_strict = grade_arm(
+            cases, rows, support_field="support_strict", expect_support_key="support"
+        )
         out = {
             "arm": "algo_t0_t1",
+            "gate_thresholds": thresholds,
             "rows": rows,
-            "by_band_mention_support": summary_mention,
+            "by_band_mention_check": summary_mention_vs_mention,
+            "by_band_mention_as_role_support": summary_mention_vs_strict,
             "by_band_strict_role_support": summary_strict,
         }
-        (HERE / "eval_algo_t0_t1.json").write_text(json.dumps(out, indent=2, ensure_ascii=False))
-        print("=== ALGO FLOOR (T0/T1) — MENTION SUPPORT ===")
-        print(json.dumps(summary_mention, indent=2))
-        print("=== ALGO FLOOR (T0/T1) — STRICT ROLE SUPPORT ===")
+        (RESULTS_DIR / "eval_algo_t0_t1.json").write_text(
+            json.dumps(out, indent=2, ensure_ascii=False)
+        )
+        print("=== ALGO FLOOR (T0/T1) — MENTION CHECK (vs expect.mention) ===")
+        print(json.dumps(summary_mention_vs_mention, indent=2))
+        print("=== ALGO FLOOR (T0/T1) — MENTION AS ROLE SUPPORT PROXY (vs expect.support) ===")
+        print(json.dumps(summary_mention_vs_strict, indent=2))
+        print("=== ALGO FLOOR (T0/T1) — STRICT ROLE SUPPORT (vs expect.support) ===")
         print(json.dumps(summary_strict, indent=2))
         return
 
     if mode in ("mercury", "semselect"):
         rows = []
+        run_state = {"run_tokens": 0}
         t_start = time.monotonic()
         for c in cases:
-            r = call_decider(mode, order, c, algo, base_url)
+            r = call_decider(mode, order, c, algo, base_url, thresholds, run_state)
             rows.append(r)
             print(
                 f"[{mode}:{order}] {c['id']} -> type={r['type']}({r['type_conf']}) "
                 f"link={r['link']}({r['link_conf']}) p_supp={r['p_support']} tok={r['input_tokens']} ms={r['latency_ms']}"
             )
-        summary = grade_arm(cases, rows, support_field="support_strict")
+        if mode == "mercury" and run_state["run_tokens"] > 0:
+            ledger = load_ledger()
+            ledger["runs"].append(
+                {
+                    "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                    "mode": f"eval_{mode}_{order}",
+                    "input_tokens": run_state["run_tokens"],
+                }
+            )
+            LEDGER_PATH.write_text(json.dumps(ledger, indent=2))
+        summary = grade_arm(cases, rows, support_field="support_strict", expect_support_key="support")
         out = {
             "arm": mode,
             "order": order,
+            "gate_thresholds": thresholds,
             "elapsed_s": round(time.monotonic() - t_start, 2),
             "rows": rows,
             "by_band": summary,
         }
-        (HERE / f"eval_{mode}_{order}.json").write_text(json.dumps(out, indent=2, ensure_ascii=False))
+        (RESULTS_DIR / f"eval_{mode}_{order}.json").write_text(
+            json.dumps(out, indent=2, ensure_ascii=False)
+        )
         print(f"=== {mode.upper()} ({order}) BY BAND ===")
         print(json.dumps(summary, indent=2))
         return
@@ -575,51 +653,108 @@ def main():
     if mode == "hybrid":
         backend = order  # e.g. python3 eval_gate.py hybrid mercury forward
         opt_order = sys.argv[3] if len(sys.argv) > 3 else "forward"
-        model_data = json.loads((HERE / f"eval_{backend}_{opt_order}.json").read_text())
+        model_data = json.loads((RESULTS_DIR / f"eval_{backend}_{opt_order}.json").read_text())
         model_by_id = {r["case"]: r for r in model_data["rows"]}
         hybrid_rows = []
-        model_calls = 0
+        cue_rows = []
+        type_link_calls = 0
+        cue_calls = 0
+        strict_support_calls = 0
+
         for c in cases:
             a_row = algo.evaluate_case(c)
             m_row = model_by_id[c["id"]]
-            # Gate 1: T0 mention check suppresses B4 before any model call
+            # Gate 1 (non-oracle): T0 mention check suppresses unmentioned claims before any model call
             if not a_row["mention"]:
                 hybrid_rows.append(a_row)
+                cue_rows.append(a_row)
                 continue
-            # Gate 2: T0/T1 owns type and link whenever resolved; Decider only fills unsure (B3)
+
+            # Gate 2 (non-oracle): T0/T1 owns type and link whenever resolved; Decider only fills unsure
             need_model_type = a_row["type"] == "unsure"
             need_model_link = a_row["link"] == "unsure"
-            # Gate 3: B5 role-support check uses Decider noul; B1/B2/B6 use T0 mention check
-            need_model_support = c["band"] == "B5"
-            used_model = need_model_type or need_model_link or need_model_support
-            if used_model:
-                model_calls += 1
-            # For B5, treat p_support >= 0.50 as True when evaluated by Decider
-            p_supp = m_row.get("p_support")
-            m_supp = (p_supp >= 0.50) if p_supp is not None else "unsure"
-            row = {
-                "case": c["id"],
-                "band": c["band"],
-                "tier": f"T0/T1+{backend}" if used_model else a_row["tier"],
-                "type": m_row["type"] if need_model_type else a_row["type"],
-                "link": m_row["link"] if need_model_link else a_row["link"],
-                "support_mention": m_supp if need_model_support else a_row["support_mention"],
-                "support_strict": m_supp if need_model_support else a_row["support_mention"],
-                "input_tokens": m_row["input_tokens"] if used_model else 0,
-                "latency_ms": m_row["latency_ms"] if used_model else 0,
-            }
-            hybrid_rows.append(row)
-        summary = grade_arm(cases, hybrid_rows, support_field="support_strict")
+            if need_model_type or need_model_link:
+                type_link_calls += 1
+
+            # Gate 3a (non-oracle strict role-support router): every mentioned claim uses Decider noul
+            # (thresholded using corpus_v1.json.gate_thresholds via m_row["support_strict"])
+            strict_support_calls += 1
+            hybrid_rows.append(
+                {
+                    "case": c["id"],
+                    "band": c["band"],
+                    "tier": f"T0/T1+{backend}",
+                    "type": m_row["type"] if need_model_type else a_row["type"],
+                    "link": m_row["link"] if need_model_link else a_row["link"],
+                    "mention": a_row["mention"],
+                    "support_mention": a_row["support_mention"],
+                    "support_strict": m_row["support_strict"],
+                    "input_tokens": m_row["input_tokens"],
+                    "latency_ms": m_row["latency_ms"],
+                }
+            )
+
+            # Gate 3b (non-oracle lexical contradiction-cue router): calls Decider only when
+            # T0/T1 abstains on type/link OR quote vs. role contains a lexical negation/contrast cue.
+            has_cue = algo.has_contradiction_cue(c["role"], c["quote"])
+            used_cue_model = need_model_type or need_model_link or has_cue
+            if used_cue_model:
+                cue_calls += 1
+            cue_rows.append(
+                {
+                    "case": c["id"],
+                    "band": c["band"],
+                    "tier": f"T0/T1+{backend}-cue" if used_cue_model else a_row["tier"],
+                    "type": m_row["type"] if need_model_type else a_row["type"],
+                    "link": m_row["link"] if need_model_link else a_row["link"],
+                    "mention": a_row["mention"],
+                    "support_mention": m_row["support_strict"] if has_cue else a_row["support_mention"],
+                    "support_strict": m_row["support_strict"] if used_cue_model else a_row["support_strict"],
+                    "input_tokens": m_row["input_tokens"] if used_cue_model else 0,
+                    "latency_ms": m_row["latency_ms"] if used_cue_model else 0,
+                }
+            )
+
+        summary_strict = grade_arm(
+            cases, hybrid_rows, support_field="support_strict", expect_support_key="support"
+        )
+        summary_cue_strict = grade_arm(
+            cases, cue_rows, support_field="support_strict", expect_support_key="support"
+        )
+        summary_cue_not_contradicted = grade_arm(
+            cases,
+            cue_rows,
+            support_field="support_mention",
+            expect_support_key="not_contradicted",
+        )
         out = {
             "arm": f"hybrid_{backend}_{opt_order}",
-            "model_calls": f"{model_calls}/{len(cases)}",
-            "total_input_tokens": sum(r["input_tokens"] for r in hybrid_rows),
-            "by_band": summary,
+            "gate_thresholds": thresholds,
+            "routing_policy": (
+                "non-oracle: T0 mention gate (suppresses unmentioned claims) + "
+                "T0/T1 type/link lock (model type/link only when T0/T1 returns unsure)"
+            ),
+            "type_link_only_model_calls": f"{type_link_calls}/{len(cases)}",
+            "cue_router_model_calls": f"{cue_calls}/{len(cases)}",
+            "strict_support_model_calls": f"{strict_support_calls}/{len(cases)}",
+            "total_input_tokens_strict_support": sum(r["input_tokens"] for r in hybrid_rows),
+            "total_input_tokens_cue_router": sum(r["input_tokens"] for r in cue_rows),
+            "by_band": summary_strict,
+            "by_band_cue_router_strict_support": summary_cue_strict,
+            "by_band_cue_router_contradiction_and_mention": summary_cue_not_contradicted,
             "rows": hybrid_rows,
+            "rows_cue_router": cue_rows,
         }
-        (HERE / f"eval_hybrid_{backend}_{opt_order}.json").write_text(json.dumps(out, indent=2, ensure_ascii=False))
-        print(f"=== GATED HYBRID (T0/T1 + {backend}:{opt_order}) — calls={model_calls}/{len(cases)} ===")
-        print(json.dumps(summary, indent=2))
+        (RESULTS_DIR / f"eval_hybrid_{backend}_{opt_order}.json").write_text(
+            json.dumps(out, indent=2, ensure_ascii=False)
+        )
+        print(
+            f"=== GATED HYBRID (T0/T1 + {backend}:{opt_order}) — "
+            f"type_link_calls={type_link_calls}/{len(cases)} "
+            f"cue_calls={cue_calls}/{len(cases)} "
+            f"strict_support_calls={strict_support_calls}/{len(cases)} ==="
+        )
+        print(json.dumps(summary_strict, indent=2))
         return
 
     sys.exit(f"Unknown mode: {mode}")

@@ -14,7 +14,8 @@ import json, os, sys, time, urllib.request, urllib.error, pathlib
 
 HERE = pathlib.Path(__file__).resolve().parent
 FIX = HERE / "fixtures"
-LEDGER = HERE / "mercury_ledger.json"
+RESULTS = HERE / "results"
+LEDGER = RESULTS / "mercury_ledger.json"
 
 # Budget: owner approved < $5 total for Mercury smoke runs. Mercury Decide lists
 # $0.04 / 1M input tokens (output free). Cap the whole ledger far below that.
@@ -95,6 +96,9 @@ def post(url, body, headers, timeout=120):
             status, raw = r.status, r.read()
     except urllib.error.HTTPError as e:
         status, raw = e.code, e.read()
+    except urllib.error.URLError as e:
+        ms = round((time.monotonic() - t0) * 1000)
+        return 0, {"_error": str(e)}, ms
     ms = round((time.monotonic() - t0) * 1000)
     try:
         parsed = json.loads(raw)
@@ -142,6 +146,7 @@ def load_ledger():
 def main():
     backend = sys.argv[1] if len(sys.argv) > 1 else "semselect"
     (FIX / backend / STATE_MODE).mkdir(parents=True, exist_ok=True)
+    RESULTS.mkdir(parents=True, exist_ok=True)
     results, spans_report = [], []
     if backend == "semselect":
         url = (sys.argv[3] if len(sys.argv) > 3 and sys.argv[2] == "--url" else "http://127.0.0.1:8084") + "/v1/systemone"
@@ -197,7 +202,7 @@ def main():
         print("SPANS")
         for s in spans_report:
             print(json.dumps(s, ensure_ascii=False))
-    (HERE / f"summary_{backend}_{STATE_MODE}.json").write_text(json.dumps(
+    (RESULTS / f"summary_{backend}_{STATE_MODE}.json").write_text(json.dumps(
         {"results": results, "spans": spans_report}, indent=2, ensure_ascii=False))
 
 
