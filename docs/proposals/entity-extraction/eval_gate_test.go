@@ -57,6 +57,14 @@ func TestAlgoFloorAndCatalogRegimes(t *testing.T) {
 			t.Fatalf("warm band %s failed: %+v", b, bs)
 		}
 	}
+	for name, b2 := range map[string]bandSummary{
+		"portfolio": out.ByBandPortfolioCatalog["B2"],
+		"empty":     out.ByBandEmptyCatalog["B2"],
+	} {
+		if b2.SupportOK != "5/6" || b2.SupportWrongConfident != 0.167 {
+			t.Fatalf("%s catalog B2 mention check = (%s, wc=%v), want (5/6, wc=0.167 on b2-02)", name, b2.SupportOK, b2.SupportWrongConfident)
+		}
+	}
 	assertOrWriteJSON(t, filepath.Join("results", "eval_algo_t0_t1.json"), out)
 }
 
@@ -84,12 +92,13 @@ func TestDeciderAndHybridArmsMatchResults(t *testing.T) {
 
 		agreeOut := evaluateAgreeArm(cp, fwdOut, revOut, backend)
 		assertOrWriteJSON(t, filepath.Join("results", "eval_hybrid_agree_"+backend+".json"), agreeOut)
-		verifyAgreeAndContradictionInvariants(t, backend, hFwd, hRev, agreeOut)
+		verifyAgreeAndContradictionInvariants(t, cp.GateThresholds, backend, hFwd, hRev, agreeOut)
 	}
 }
 
 func verifyAgreeAndContradictionInvariants(
 	t *testing.T,
+	th gateThresholds,
 	backend string,
 	hFwd, hRev hybridEvalOutput,
 	agreeOut agreeEvalOutput,
@@ -106,6 +115,19 @@ func verifyAgreeAndContradictionInvariants(
 		if ab.TypeWrongConfident != 0.0 || ab.FalseMergeRate != 0.0 || ab.SupportWrongConfident != 0.0 {
 			t.Fatalf("%s agree arm had non-zero wrong_confident/false_merge on %s: %+v", backend, b, ab)
 		}
+	}
+	for _, b := range []string{"B1", "B2", "B5", "B6"} {
+		if hFwd.ByBand[b].TypeOK != "6/6" || hFwd.ByBand[b].LinkOK != "6/6" ||
+			hRev.ByBand[b].TypeOK != "6/6" || hRev.ByBand[b].LinkOK != "6/6" {
+			t.Fatalf("%s hybrid failed to preserve T0/T1 lock on %s: fwd=%+v rev=%+v", backend, b, hFwd.ByBand[b], hRev.ByBand[b])
+		}
+	}
+	if hFwd.ByBand["B3"].TypeOK != "6/6" || hFwd.ByBand["B3"].LinkOK != "6/6" {
+		t.Fatalf("%s/forward hybrid B3 = %+v, want 6/6 Type and 6/6 Link", backend, hFwd.ByBand["B3"])
+	}
+	ab3 := agreeOut.ByBandStrictBothAboveFloor["B3"]
+	if ab3.TypeCoverage < th.CoverageFloor || ab3.LinkCoverage < th.CoverageFloor {
+		t.Fatalf("%s agree B3 coverage below %v floor: %+v", backend, th.CoverageFloor, ab3)
 	}
 }
 
@@ -130,6 +152,22 @@ func TestGateSensitivity(t *testing.T) {
 	// 2. Verify agreeStrict catches option-order disagreement (b3-02 organization vs software)
 	if agreeStrict("organization", "software") != "unsure" {
 		t.Fatalf("sensitivity failure: agreeStrict did not abstain on disagreeing option orders")
+	}
+	// 3. Verify resolveAgreeCase abstains to "unsure" when forward and reverse contradiction flags disagree
+	af := newAlgoFloor(cp.SeedCatalog)
+	var cueCase corpusCase
+	for _, c := range cp.Cases {
+		if c.ID == "b5-01-role-contradicted-semsparql" {
+			cueCase = c
+			break
+		}
+	}
+	aRow := af.evaluateCase(cueCase)
+	fRow := evalRow{SupportContradiction: false}
+	rRow := evalRow{SupportContradiction: true}
+	sRow, _, _ := resolveAgreeCase(cueCase, af, aRow, fRow, rRow, "mercury", 0.55)
+	if sRow.SupportContradiction != "unsure" {
+		t.Fatalf("sensitivity failure: resolveAgreeCase returned %v on contradiction-flag order disagreement, want unsure", sRow.SupportContradiction)
 	}
 }
 

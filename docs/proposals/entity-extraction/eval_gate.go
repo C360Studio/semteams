@@ -484,8 +484,8 @@ func buildHybridRows(
 	return hybridRows, cueRows, tlCalls, cueCalls, strictCalls
 }
 
-// evaluateAgreeArm implements Arm 5 (Fable finding A3): non-oracle Gated Hybrid
-// with both-orders agreement (forward == reverse) on the residual.
+// evaluateAgreeArm implements Arm 5: non-oracle Gated Hybrid with both-orders
+// agreement (forward == reverse) on the residual.
 func evaluateAgreeArm(cp corpus, fwdOut, revOut modelEvalOutput, backend string) agreeEvalOutput {
 	af := newAlgoFloor(cp.SeedCatalog)
 	fwdByID := make(map[string]evalRow, len(fwdOut.Rows))
@@ -508,7 +508,7 @@ func evaluateAgreeArm(cp corpus, fwdOut, revOut modelEvalOutput, backend string)
 			continue
 		}
 		fRow, rRow := fwdByID[c.ID], revByID[c.ID]
-		sRow, mRow, used := resolveAgreeCase(c, aRow, fRow, rRow, backend, confFloor)
+		sRow, mRow, used := resolveAgreeCase(c, af, aRow, fRow, rRow, backend, confFloor)
 		if used {
 			residualCases++
 			totalRequests += 2
@@ -540,15 +540,14 @@ func evaluateAgreeArm(cp corpus, fwdOut, revOut modelEvalOutput, backend string)
 
 func resolveAgreeCase(
 	c corpusCase,
+	af *algoFloor,
 	aRow, fRow, rRow evalRow,
 	backend string,
 	confFloor float64,
 ) (evalRow, evalRow, bool) {
 	needType := aRow.Type == "unsure"
 	needLink := aRow.Link == "unsure"
-	hasCue := strings.Contains(foldText(c.Quote), "never") ||
-		strings.Contains(foldText(c.Quote), "no ") ||
-		strings.Contains(foldText(c.Quote), "read-only")
+	hasCue := af.hasContradictionCue(c.Role, c.Quote)
 	used := needType || needLink || hasCue
 
 	sType, mType := aRow.Type, aRow.Type
@@ -562,8 +561,12 @@ func resolveAgreeCase(
 		mLink = agreeMean(fRow.LinkRaw, rRow.LinkRaw, fRow.LinkConf, rRow.LinkConf, confFloor)
 	}
 	suppContra := aRow.SupportContradiction
-	if hasCue && fRow.SupportContradiction == rRow.SupportContradiction {
-		suppContra = fRow.SupportContradiction
+	if hasCue {
+		if fRow.SupportContradiction == rRow.SupportContradiction {
+			suppContra = fRow.SupportContradiction
+		} else {
+			suppContra = "unsure"
+		}
 	}
 	toks, ms := 0, 0
 	tier := aRow.Tier
