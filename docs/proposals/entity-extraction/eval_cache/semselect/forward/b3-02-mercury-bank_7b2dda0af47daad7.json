@@ -1,0 +1,78 @@
+{
+  "request": {
+    "state": "Mercury provides FDIC-insured treasury accounts and wire APIs for venture-backed technology companies.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Mercury\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Mercury\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:org:mercury-bank": "Mercury (organization): Financial technology company offering banking and treasury accounts for startups",
+          "entity:software:mercury-decide": "Mercury (software): Inception Labs System One decision model serving /v1/decisions",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Mercury\" is \"fintech provider holding startup treasury and operating accounts\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 882,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "organization",
+        "probabilities": {
+          "person": 0.0006740339478056299,
+          "organization": 0.8606230274757047,
+          "software": 0.05082107294407873,
+          "repository": 0.005684097383108961,
+          "specification": 0.003936255824689653,
+          "event": 0.002018608136263757,
+          "concept": 0.012303931633288245,
+          "not_an_entity": 0.01827411742678127,
+          "unsure": 0.045664855228278865
+        },
+        "confidence": 0.8432009059101678
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:org:mercury-bank",
+        "probabilities": {
+          "entity:org:mercury-bank": 0.8442818137429096,
+          "entity:software:mercury-decide": 0.002668866297217582,
+          "new": 0.11459468319856943,
+          "unsure": 0.03845463676130338
+        },
+        "confidence": 0.7923757516572127
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.7493669585209242
+      }
+    },
+    "usage": {
+      "input_tokens": 410,
+      "output_tokens": 0
+    }
+  }
+}

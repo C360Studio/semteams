@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "🧪 In 2019, François Chollet introduced the Abstraction and Reasoning Corpus (ARC) to measure fluid intelligence.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Francois Chollet\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Francois Chollet\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:person:francois-chollet": "François Chollet (person): AI researcher, creator of Keras and the Abstraction and Reasoning Corpus (ARC)",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Francois Chollet\" is \"creator of the Abstraction and Reasoning Corpus (ARC) benchmark\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 951,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "person",
+        "probabilities": {
+          "person": 0.965327947280575,
+          "organization": 0.0022828726954923296,
+          "software": 0.0031497401407911464,
+          "repository": 0.0032033514126293063,
+          "specification": 0.0017537345561646697,
+          "event": 0.0035521735932125768,
+          "concept": 0.004322829925015294,
+          "not_an_entity": 0.007077973914055546,
+          "unsure": 0.009329376482064309
+        },
+        "confidence": 0.960993940690647
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:person:francois-chollet",
+        "probabilities": {
+          "entity:person:francois-chollet": 0.8097621583976863,
+          "new": 0.1398627376238874,
+          "unsure": 0.050375103978426296
+        },
+        "confidence": 0.7146432375965294
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9742852592267831
+      }
+    },
+    "usage": {
+      "input_tokens": 438,
+      "output_tokens": 0
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "request": {
+    "state": "SemEngine runs on NATS JetStream and needs no external database.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is the actor \"Kubernetes\"? Use only the supplied text. Choose unsure if the text does not settle it.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, regulator or other group of people",
+          "software": "A software product, library, framework, service or model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol or formal specification",
+          "event": "A release, incident, meeting or other dated occurrence",
+          "concept": "An idea, technique, market or phenomenon that is not one of the above",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The text does not allow a confident answer"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the quote, on its own, support that \"Kubernetes\" is graph database used by SemEngine?"
+      },
+      "centrality": {
+        "type": "score",
+        "instructions": "How central is \"Kubernetes\" to what the quote says?",
+        "criteria": [
+          "Not mentioned",
+          "Mentioned in passing",
+          "The main subject"
+        ]
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 635,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.002841428435569179,
+          "organization": 0.04109849878307006,
+          "software": 0.45953712475068637,
+          "repository": 0.01455847825862479,
+          "specification": 0.04921928050318577,
+          "event": 0.01614765833376195,
+          "concept": 0.1414978310083194,
+          "not_an_entity": 0.1334631733675448,
+          "unsure": 0.14163652655923764
+        },
+        "confidence": 0.3919792653445222
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.003972030195134916
+      },
+      "centrality": {
+        "type": "score",
+        "score": 0.05633634679110579,
+        "legend": {
+          "0": "Not mentioned",
+          "1": "Mentioned in passing",
+          "2": "The main subject"
+        },
+        "probabilities": {
+          "0": 0.9571228200276463,
+          "1": 0.029418013153601544,
+          "2": 0.01345916681875212
+        },
+        "confidence": 0.9154954798133413
+      }
+    },
+    "usage": {
+      "input_tokens": 264,
+      "output_tokens": 0
+    }
+  }
+}

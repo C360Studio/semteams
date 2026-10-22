@@ -1,0 +1,75 @@
+{
+  "request": {
+    "state": "Every publish_agent rule action sets an explicit loop_max_iterations ceiling under the research containment budget.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Mitchell Hashimoto\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Mitchell Hashimoto\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Mitchell Hashimoto\" is \"author of the SemTeams research containment rules\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 320,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "unsure": 0.9981734449809053,
+          "not_an_entity": 0.0010314101445481714,
+          "concept": 6.593584456786569e-05,
+          "event": 2.140623462631424e-05,
+          "specification": 1.7746391815816045e-05,
+          "repository": 6.949586888284658e-06,
+          "software": 8.46633002959119e-05,
+          "organization": 1.0763730735565783e-05,
+          "person": 0.0005876797856167866
+        },
+        "confidence": 0.9979451256035186
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "unsure": 0.9149009561531425,
+          "new": 0.0850990438468576
+        },
+        "confidence": 0.829801912306285
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.00970847719778945
+      }
+    },
+    "usage": {
+      "input_tokens": 517,
+      "output_tokens": 3
+    }
+  }
+}

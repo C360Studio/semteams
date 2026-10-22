@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "ADR-061 records the approved ownership boundary between SemEngine and SemTeams.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"ADR-061\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"ADR-061\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:spec:adr-061": "ADR-061 (specification): Architecture Decision Record defining SemEngine substrate and SemTeams runtime boundary"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"ADR-061\" is \"architecture decision record defining runtime ownership boundaries\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 878,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "specification",
+        "probabilities": {
+          "unsure": 0.055694976427602995,
+          "not_an_entity": 0.03537665266552717,
+          "concept": 0.0267948904085576,
+          "event": 0.013547246948697012,
+          "specification": 0.8299148131316734,
+          "repository": 0.014410427826773382,
+          "software": 0.019237674544987718,
+          "organization": 0.004477429564676809,
+          "person": 0.0005458884815039398
+        },
+        "confidence": 0.8086541647731326
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:spec:adr-061",
+        "probabilities": {
+          "unsure": 0.11862492593062479,
+          "new": 0.1527419783696852,
+          "entity:spec:adr-061": 0.7286330956996899
+        },
+        "confidence": 0.5929496435495348
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.49850287143278715
+      }
+    },
+    "usage": {
+      "input_tokens": 393,
+      "output_tokens": 0
+    }
+  }
+}

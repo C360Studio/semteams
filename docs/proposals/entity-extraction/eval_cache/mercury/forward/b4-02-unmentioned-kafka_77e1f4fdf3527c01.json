@@ -1,0 +1,75 @@
+{
+  "request": {
+    "state": "Gather loops publish completion events to NATS JetStream subjects consumed by rule-processor.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Apache Kafka\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Apache Kafka\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Apache Kafka\" is \"message broker transporting gather completion events\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 358,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "person": 0.00010827474566086916,
+          "organization": 0.00011525786679673576,
+          "software": 0.00521696940272312,
+          "repository": 4.5135629156366735e-05,
+          "specification": 7.921549614571446e-05,
+          "event": 2.415936133934024e-05,
+          "concept": 0.0001900280966033003,
+          "not_an_entity": 4.2400999627795694e-05,
+          "unsure": 0.9941785584019468
+        },
+        "confidence": 0.9934508782021902
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "new": 0.03732688426527926,
+          "unsure": 0.9626731157347207
+        },
+        "confidence": 0.9253462314694414
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.0018102112003764493
+      }
+    },
+    "usage": {
+      "input_tokens": 513,
+      "output_tokens": 3
+    }
+  }
+}

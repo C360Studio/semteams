@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "The vocabulary pack is written as SHACL shapes and compiled with semvocab shacl.Compile against the CCO catalog.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"semvocab\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"semvocab\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:semvocab": "semvocab (software): SHACL vocabulary compiler and CCO catalog for SemEngine"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"semvocab\" is \"SHACL compiler and ontology catalog used to compile vocabulary shape packs\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 850,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.1697028181727429,
+          "not_an_entity": 0.10907015153809144,
+          "concept": 0.09392764482829898,
+          "event": 0.004577735156763113,
+          "specification": 0.12159193256231172,
+          "repository": 0.05452265278724562,
+          "software": 0.42120637460462235,
+          "organization": 0.022507367024604263,
+          "person": 0.0028933233253196087
+        },
+        "confidence": 0.3488571714302002
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:semvocab",
+        "probabilities": {
+          "unsure": 0.19804664805124683,
+          "new": 0.22024495216829754,
+          "entity:software:semvocab": 0.5817083997804556
+        },
+        "confidence": 0.37256259967068345
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.5070861501244185
+      }
+    },
+    "usage": {
+      "input_tokens": 398,
+      "output_tokens": 0
+    }
+  }
+}

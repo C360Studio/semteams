@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "graph-ingest is the sole writer to ENTITY_STATES; semsparql is an indirect read-only query consumer.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"semsparql\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"semsparql\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:semsparql": "semsparql (software): Read-only SPARQL query consumer over projected graph triples"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"semsparql\" is \"primary graph writer that mutates ENTITY_STATES triples during updates\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 877,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.15226646817749984,
+          "not_an_entity": 0.10468970892069066,
+          "concept": 0.08884842400566165,
+          "event": 0.004950215161453029,
+          "specification": 0.030755409200714193,
+          "repository": 0.04316747386885938,
+          "software": 0.548318976273797,
+          "organization": 0.018572914975964975,
+          "person": 0.008430409415359408
+        },
+        "confidence": 0.4918588483080217
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:semsparql",
+        "probabilities": {
+          "unsure": 0.23299921126041698,
+          "new": 0.18482162280508355,
+          "entity:software:semsparql": 0.5821791659344994
+        },
+        "confidence": 0.37326874890174905
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.013250956950202016
+      }
+    },
+    "usage": {
+      "input_tokens": 403,
+      "output_tokens": 0
+    }
+  }
+}

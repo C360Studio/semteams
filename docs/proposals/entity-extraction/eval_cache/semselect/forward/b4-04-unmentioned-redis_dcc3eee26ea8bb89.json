@@ -1,0 +1,74 @@
+{
+  "request": {
+    "state": "Initial rule reconciliation runs inside the service readiness barrier before message consumption starts.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Redis Cluster\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Redis Cluster\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Redis Cluster\" is \"distributed lock manager for rule reconciliation\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 764,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.0022466887864883655,
+          "organization": 0.012438903617415223,
+          "software": 0.3350219084034087,
+          "repository": 0.023335068805323288,
+          "specification": 0.04945709487251095,
+          "event": 0.05053700487695906,
+          "concept": 0.18576865607290183,
+          "not_an_entity": 0.17382962948490718,
+          "unsure": 0.16736504508008537
+        },
+        "confidence": 0.25189964695383477
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "new": 0.308994467655228,
+          "unsure": 0.691005532344772
+        },
+        "confidence": 0.38201106468954404
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.05071903644396666
+      }
+    },
+    "usage": {
+      "input_tokens": 340,
+      "output_tokens": 0
+    }
+  }
+}

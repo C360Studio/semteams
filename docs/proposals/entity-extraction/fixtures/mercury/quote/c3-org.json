@@ -1,0 +1,127 @@
+{
+  "request": {
+    "state": "NATS was created by Derek Collison, who later founded Synadia to steward the project.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is the actor \"Synadia\"? Use only the supplied text. Choose unsure if the text does not settle it.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, regulator or other group of people",
+          "software": "A software product, library, framework, service or model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol or formal specification",
+          "event": "A release, incident, meeting or other dated occurrence",
+          "concept": "An idea, technique, market or phenomenon that is not one of the above",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The text does not allow a confident answer"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the quote, on its own, support that \"Synadia\" is company that stewards NATS?"
+      },
+      "centrality": {
+        "type": "score",
+        "instructions": "How central is \"Synadia\" to what the quote says?",
+        "criteria": [
+          "Not mentioned",
+          "Mentioned in passing",
+          "The main subject"
+        ]
+      },
+      "mentions": {
+        "type": "extract",
+        "instructions": "Mark named entities in the text.",
+        "criteria": {
+          "person": "Names of people",
+          "organization": "Names of companies or organizations",
+          "software": "Names of software products, libraries, services or models"
+        }
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 453,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "organization",
+        "probabilities": {
+          "person": 0.0131,
+          "organization": 0.9416,
+          "software": 0.0005,
+          "repository": 0.0003,
+          "specification": 0.0002,
+          "event": 0.0003,
+          "concept": 0.0002,
+          "not_an_entity": 0.0008,
+          "unsure": 0.043
+        },
+        "confidence": 0.9343
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9948
+      },
+      "centrality": {
+        "type": "score",
+        "score": 1.0816,
+        "legend": {
+          "0": "Not mentioned",
+          "1": "Mentioned in passing",
+          "2": "The main subject"
+        },
+        "probabilities": {
+          "0": 0.0043,
+          "1": 0.9097,
+          "2": 0.0859
+        },
+        "confidence": 0.8646
+      },
+      "mentions": {
+        "type": "extract",
+        "spans": {
+          "person": [
+            {
+              "text": "Derek Collison",
+              "start": 20,
+              "end": 34,
+              "confidence": 0.9985
+            }
+          ],
+          "organization": [
+            {
+              "text": "Synadia",
+              "start": 54,
+              "end": 61,
+              "confidence": 0.9986
+            }
+          ],
+          "software": [
+            {
+              "text": "NATS",
+              "start": 0,
+              "end": 4,
+              "confidence": 0.9586
+            }
+          ]
+        },
+        "not_stated": {
+          "person": 0.0007,
+          "organization": 0.0013,
+          "software": 0.0299
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 416,
+      "output_tokens": 0,
+      "cost": 0.0
+    },
+    "elapsedMs": 289.1
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "request": {
+    "state": "⚛️ München-Lab/quantum-sim provides open-source Rust bindings for cryogenic ion-trap gate simulation.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"München-Lab/quantum-sim\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"München-Lab/quantum-sim\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"München-Lab/quantum-sim\" is \"source repository providing Rust bindings for ion-trap gates\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 878,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "repository",
+        "probabilities": {
+          "person": 0.0013300276080775108,
+          "organization": 0.036911002810515674,
+          "software": 0.2801700715881996,
+          "repository": 0.4722054457435267,
+          "specification": 0.006616690955416955,
+          "event": 0.0045984473793654595,
+          "concept": 0.030684594661198748,
+          "not_an_entity": 0.05356638262823639,
+          "unsure": 0.11391733662546306
+        },
+        "confidence": 0.40623112646146753
+      },
+      "link": {
+        "type": "choice",
+        "choice": "new",
+        "probabilities": {
+          "new": 0.6168032152163587,
+          "unsure": 0.3831967847836412
+        },
+        "confidence": 0.23360643043271745
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.880604449681997
+      }
+    },
+    "usage": {
+      "input_tokens": 410,
+      "output_tokens": 0
+    }
+  }
+}

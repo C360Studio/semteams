@@ -1,0 +1,79 @@
+{
+  "request": {
+    "state": "Inception's Mercury model returns calibrated choice and noul probabilities on /v1/decisions without generating chat text.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Mercury\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Mercury\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:mercury-decide": "Mercury (software): Inception Labs System One decision model serving /v1/decisions",
+          "entity:org:mercury-bank": "Mercury (organization): Financial technology company offering banking and treasury accounts for startups"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Mercury\" is \"System One decision model from Inception Labs\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 307,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.0002453061421754901,
+          "not_an_entity": 0.00011587441674563351,
+          "concept": 5.1418960738088905e-05,
+          "event": 3.3198576231000744e-05,
+          "specification": 1.7769917338202052e-05,
+          "repository": 1.3000749249718528e-05,
+          "software": 0.9994962762195676,
+          "organization": 1.1473120944155603e-05,
+          "person": 1.568189701014761e-05
+        },
+        "confidence": 0.9994333107470136
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:mercury-decide",
+        "probabilities": {
+          "unsure": 0.27368993693368504,
+          "new": 0.06919965303013947,
+          "entity:software:mercury-decide": 0.6565479887843194,
+          "entity:org:mercury-bank": 0.0005624212518561053
+        },
+        "confidence": 0.5420639850457593
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.01798620588257211
+      }
+    },
+    "usage": {
+      "input_tokens": 596,
+      "output_tokens": 3
+    }
+  }
+}
