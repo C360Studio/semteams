@@ -10,7 +10,9 @@
     "confidence_threshold_mercury": 0.55,
     "confidence_threshold_semselect": 0.55,
     "support_threshold_yes": 0.60,
-    "support_threshold_no": 0.40
+    "support_threshold_no": 0.40,
+    "contradiction_threshold_mercury": 0.01,
+    "contradiction_threshold_semselect": 0.055
   },
   "seed_catalog": [
     {
