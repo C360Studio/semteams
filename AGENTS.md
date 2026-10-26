@@ -138,13 +138,13 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | `verify+review` | Browser reads of portfolio and work state go through scoped SvelteKit server routes (`/api/work/*`), never direct browser NATS connections or admin credentials | `svelte-dev`, `svelte-rev`; `observable-work` spec |
 | `verify+review` | Graph-derived overlays carry explicit `known | none | unknown` states; never collapse a failed, partial, or unsupported lookup into `none` or simulate unshipped pulse/attention state | `svelte-dev`, `svelte-rev`; ADR-061 §3; `observable-work` spec |
 | `verify+review` | Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`) avoid subscription/SSE reconnect loops and preserve keyboard focus order, `aria-busy`/`aria-disabled`, and WCAG 2.5.3 compliance | `svelte-dev`, `svelte-rev`; `task ui:check`, `task ui:test` |
-| `verify` | Frontend `npm run lint`, `npm run check`, `npm run test:unit`, `npm run generate-types:check`, and `npm run build` pass without overwriting tracked generated types | `task validate`; `TestValidateTaskContract` |
+| `verify` | Frontend `npm run lint`, `npm run check`, `npm run test:unit`, `npm run generate-types:check`, and `npm run build` pass without overwriting tracked generated types | `task validate`; `TestValidateTaskMirrorsRepositoryCI`, `TestValidateTaskAndDocsContract` |
 
 ### 4. Testing, E2E, and verification
 
 | Gate | Rule | Where |
 | --- | --- | --- |
-| `verify+review` | `task validate` (and `task verify`) runs the read-only local parity gate (Go, UI, Governance) without mutating tracked, staged, unstaged, or untracked worktree files | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestValidateTaskContract` |
+| `verify+review` | `task validate` (and `task verify`) runs the read-only local parity gate (Go, UI, Governance) without mutating tracked, staged, unstaged, or untracked worktree files | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestValidateScriptCommandCompositionAndWorktreePreservation` |
 | `verify+review` | Tests use an independent oracle and are shown able to fail; structural guards carry paired sensitivity tests | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestAgentSetupParitySensitivity` |
 | `verify` | Tests bind ephemeral TCP ports (`net.Listen("tcp", "127.0.0.1:0")`) and bound `.Stop`/`.Close`/`.Terminate` cleanup with `context.WithTimeout`, never `context.Background()`/`context.TODO()` | `task lint`; `scripts/lint-test-ports.sh`, `scripts/cleanup-roots-check.sh`; `TestCleanupRootsCheckSensitivity` |
 | `review` | Integration tests run sequentially (`-p 1`) under `task test:integration`; serialize heavy Docker/testcontainers runs across concurrent sessions on a shared host | `go-dev`, `go-rev`; `semteams-preflight` skill |

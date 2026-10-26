@@ -47,7 +47,7 @@ build and schema artifacts to `mktemp -d` and diffing against tracked `schemas/`
 
 Select by what the diff changes during iteration, and run `task validate` before any push:
 
-- **Documentation, `.agents/`, `.claude/`, or `.codex/` files:** `go test ./test/contract/... -run 'TestAgentSetupParity|TestValidateTaskContract' -v`, `task openspec:validate`, and `task openspec:queue-test`.
+- **Documentation, `.agents/`, `.claude/`, or `.codex/` files:** `go test ./test/contract/... -run 'TestAgentSetupParity|TestValidateTask' -v`, `task openspec:validate`, and `task openspec:queue-test`.
 - **An OpenSpec change (`openspec/`):** `task openspec:validate`, `task openspec:queue-test`, then inspect `task openspec:queue` in this worktree.
 - **Go backend, product shell (`cmd/semteams/`), catalog (`internal/runtimecatalog`), or rule packs (`configs/`):** focused `go test` first during iteration, then `task lint`, `task test:race`, `go build ./...`, and `task schema:generate && task schema:check-changes` when component/payload registrations change.
 - **SvelteKit UI (`ui/`):** `task ui:lint`, `task ui:check`, `task ui:test`, `npm --prefix ui run generate-types:check`, and `task ui:build`; add focused `task ui:test:e2e` journeys when interactive browser flows or `/work` / `/pulse` workbench behavior change.
