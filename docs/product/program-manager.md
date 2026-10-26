@@ -73,6 +73,13 @@ managers may gain durable context, cadence, and delegated work; the program mana
 instead of reprocessing every repository directly. A project manager is assigned to a project, not automatically to
 each repository.
 
+[ADR-064](../adr/064-rule-pack-coordination-and-source-observation.md) defines the target coordination boundary for
+those future managers: source adapters produce scoped observations, category rule packs decide bounded follow-up, and
+typed requests carry explicit program/project authority. Outbound GitHub polling is the first planned proof for
+deployments without inbound webhooks. SemSource indexing is recommended when code or documentation evidence is needed,
+but it is optional for forge observation. These are design commitments; the current Program Pulse profile does not
+run durable Project Managers or an inter-manager inbox.
+
 ## The program-management loop
 
 SemTeams grows through one coherent loop:
