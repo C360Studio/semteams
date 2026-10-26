@@ -5,7 +5,9 @@
 Record the accepted design-admission boundary for future SemTeams source observation and delegated-manager coordination.
 These requirements govern later design and implementation claims; they do not assert that a watcher, inter-manager
 inbox, or new durability mechanism is shipped.
+
 ## Requirements
+
 ### Requirement: Coordination design admission
 
 The SemTeams coordination design SHALL identify authoritative repository records, source observation, rule-pack policy,
@@ -13,8 +15,8 @@ agent-runtime ownership, and generic substrate ownership separately. It SHALL di
 contracts and state which durability and claim semantics need later substrate qualification. The design SHALL define
 the first separately qualified proof as one configured GitHub repository and one existing issue: a fixture title or body
 update with a changed `updated_at` is discovered and staged as one logical, explicitly scoped observation; after
-downstream persistence through a proven boundary and cursor commit, an unchanged repeat yields none. This requirement admits a design; it does not assert that
-the proof or delegated-manager runtime is implemented.
+downstream persistence through a proven boundary and cursor commit, an unchanged repeat yields none. This requirement
+admits a design; it does not assert that the proof or delegated-manager runtime is implemented.
 
 #### Scenario: Outbound-only repository observation is planned
 

@@ -111,7 +111,10 @@ The current compatibility baseline is frozen SemStreams
 `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`. Agent-runtime extraction,
 SemEngine adoption, and development-pack activation are independently
 qualified changes. Dependency dates or a rolling-beta target do not override
-consumer-contract, recovery, state, and product qualification gates.
+consumer-contract, recovery, state, and product qualification gates
+([ADR-059](adr/059-semstreams-beta160-graph-foundation-adoption.md),
+[frozen migration evidence](migrations/semstreams-8b99efe/README.md),
+[ADR-061](adr/061-agent-runtime-ownership-and-observable-work.md)).
 
 ## Framework boundary
 
