@@ -59,5 +59,5 @@ The first candidate after this decision is one configured GitHub repository and 
 ## Related
 
 - [Program-manager product direction](../product/program-manager.md) and [roadmap](../ROADMAP.md)
-- [Issue #335](https://github.com/C360Studio/semteams/issues/335) and [OpenSpec design admission](../../openspec/changes/event-driven-coordination-design/design.md)
+- [Issue #335](https://github.com/C360Studio/semteams/issues/335) and [OpenSpec design admission](../../openspec/changes/archive/2026-10-26-event-driven-coordination-design/design.md)
 - [GitHub webhook reachability](https://docs.github.com/en/webhooks/testing-and-troubleshooting-webhooks/troubleshooting-webhooks) and [REST polling guidance](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)

@@ -2,7 +2,7 @@
 
 ## Why
 
-[Issue #335](https://github.com/C360Studio/semteams/issues/335), claimed by [draft PR #358](https://github.com/C360Studio/semteams/pull/358), asks how a Program Manager can delegate bounded work to durable Project Managers without turning inter-agent communication into freeform chat. Repository activity also needs to trigger work when the SemTeams deployment cannot expose a public webhook endpoint. The design must distinguish GitHub or Gitea work records from internal runtime events and preserve the SemTeams agent-runtime ownership boundary in [ADR-061](../../../docs/adr/061-agent-runtime-ownership-and-observable-work.md).
+[Issue #335](https://github.com/C360Studio/semteams/issues/335), claimed by [draft PR #358](https://github.com/C360Studio/semteams/pull/358), asks how a Program Manager can delegate bounded work to durable Project Managers without turning inter-agent communication into freeform chat. Repository activity also needs to trigger work when the SemTeams deployment cannot expose a public webhook endpoint. The design must distinguish GitHub or Gitea work records from internal runtime events and preserve the SemTeams agent-runtime ownership boundary in [ADR-061](../../../../docs/adr/061-agent-runtime-ownership-and-observable-work.md).
 
 ## What changes
 
