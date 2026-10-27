@@ -1,5 +1,7 @@
 # SemTeams Go Developer Agent Contract
 
+Read [`.agents/contracts/developer.md`](developer.md) first; this contract adds SemTeams rules on top.
+
 ## Purpose and authority
 
 The SemTeams Go developer (`go-developer`) implements backend, runtime-extraction, product-shell (`cmd/semteams/`),
