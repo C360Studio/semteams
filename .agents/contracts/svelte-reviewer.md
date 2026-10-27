@@ -1,5 +1,7 @@
 # SemTeams Svelte Reviewer Agent Contract
 
+Read [`.agents/contracts/reviewer.md`](reviewer.md) first; this contract adds SemTeams rules on top.
+
 ## Purpose and authority
 
 The SemTeams Svelte reviewer (`svelte-reviewer`) is the mandatory independent reviewer for frontend changes under `ui/`
@@ -65,7 +67,8 @@ Group findings by severity. Every actionable finding must contain:
 Use `BLOCKING` for silent data misrepresentation (e.g., rendering `unknown`/error state as `none`), leaked browser
 credentials/NATS access, broken reactivity loops, or wire-contract breaks. Use `HIGH` for a likely functional or
 accessibility defect or project discipline failure, `MEDIUM` for a non-blocking correction, and `NIT` for style only.
-End with `APPROVE` when there are no `BLOCKING` or `HIGH` findings, otherwise `CHANGES REQUESTED` and the exact
+End with the record block from [`reviewer.md` § Record](reviewer.md#record), naming your exact model and effort:
+`Verdict: APPROVE` when there are no `BLOCKING` or `HIGH` findings, otherwise `Verdict: REQUEST CHANGES` and the exact
 blocking list. State explicitly when evidence was unavailable.
 
 **Severity needs a real-world trigger (owner ruling #185).** A failure that happens only under a condition the code
@@ -77,6 +80,5 @@ or spec, or declare the degrade.
 Under [Bounded port and extraction scope](../protocol.md#bounded-port-and-extraction-scope), an optional maintenance
 finding cannot veto approval.
 
-An `APPROVE` verdict names the commit SHA it rests on and the local verification run (`task validate` / UI lane
-commands) behind it: the reviewer's own run on that commit, or the implementer's local result recorded as reported,
+An `APPROVE` record names the local verification run (`task validate` / UI lane commands) on its `Reviewed at` commit: the reviewer's own run on that commit, or the implementer's local result recorded as reported,
 never as passed. It never rests on a CI run (owner ruling #171).

@@ -87,7 +87,7 @@ with Claude and Codex:
    explicitly in `Prompt`:
    - For `go-reviewer` and `svelte-reviewer` (`high` effort): require a full single-pass audit of record (read the
      complete diff and blast radius via `gopls`/callers, verify claims from the tree and local verification commands,
-     attempt refutation of every candidate finding, and emit `APPROVE` or `CHANGES REQUESTED`).
+     attempt refutation of every candidate finding, and emit `Verdict: APPROVE` or `Verdict: REQUEST CHANGES`).
    - For `architect`, `go-developer`, and `svelte-developer`: state `medium` effort for bounded work, or escalate to
      `high` in the brief when crossing runtime/module boundaries, designing concurrency/durability contracts, or
      resolving a failed review round.

@@ -1,5 +1,7 @@
 # SemTeams Technical Writer Agent Contract
 
+Read [`.agents/contracts/developer.md`](developer.md) first; this contract adds SemTeams rules on top.
+
 ## Purpose and authority
 
 The SemTeams technical writer (`technical-writer`) owns durable documentation (`README.md`, `docs/`, `AGENTS.md`,

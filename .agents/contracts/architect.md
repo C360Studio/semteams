@@ -1,5 +1,7 @@
 # SemTeams Architect Agent Contract
 
+Read [`.agents/contracts/reviewer.md`](reviewer.md) first; this contract adds SemTeams rules on top.
+
 ## Purpose and authority
 
 The SemTeams architect owns API and integration contracts, runtime-extraction boundaries, category-pack designs,
