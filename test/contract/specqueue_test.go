@@ -362,8 +362,9 @@ func TestSpecQueueCheck(t *testing.T) {
 }
 
 const (
-	specValidateCmd = `openspec validate --all --strict`
-	specHoldCmd     = `scripts/openspec-queue.sh --check`
+	specValidateCmd   = `openspec validate --all --strict`
+	specHoldCmd       = `scripts/openspec-queue.sh --check`
+	specAteamCheckCmd = `ateam state spec-check`
 )
 
 func TestSpecCheckWiring(t *testing.T) {
@@ -394,20 +395,22 @@ func TestSpecCheckWiring(t *testing.T) {
 		return []byte(s)
 	}
 	t.Run("clean fixture", func(t *testing.T) {
-		requireNoViolations(t, "clean fixture", specCheckWiringViolations(taskfile("", specValidateCmd, specHoldCmd), "spec:check"))
+		requireNoViolations(t, "clean fixture", specCheckWiringViolations(taskfile("", specValidateCmd, specHoldCmd, specAteamCheckCmd), "spec:check"))
 	})
 	for _, tc := range []struct {
 		name  string
 		file  []byte
 		wants []string
 	}{
-		{"check line removed", taskfile("", specValidateCmd),
+		{"check line removed", taskfile("", specValidateCmd, specAteamCheckCmd),
 			[]string{"spec:check", "command 2", `want "` + specHoldCmd + `"`}},
-		{"the two lines swapped", taskfile("", specHoldCmd, specValidateCmd),
+		{"ateam spec-check line removed", taskfile("", specValidateCmd, specHoldCmd),
+			[]string{"spec:check", "command 3", `want "` + specAteamCheckCmd + `"`}},
+		{"the first two lines swapped", taskfile("", specHoldCmd, specValidateCmd, specAteamCheckCmd),
 			[]string{"spec:check", "command 2", `want "` + specHoldCmd + `"`}},
-		{"--check dropped", taskfile("", specValidateCmd, "scripts/openspec-queue.sh"),
+		{"--check dropped", taskfile("", specValidateCmd, "scripts/openspec-queue.sh", specAteamCheckCmd),
 			[]string{"spec:check", "command 2", `want "` + specHoldCmd + `"`}},
-		{"ignore_error on the task", taskfile("    ignore_error: true\n", specValidateCmd, specHoldCmd),
+		{"ignore_error on the task", taskfile("    ignore_error: true\n", specValidateCmd, specHoldCmd, specAteamCheckCmd),
 			[]string{"spec:check", "ignore_error"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -443,7 +446,8 @@ func specCheckWiringViolations(taskfile []byte, taskName string) []string {
 			violations = append(violations, fmt.Sprintf("Taskfile.yml: %s: key %q can skip a command or discard its exit status; only desc, summary and cmds are allowed", taskName, key))
 		}
 	}
-	for i, want := range []string{specValidateCmd, specHoldCmd} {
+	wantCmds := []string{specValidateCmd, specHoldCmd, specAteamCheckCmd}
+	for i, want := range wantCmds {
 		got := "nothing"
 		if i < len(cmds) {
 			got = strconv.Quote(cmds[i])
@@ -452,8 +456,8 @@ func specCheckWiringViolations(taskfile []byte, taskName string) []string {
 			violations = append(violations, fmt.Sprintf("Taskfile.yml: %s: command %d is %s, want %q", taskName, i+1, got, want))
 		}
 	}
-	if len(cmds) > 2 {
-		violations = append(violations, fmt.Sprintf("Taskfile.yml: %s: runs %d commands, want exactly 2: %q", taskName, len(cmds), cmds))
+	if len(cmds) > len(wantCmds) {
+		violations = append(violations, fmt.Sprintf("Taskfile.yml: %s: runs %d commands, want exactly %d: %q", taskName, len(cmds), len(wantCmds), cmds))
 	}
 	return violations
 }

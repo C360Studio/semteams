@@ -61,10 +61,11 @@ openspec show <change-id>
 openspec archive <change-id>
 ```
 
-Use `task openspec:queue` for the repository's hold-aware queue. CI validation
-and the future main-branch ruleset are owned by
-[#254](https://github.com/C360Studio/semteams/issues/254); workflow presence alone is not proof of a trustworthy
-required-check contract.
+Use `task openspec:queue` for the repository's hold-aware queue. `Repository CI`
+and the live `main` branch ruleset (`main-required-checks`, requiring `Required`
+with strict up-to-date and squash-only PR merges; introduced under
+[#254](https://github.com/C360Studio/semteams/issues/254) and `#362`) enforce
+strict OpenSpec validation before merge.
 
 Do not archive `conversational-front-door` early. Its archive and living-spec sync are the landing pull request's final
 content commit before the mandatory read-only reviewer pass.

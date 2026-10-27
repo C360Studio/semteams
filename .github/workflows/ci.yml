@@ -24,6 +24,7 @@ jobs:
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
           go install github.com/mgechev/revive@v1.15.0
+          GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.2
 
       - name: Lint
         run: task lint
@@ -102,9 +103,15 @@ jobs:
           node-version: 22.20.0
 
       - name: Install pinned governance tools
+        env:
+          GOTOOLCHAIN: auto
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
+          go install github.com/c360studio/ateam/cmd/ateam@v0.3.2
           npm install --global @fission-ai/openspec@1.7.0
+
+      - name: Check ATeam multi-agent parity
+        run: task ateam:doctor
 
       - name: Validate OpenSpec
         run: task openspec:validate
@@ -115,8 +122,8 @@ jobs:
       - name: Test publish verify script
         run: task publish:verify-test
 
-  status-check:
-    name: CI Status Check
+  required:
+    name: Required
     runs-on: ubuntu-latest
     needs: [go, ui, governance]
     if: ${{ always() }}
@@ -126,6 +133,6 @@ jobs:
           if [[ "${{ needs.go.result }}" != "success" ]] || \
              [[ "${{ needs.ui.result }}" != "success" ]] || \
              [[ "${{ needs.governance.result }}" != "success" ]]; then
-            echo "One or more required CI jobs failed"
+            echo "Required CI check failed: one or more lanes did not succeed"
             exit 1
           fi
