@@ -88,5 +88,6 @@ promise in a doc comment or spec, or declare the degrade.
 Under [Bounded port and extraction scope](../protocol.md#bounded-port-and-extraction-scope), an optional maintenance
 finding cannot veto approval.
 
-An `APPROVE` record names the local verification run (`task validate` / Go lane commands) on its `Reviewed at` commit: the reviewer's own run on that commit, or the implementer's local result recorded as reported,
+An `APPROVE` record names the local verification run (`task validate` / Go lane commands) on its
+`Reviewed at` commit: the reviewer's own run on that commit, or the implementer's local result recorded as reported,
 never as passed. It never rests on a CI run (owner ruling #171).

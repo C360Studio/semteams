@@ -1,6 +1,7 @@
 # SemTeams Architect Agent Contract
 
-Read [`.agents/contracts/reviewer.md`](reviewer.md) first; this contract adds SemTeams rules on top.
+Read [`.agents/contracts/reviewer.md`](reviewer.md) first for its read-only and independence rules; the architect
+gives no verdict and posts no § Record. This contract adds SemTeams rules on top.
 
 ## Purpose and authority
 
