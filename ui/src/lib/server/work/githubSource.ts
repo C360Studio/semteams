@@ -830,6 +830,13 @@ function hasRecordSignals(unquoted: string): boolean {
   );
 }
 
+function hasReviewerIdentity(unquoted: string): boolean {
+  return (
+    [...unquoted.matchAll(REVIEWED_BY_LINE_RE)].length > 0 ||
+    [...unquoted.matchAll(CROSS_AGENT_HEADING_RE)].length > 0
+  );
+}
+
 function hasReviewRequestHeader(unquoted: string): boolean {
   if (REVIEW_REQUEST_HEADING_RE.test(unquoted)) return true;
   const firstNonEmpty = unquoted.split(/\r?\n/).find((line) => line.trim().length > 0);
@@ -913,62 +920,80 @@ interface ParsedRecordEntry {
 
 interface UnparsedEntry {
   index: number;
+  // Lanes the comment names. `undefined` with `allLanes: true` is a comment that carries a
+  // reviewer identity but no lane line: had it parsed it would be an all-lanes record, so
+  // only a later all-lanes record clears it. `undefined` with `allLanes: false` (no identity,
+  // e.g. an implementer reply quoting a verdict) is cleared by any later surviving record.
   lanes: Set<string> | undefined;
+  allLanes: boolean;
 }
 
-// A later valid record clears an earlier unparseable comment the way ATeam's gate skips
-// non-records and keeps the latest valid one (ateam internal/review/gate.go record(),
-// 36b999b:500-527). Lanes are SemTeams-specific: an unparseable comment naming a lane is
-// cleared only by a later record covering every lane it names (or an all-lanes record), so
-// a go-reviewer APPROVE cannot clear an unreadable svelte-reviewer record.
-function unparsedCleared(entry: UnparsedEntry, records: ParsedRecordEntry[]): boolean {
-  return records.some((rec) => {
-    if (rec.index <= entry.index) return false;
-    if (!entry.lanes || !rec.lanes) return true;
+interface LaneState {
+  allLanes?: ParsedRecordEntry;
+  byLane: Map<string, ParsedRecordEntry>;
+}
+
+// Replays every valid record in comment order, at any SHA, as ATeam's gate keeps the
+// latest valid record whatever commit it names (ateam internal/review/gate.go record(),
+// 36b999b:500-527). An all-lanes record (no lane line) resets every lane; a lane record
+// replaces only the lanes it names.
+function replayLanes(records: ParsedRecordEntry[]): LaneState {
+  const state: LaneState = { byLane: new Map() };
+  for (const entry of records) {
+    if (!entry.lanes) {
+      state.allLanes = entry;
+      state.byLane.clear();
+      continue;
+    }
+    for (const lane of entry.lanes) state.byLane.set(lane, entry);
+  }
+  return state;
+}
+
+function survivingEntries(state: LaneState): ParsedRecordEntry[] {
+  const unique = new Set<ParsedRecordEntry>(state.byLane.values());
+  if (state.allLanes) unique.add(state.allLanes);
+  return [...unique].sort((a, b) => a.index - b.index);
+}
+
+// An earlier unparseable comment is cleared only by surviving lane state newer than it, so
+// a clearing record later superseded in its lane (at any SHA) no longer clears it. Lanes are
+// SemTeams-specific: a go-reviewer APPROVE cannot clear an unreadable svelte-reviewer record.
+function unparsedCleared(entry: UnparsedEntry, state: LaneState): boolean {
+  if (entry.lanes) {
     for (const lane of entry.lanes) {
-      if (!rec.lanes.has(lane)) return false;
+      const holder = state.byLane.get(lane) ?? state.allLanes;
+      if (!holder || holder.index <= entry.index) return false;
     }
     return true;
-  });
+  }
+  if (entry.allLanes) {
+    return Boolean(state.allLanes && state.allLanes.index > entry.index);
+  }
+  return survivingEntries(state).some((rec) => rec.index > entry.index);
 }
 
-// Effective review record across reviewer lanes. Records at the anchor SHA (HEAD when
-// known, else the latest record's SHA) are replayed in comment order: an all-lanes record
-// resets every lane, a lane record replaces only the lanes it names. If any surviving
-// lane is blocking, the latest surviving blocking record is effective; otherwise the latest
-// record at the anchor is. With no record at the anchor, the latest record is effective
-// (the baton then reports stale).
+// Effective review record across reviewer lanes, derived from the surviving per-lane state:
+// the newest surviving blocking record if any lane is blocking; else the newest surviving
+// record not at HEAD (the baton reports stale); else the latest record. Without HEAD, the
+// latest record's SHA is the anchor.
 function effectiveReviewRecord(
   records: ParsedRecordEntry[],
+  state: LaneState,
   headSha: string | undefined,
 ): PullRequestReviewRecord | undefined {
   const latest = records.at(-1);
   if (!latest) return undefined;
   const anchor = headSha ?? latest.record.sha;
   // Symmetric prefix match: without HEAD the anchor may be an abbreviated record SHA.
-  const atAnchor = records.filter(
-    (entry) =>
-      shaMatchesHead(entry.record.sha, anchor) || shaMatchesHead(anchor, entry.record.sha),
-  );
-  if (atAnchor.length === 0) return latest.record;
+  const atAnchor = (entry: ParsedRecordEntry) =>
+    shaMatchesHead(entry.record.sha, anchor) || shaMatchesHead(anchor, entry.record.sha);
 
-  let allLanes: ParsedRecordEntry | undefined;
-  const byLane = new Map<string, ParsedRecordEntry>();
-  for (const entry of atAnchor) {
-    if (!entry.lanes) {
-      allLanes = entry;
-      byLane.clear();
-      continue;
-    }
-    for (const lane of entry.lanes) byLane.set(lane, entry);
-  }
-
-  const surviving = [...(allLanes ? [allLanes] : []), ...byLane.values()];
-  const blocking = surviving
-    .filter((entry) => entry.record.verdict === "blocking")
-    .sort((a, b) => a.index - b.index)
-    .at(-1);
-  return (blocking ?? atAnchor[atAnchor.length - 1]).record;
+  const surviving = survivingEntries(state);
+  const blocking = surviving.filter((entry) => entry.record.verdict === "blocking").at(-1);
+  if (blocking) return blocking.record;
+  const notAtHead = surviving.filter((entry) => !atAnchor(entry)).at(-1);
+  return (notAtHead ?? latest).record;
 }
 
 export function parseReviewComments(
@@ -1013,7 +1038,11 @@ export function parseReviewComments(
         pushRecord(index, legacyRecord);
       } else {
         const lane = matchMetadataField(unquoted, "(?:reviewer[- \\t_]*lane|lane)");
-        unparsed.push({ index, lanes: reviewerLaneKeys(lane) });
+        unparsed.push({
+          index,
+          lanes: reviewerLaneKeys(lane),
+          allLanes: Boolean(matchMetadataField(unquoted, "reviewed[- \\t_]*by")),
+        });
       }
       matchedLegacy = true;
     }
@@ -1026,7 +1055,11 @@ export function parseReviewComments(
       return;
     }
     if (hasRecordSignals(ateamBody)) {
-      unparsed.push({ index, lanes: reviewerLaneKeys(extractReviewerLane(ateamBody)) });
+      unparsed.push({
+        index,
+        lanes: reviewerLaneKeys(extractReviewerLane(ateamBody)),
+        allLanes: hasReviewerIdentity(ateamBody),
+      });
       return;
     }
 
@@ -1036,8 +1069,9 @@ export function parseReviewComments(
     }
   });
 
-  const review_record = effectiveReviewRecord(records, headSha);
-  const review_unparsed = unparsed.some((entry) => !unparsedCleared(entry, records));
+  const laneState = replayLanes(records);
+  const review_record = effectiveReviewRecord(records, laneState, headSha);
+  const review_unparsed = unparsed.some((entry) => !unparsedCleared(entry, laneState));
 
   return {
     ...(review_request && { review_request }),
@@ -1122,6 +1156,10 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
       toFetch.map(async (pr) => {
         const basePath = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${pr.number}/comments?per_page=${GITHUB_PAGE_LIMIT}`;
         const label = `GET /repos/${repository.owner}/${repository.name}/issues/${pr.number}/comments`;
+        // Page-number pagination over ascending comments: a comment inserted between page
+        // reads lands on a later page and is still read, but a comment deleted between reads
+        // shifts the next page and can skip one comment. Pages are read sequentially, so a
+        // PR costs at most MAX_PR_COMMENT_PAGES x READ_TIMEOUT_MS in the worst case.
         const comments: unknown[] = [];
         let complete = false;
         for (let page = 1; page <= MAX_PR_COMMENT_PAGES; page++) {

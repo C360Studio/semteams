@@ -21,20 +21,25 @@ very good reason not to. The reference is `C360Studio/ateam` `internal/review/ga
 
 ## What changes
 
-- A `Review record` maps to `pass` only when it carries exactly one `Verdict:` line outside code fences and that line,
+- An ATeam `Review record` maps to `pass` only when it carries exactly one `Verdict:` line outside code fences and that line,
   trimmed, is `Verdict: APPROVE` (case-insensitive), matching `gateVerdict()`. Conditional, decorated, or
   multi-line approvals (`APPROVE pending H1`, `APPROVE with nits`, `**Verdict**: APPROVE`, `` Verdict: `APPROVE` ``,
   `APPROVED`) do not pass; they leave the comment unparsed so the overlay fails closed to `unknown`. Leading
-  `REQUEST CHANGES` / `CHANGES REQUESTED` / `BLOCKING` / `FAIL` values still map to `blocking`.
+  `REQUEST CHANGES` / `CHANGES REQUESTED` / `BLOCKING` / `FAIL` values still map to `blocking`. Historical
+  `<!-- semteams-review-record -->` marker records keep their `verdict:` mapping (`pass` / `approved` to `pass`).
 - `review_unparsed` is no longer sticky: a later valid `Review record` clears an earlier unparseable comment, matching
-  `record()`. An unparseable comment that names a reviewer lane is cleared only by a later record covering that lane or
-  an all-lanes record. An unparseable record-shaped comment posted after the latest valid record still fails closed.
-- `parseReviewComments(comments, headSha?)` aggregates valid records at `HEAD` across distinct reviewer lanes: a record
-  without a lane (or naming every lane it covers) resets the lanes it covers, and a blocking lane stays effective until a
-  newer record for that lane or an all-lanes record supersedes it. ATeam has no counterpart; it keys on one
+  `record()`. An unparseable comment that names a reviewer lane is cleared only by newer surviving records covering that
+  lane; one that carries a reviewer identity but no lane is cleared only by a newer all-lanes record; one with neither
+  (an implementer reply) is cleared by any newer record. One posted after the latest valid record still fails closed.
+- `parseReviewComments(comments, headSha?)` replays every valid record in comment order at any SHA, per reviewer lane
+  (a record without a lane line resets every lane). The newest surviving blocking record is effective; else the newest
+  surviving record not at `HEAD` (stale); else the latest record. A blocking lane therefore stays effective until a newer
+  record for that lane or an all-lanes record supersedes it, and a later record at an older SHA is never skipped. ATeam has no counterpart; it keys on one
   `reviewed-by:` reviewer, while SemTeams's `go-reviewer` / `svelte-reviewer` lanes are product-specific.
 - Open-PR comment reads paginate (`&page=N`) up to `MAX_PR_COMMENT_PAGES` (10) pages of `GITHUB_PAGE_LIMIT` comments;
   when the last page read is still full, the PR is marked `review_inspected: false` and the overlay reads `unknown`.
+  Reads are sequential (worst case `MAX_PR_COMMENT_PAGES` x `READ_TIMEOUT_MS` per PR), and page-number pagination can
+  skip one comment if a comment is deleted between page reads.
 
 ## Non-goals
 

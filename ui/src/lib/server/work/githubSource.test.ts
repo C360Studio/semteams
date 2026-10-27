@@ -768,8 +768,20 @@ describe("githubSource parsing helpers", () => {
     ).toBe("pass");
     // An unrecognized lane name is its own lane and never clears a named lane.
     expect(verdictOf([svelteBlocks, laneRecord("ui", "APPROVE")])).toBe("blocking");
-    // Records at an older SHA do not take part in the HEAD aggregate.
-    expect(verdictOf([laneRecord("svelte-reviewer", "REQUEST CHANGES", "99887766"), goApproves])).toBe("pass");
+    // A lane whose latest record is at an older SHA keeps that record: svelte never re-reviewed HEAD.
+    expect(
+      parseReviewComments(
+        [laneRecord("svelte-reviewer", "REQUEST CHANGES", "99887766"), goApproves],
+        head,
+      ).review_record,
+    ).toMatchObject({ sha: "99887766", verdict: "blocking", reviewer_lane: "svelte-reviewer" });
+    // Case E: a valid all-lanes REQUEST CHANGES survives APPROVEs from every named lane until an
+    // all-lanes record supersedes it (fail-closed).
+    const allBlock = laneRecord(undefined, "REQUEST CHANGES");
+    expect(verdictOf([allBlock, goApproves, svelteApproves])).toBe("blocking");
+    expect(
+      verdictOf([allBlock, goApproves, svelteApproves, laneRecord(undefined, "APPROVE")]),
+    ).toBe("pass");
     // With no record at HEAD the latest record is reported (the baton derives stale from it).
     expect(parseReviewComments([goApproves], "ffffffffffffffff").review_record?.sha).toBe("a1b2c3d4");
     // Without a HEAD SHA, records at the latest record's SHA are aggregated.
@@ -1672,7 +1684,7 @@ describe("createGithubSource", () => {
     });
   });
 
-  describe("paginated PR comment reads", () => {
+  describe("live PR comment reads", () => {
     const head = "a1b2c3d4e5f6789012345678901234567890abcd";
     const record = (lane: string, verdict: string) => ({
       body: [
@@ -1746,6 +1758,88 @@ describe("createGithubSource", () => {
       );
       const item = listed.items.find((i) => i.number === 362)!;
       expect(item.review).toEqual({ state: "unknown", reason: "PR review comments not inspected" });
+    });
+
+    // ATeam record() keeps the latest valid record at any SHA (gate.go 36b999b:500-527), so a later
+    // record at an older SHA must not be skipped for an earlier record at HEAD (a false current).
+    const anyRecord = (
+      lane: string | undefined,
+      verdict: string,
+      sha: string,
+      by = "codex (gpt-6-astra, high)",
+    ) => ({
+      body: [
+        `reviewed-by: ${by}`,
+        ...(lane ? [`Reviewer lane: ${lane}`] : []),
+        `Reviewed at ${sha}`,
+        `Verdict: ${verdict}`,
+      ].join("\n"),
+    });
+    async function statusOf(comments: unknown[]) {
+      stubPr(() => comments);
+      const listed = await createGithubSource({ apiUrl: "http://github.test" }).listItems(REPO);
+      const review = listed.items.find((i) => i.number === 362)!.review;
+      return review.state === "known" ? review.value.status : review.state;
+    }
+
+    it("lets a later record at an older SHA supersede an earlier record at HEAD (cases A, B, C)", async () => {
+      // A: all-lanes APPROVE@HEAD, then all-lanes REQUEST CHANGES@OLD.
+      expect(
+        await statusOf([
+          anyRecord(undefined, "APPROVE", "a1b2c3d4"),
+          anyRecord(undefined, "REQUEST CHANGES", "99887766"),
+        ]),
+      ).toBe("stale");
+      // B: same lane, APPROVE@HEAD then REQUEST CHANGES@OLD.
+      expect(
+        await statusOf([
+          anyRecord("svelte-reviewer", "APPROVE", "a1b2c3d4"),
+          anyRecord("svelte-reviewer", "REQUEST CHANGES", "99887766"),
+        ]),
+      ).toBe("stale");
+      // C: go APPROVE@HEAD, unreadable svelte record@HEAD, then an all-lanes APPROVE@OLD: never current.
+      expect(
+        await statusOf([
+          anyRecord("go-reviewer", "APPROVE", "a1b2c3d4"),
+          anyRecord("svelte-reviewer", "HOLD", "a1b2c3d4", "claude (opus, high)"),
+          anyRecord(undefined, "APPROVE", "99887766"),
+        ]),
+      ).toBe("stale");
+      // A lane whose surviving APPROVE is at an older SHA is stale even when another lane approved HEAD later.
+      expect(
+        await statusOf([
+          anyRecord("go-reviewer", "APPROVE", "99887766"),
+          anyRecord("svelte-reviewer", "APPROVE", "a1b2c3d4"),
+        ]),
+      ).toBe("stale");
+      // Control: the same lane re-reviewed at HEAD afterwards is current again.
+      expect(
+        await statusOf([
+          anyRecord("svelte-reviewer", "REQUEST CHANGES", "99887766"),
+          anyRecord("svelte-reviewer", "APPROVE", "a1b2c3d4"),
+        ]),
+      ).toBe("current");
+    });
+
+    it("treats an unreadable record carrying a reviewer identity but no lane as all-lanes (case D)", async () => {
+      const withIdentity = anyRecord(undefined, "REQUEST CHANGES", "a1b2c3d4", "claude, codex");
+      expect(parseReviewComments([withIdentity])).toEqual({ review_unparsed: true });
+      // A go-only APPROVE does not clear it; an all-lanes record does.
+      expect(await statusOf([withIdentity, anyRecord("go-reviewer", "APPROVE", "a1b2c3d4")])).toBe(
+        "unknown",
+      );
+      expect(await statusOf([withIdentity, anyRecord(undefined, "APPROVE", "a1b2c3d4")])).toBe(
+        "current",
+      );
+      // An implementer reply with no reviewer identity is still cleared by any later record.
+      const reply = {
+        body: ["Addressed:", "- Reviewed at 99887766", "- Verdict: REQUEST CHANGES was for H1"].join(
+          "\n",
+        ),
+      };
+      expect(await statusOf([reply, anyRecord("go-reviewer", "APPROVE", "a1b2c3d4")])).toBe(
+        "current",
+      );
     });
 
     it("keeps the per-lane blocking verdict through the HEAD aggregate on the live read path", async () => {

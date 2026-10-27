@@ -5,7 +5,7 @@
 
 ## 2. Reviewer-lane aggregation and paginated comment reads (#366)
 
-- [x] 2.1 Aggregate valid `Review record`s at `HEAD` across reviewer lanes in `parseReviewComments(comments, headSha?)` so a blocking lane survives another lane's `APPROVE` until a newer same-lane or all-lanes record supersedes it.
+- [x] 2.1 Replay every valid `Review record` per reviewer lane at any SHA in `parseReviewComments(comments, headSha?)` so a blocking lane survives another lane's `APPROVE` until a newer same-lane or all-lanes record supersedes it, and a later record at an older SHA is never skipped.
 - [x] 2.2 Paginate open-PR comment reads up to `MAX_PR_COMMENT_PAGES`, failing closed to `review_inspected: false` when the last page read is full (see `notes/1.1.md`).
 
 ## 3. Tests, spec, and verification

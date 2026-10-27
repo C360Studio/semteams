@@ -130,15 +130,25 @@ introducing a separate agent message bus or mutating GitHub state:
   and that line, trimmed, is `Verdict: APPROVE` (case-insensitive); a value led by `REQUEST CHANGES`,
   `CHANGES REQUESTED`, `BLOCKING`, or `FAIL` SHALL map to `blocking`; any other value — including conditional or
   decorated approvals such as `APPROVE pending H1`, `APPROVE, but REQUEST CHANGES on H1`, or `APPROVE with nits` — and
-  more than one `Verdict:` line SHALL leave the comment unparsed. The effective `Review record` SHALL aggregate valid
-  records at `HEAD` across reviewer lanes (`<name>-reviewer` tokens of the lane line; a record without a lane line
-  covers all lanes): a blocking lane SHALL remain effective until a newer record for that lane or a newer all-lanes
-  record supersedes it. When no valid record is at `HEAD`, the latest valid record is effective. Open pull request
-  comments SHALL be read page by page up to `MAX_PR_COMMENT_PAGES`; when the last page read is full, or when a comment
-  carrying `<!-- semteams-review-record -->` or unquoted ATeam review-record signals fails to parse unambiguously and is
-  not followed by a valid `Review record` covering its reviewer lane (matching ATeam `record()`, which skips non-records
-  and keeps the latest valid record), the source SHALL mark `review_inspected: false` (`lookup: "partial"`) and render
-  the `review` overlay as `unknown` rather than retaining an earlier `current` or `known` state.
+  more than one `Verdict:` line SHALL leave the comment unparsed. Historical `<!-- semteams-review-record -->` marker
+  records keep their own `verdict:` field mapping (`pass` or `approved` to `pass`; `blocking`, `changes_requested`, or
+  `fail` to `blocking`). The effective `Review record` SHALL be derived by replaying every valid record in comment
+  order at any SHA (matching ATeam `record()`, which keeps the latest valid record whatever commit it names), per
+  reviewer lane (`<name>-reviewer` tokens of the lane line; any other lane text is one opaque lane; a record without a
+  lane line is an all-lanes record that resets every lane): each lane keeps its latest record. If any surviving lane
+  record is blocking, the newest surviving blocking record SHALL be effective; otherwise the newest surviving record not
+  at `HEAD` SHALL be effective (so the overlay reports `stale`); otherwise the latest record is. A blocking all-lanes
+  record therefore remains effective until a newer all-lanes record supersedes it, even after every named lane
+  approves. A comment carrying `<!-- semteams-review-record -->` or unquoted ATeam review-record signals that fails to
+  parse unambiguously SHALL set `review_unparsed` unless surviving lane state newer than it covers it: every lane it
+  names; or, when it names no lane but carries a reviewer identity (`reviewed-by:` or an `Independent Cross-Agent
+  Review` heading), a newer all-lanes record; or, when it carries neither (for example an implementer reply), any newer
+  surviving record. Open pull request comments SHALL be read sequentially page by page (`page=N`) up to
+  `MAX_PR_COMMENT_PAGES`, so one pull request costs at most `MAX_PR_COMMENT_PAGES` x `READ_TIMEOUT_MS`; page-number
+  pagination is not snapshot-consistent, so a comment deleted between page reads can cause one comment to be skipped
+  (comments added between reads land on later pages and are still read). When the last page read is full, or when
+  `review_unparsed` is set, the source SHALL mark `review_inspected: false` (`lookup: "partial"`) and render the
+  `review` overlay as `unknown` rather than retaining an earlier `current` or `known` state.
 - **Decision and hold gate (`gate`):** SHALL surface `status:needs-decision` owner-docket labels, `status:blocked`
   labels and `blocked-by` dependencies, repository-wide open `class:flake` merge holds on active pull requests, and
   unticked OpenSpec `tasks.md` caveats (`HALT`, `RED`, `BLOCKED`, `WONTDO`, `OPEN-Q`).
@@ -190,10 +200,11 @@ None of `claim`, `review`, or `gate` SHALL alter the work item's board column (`
 - **GIVEN** an open pull request whose comments include an unparseable record-shaped comment (for example an
   implementer reply quoting a verdict and commit SHA) followed by a valid `Review record` at `HEAD`
 - **WHEN** `parseReviewComments` inspects the comments
-- **THEN** it SHALL NOT set `review_unparsed` when the earlier comment names no reviewer lane, or names only lanes the
-  later record covers
+- **THEN** it SHALL NOT set `review_unparsed` when the earlier comment carries no reviewer identity and no lane, or
+  names only lanes that newer surviving records cover
 - **AND** it SHALL keep `review_unparsed: true` when the earlier comment names a reviewer lane (for example
-  `svelte-reviewer`) that no later record covers
+  `svelte-reviewer`) that no newer record covers, or carries a reviewer identity but no lane and no newer all-lanes
+  record follows it
 
 #### Scenario: Conditional APPROVE verdict does not pass
 
@@ -209,6 +220,10 @@ None of `claim`, `review`, or `gate` SHALL alter the work item's board column (`
 - **WHEN** the GitHub work source derives the `review` overlay
 - **THEN** the `review` overlay SHALL render `changes_requested` with reviewer lane `svelte-reviewer`
 - **AND** a later `svelte-reviewer` `APPROVE` or all-lanes `APPROVE` record at `HEAD` SHALL make it `current`
+- **AND** a later record for the same lane (or an all-lanes record) at an older SHA SHALL make it `stale` or
+  `changes_requested`, never `current`
+- **AND** an all-lanes `REQUEST CHANGES` record SHALL stay `changes_requested` after both `go-reviewer` and
+  `svelte-reviewer` approve at `HEAD`, until a newer all-lanes record supersedes it
 
 #### Scenario: Review comments span more than one page
 
