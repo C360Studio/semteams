@@ -171,6 +171,7 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | `verify+review` | `architect`, `go-developer`, `go-reviewer`, `svelte-developer`, and `svelte-reviewer` run on the frontier model tier (`opus` / `gpt-6-astra` or `gpt-6-sol` / Gemini `inherit` or `pro`); `technical-writer` runs on `sonnet` / `gpt-6-sol` / Gemini `inherit` (or `flash` when requested); effort defaults match `.agents/README.md` | `.agents/README.md`; `.agents/review-policy.json`; `TestAgentSetupParity` |
 | `verify+review` | `CLAUDE.md` only imports `@AGENTS.md`, `AGENTS.md` stays strictly `< 24,000` bytes and matches `.agents/rules-index.md` in numbered domains and row counts, and all role/skill/hook/MCP adapters pass parity checks | `.agents/README.md`; `task ateam:doctor`; `TestAgentSetupParity`, `TestAgentSetupParitySensitivity` |
 | `review` | Pushed claim branches live in dedicated worktrees (`../semteams-wt/<branch>` or `.worktrees/<branch>`) and update by merging `origin/main`, never by rebase or force-push | `protocol` |
+| `review` | After the squash merge, the claiming agent removes its worktree and deletes the remote branch; never one it does not own, dirty, or unpushed | `protocol`; `ateam state pickup` (merged / `no PR` worktree labels) |
 | `review` | Evidence cited in a PR or task can be opened on another machine; git-ignored paths are named as local only, and task choices not in the design go in `openspec/changes/<id>/notes/<task>.md` | `handoff`, `preflight` skills; `protocol` |
 | `review` | Docs are written for a working developer: shipped vs. target behavior kept distinct (`docs/demo-mvp-claims.md`), coined terms defined at first use, no marketing register | `writer`, `go-rev`, `svelte-rev` |
 
@@ -196,7 +197,8 @@ The canonical protocol is [`.agents/protocol.md`](.agents/protocol.md); role con
   content commit → `task validate`, `task merge:check -- <pr>`, and `Repository CI` (`Required`) green on a head up to
   date with `main` with no open unfixed `class:flake` → squash merge.
 - **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` or the squash merge of an approved PR that
-  declared `Closes #n`.
+  declared `Closes #n`. After the squash merge, the claiming agent removes its worktree and deletes the remote branch
+  (never one it does not own, or one that is dirty or unpushed).
 
 ## Roles and Related Repos
 
