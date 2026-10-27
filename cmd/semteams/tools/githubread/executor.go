@@ -3,8 +3,10 @@ package githubread
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/c360studio/semteams/cmd/semteams/portfolio"
 	"github.com/c360studio/semteams/cmd/semteams/research"
+	"github.com/c360studio/semteams/cmd/semteams/runanchor"
 )
 
 // ToolName is the LLM-facing tool name registered on the ExecutorRegistry.
@@ -68,15 +71,30 @@ type Config struct {
 	Clock func() time.Time
 }
 
+// RepositoryFailure records a partial fetch failure for a single
+// (repository, kind) stream during a multi-repository or multi-kind github_read
+// invocation (#268).
+type RepositoryFailure struct {
+	Repository  string `json:"repository"`
+	Kind        string `json:"kind"`
+	Error       string `json:"error"`
+	ErrorKind   string `json:"error_kind"`
+	StatusCode  int    `json:"status_code,omitempty"`
+	RateLimited bool   `json:"rate_limited,omitempty"`
+}
+
 // Result is the structured JSON payload returned in ToolResult.Content.
 type Result struct {
 	Channel        research.EvidenceChannel     `json:"channel"`
 	Repositories   []string                     `json:"repositories"`
 	Kinds          []string                     `json:"kinds"`
+	Baseline       bool                         `json:"baseline"`
+	NoChange       bool                         `json:"no_change"`
 	NewCount       int                          `json:"new_count"`
 	UnchangedCount int                          `json:"unchanged_count"`
 	Cursors        map[string]map[string]string `json:"cursors"`
 	Records        []research.EvidenceRecord    `json:"records"`
+	Failures       []RepositoryFailure          `json:"failures,omitempty"`
 }
 
 // Executor implements agentic.ToolExecutor for the read-only github_read tool.
@@ -114,6 +132,11 @@ func NewExecutor(cfg Config, logger *slog.Logger) *Executor {
 		clock:   clock,
 		logger:  logger,
 	}
+}
+
+// Cursors returns the executor's underlying CursorStore.
+func (e *Executor) Cursors() CursorStore {
+	return e.cursors
 }
 
 // ListTools returns the LLM-facing schema for github_read.
@@ -211,6 +234,25 @@ func (e *Executor) parseExecuteRequest(args map[string]any) (executeRequest, err
 	}, nil
 }
 
+func resolveRunScopeKey(call agentic.ToolCall) string {
+	runID, runEntityID := runanchor.Anchor(call, "", "")
+	if strings.TrimSpace(runID) != "" {
+		return strings.TrimSpace(runID)
+	}
+	if strings.TrimSpace(runEntityID) != "" {
+		if idx := strings.LastIndexByte(runEntityID, '.'); idx >= 0 && idx < len(runEntityID)-1 {
+			return runEntityID[idx+1:]
+		}
+		return strings.TrimSpace(runEntityID)
+	}
+	if call.Metadata != nil {
+		if pulseRunID, ok := call.Metadata["pulse_run_id"].(string); ok && strings.TrimSpace(pulseRunID) != "" {
+			return strings.TrimSpace(pulseRunID)
+		}
+	}
+	return strings.TrimSpace(call.LoopID)
+}
+
 // Execute reads GitHub state for the requested portfolio scope, filters out
 // unchanged items via the CursorStore, and returns validated EvidenceRecords.
 func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
@@ -224,10 +266,14 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 	}
 
 	retrievedAt := e.clock().UTC()
+	runID := resolveRunScopeKey(call)
 	records := make([]research.EvidenceRecord, 0)
+	failures := make([]RepositoryFailure, 0)
 	cursorsOut := make(map[string]map[string]string, len(req.repos))
 	repoSlugs := make([]string, 0, len(req.repos))
 	unchangedCount := 0
+	anyBaseline := false
+	succeededTargets := 0
 
 	for _, repo := range req.repos {
 		repoSlugs = append(repoSlugs, repo.Slug())
@@ -235,30 +281,52 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		cursorsOut[repoKey] = make(map[string]string, len(req.kinds))
 
 		for _, kind := range req.kinds {
-			newRecs, unchanged, watermark, toolErr := e.executeRepoKind(
-				ctx, call, repo, repoKey, kind,
+			outcome, fatalToolErr := e.executeRepoKind(
+				ctx, call, runID, repo, repoKey, kind,
 				ListOpts{State: req.state, Limit: req.limit},
 				req.includeUnchanged, retrievedAt,
 			)
-			if toolErr != nil {
-				return *toolErr, nil
+			if fatalToolErr != nil {
+				return *fatalToolErr, nil
 			}
-			records = append(records, newRecs...)
-			unchangedCount += unchanged
-			if watermark != "" {
-				cursorsOut[repoKey][kind] = watermark
+			if outcome.failure != nil {
+				failures = append(failures, *outcome.failure)
+				continue
+			}
+			succeededTargets++
+			if outcome.isBaseline {
+				anyBaseline = true
+			}
+			records = append(records, outcome.records...)
+			unchangedCount += outcome.unchangedCount
+			if outcome.watermark != "" {
+				cursorsOut[repoKey][kind] = outcome.watermark
 			}
 		}
 	}
 
+	if succeededTargets == 0 && len(failures) > 0 {
+		first := failures[0]
+		return agentic.ToolResult{
+			CallID:    call.ID,
+			Name:      call.Name,
+			Error:     fmt.Sprintf("github_read %s (%s): %s", first.Repository, first.Kind, first.Error),
+			ErrorKind: agentic.ToolErrorKind(first.ErrorKind),
+		}, nil
+	}
+
+	noChange := !anyBaseline && len(records) == 0 && len(failures) == 0
 	res := Result{
 		Channel:        research.ChannelGitHub,
 		Repositories:   repoSlugs,
 		Kinds:          req.kinds,
+		Baseline:       anyBaseline,
+		NoChange:       noChange,
 		NewCount:       len(records),
 		UnchangedCount: unchangedCount,
 		Cursors:        cursorsOut,
 		Records:        records,
+		Failures:       failures,
 	}
 	payload, err := json.Marshal(res)
 	if err != nil {
@@ -272,8 +340,11 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 
 	e.logger.Info("github_read completed",
 		slog.Int("repositories", len(repoSlugs)),
+		slog.Bool("baseline", anyBaseline),
+		slog.Bool("no_change", noChange),
 		slog.Int("new_records", len(records)),
-		slog.Int("unchanged_records", unchangedCount))
+		slog.Int("unchanged_records", unchangedCount),
+		slog.Int("failures", len(failures)))
 
 	return agentic.ToolResult{
 		CallID:  call.ID,
@@ -281,37 +352,66 @@ func (e *Executor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.
 		Content: string(payload),
 		Metadata: map[string]any{
 			"channel":         string(research.ChannelGitHub),
+			"baseline":        anyBaseline,
+			"no_change":       noChange,
 			"new_count":       len(records),
 			"unchanged_count": unchangedCount,
+			"failures_count":  len(failures),
 			"repositories":    repoSlugs,
 		},
 	}, nil
 }
 
+type repoKindOutcome struct {
+	records        []research.EvidenceRecord
+	unchangedCount int
+	watermark      string
+	isBaseline     bool
+	failure        *RepositoryFailure
+}
+
 func (e *Executor) executeRepoKind(
 	ctx context.Context,
 	call agentic.ToolCall,
+	runID string,
 	repo portfolio.Repository,
 	repoKey, kind string,
 	opts ListOpts,
 	includeUnchanged bool,
 	retrievedAt time.Time,
-) ([]research.EvidenceRecord, int, string, *agentic.ToolResult) {
-	prevCursor, _ := e.cursors.Get(repoKey, kind)
+) (repoKindOutcome, *agentic.ToolResult) {
+	var (
+		prevCursor CursorEntry
+		hadPrev    bool
+	)
+	if runStore, ok := e.cursors.(RunCursorStore); ok {
+		prevCursor, hadPrev = runStore.GetForRun(runID, repoKey, kind)
+	} else {
+		prevCursor, hadPrev = e.cursors.Get(repoKey, kind)
+	}
+	isBaseline := !hadPrev || !prevCursor.isBaselined()
 	if prevCursor.Seen == nil {
 		prevCursor.Seen = make(map[string]string)
 	}
 	nextCursor := prevCursor.clone()
+	nextCursor.LastCheckedAt = retrievedAt
 
 	fetched, err := e.fetchKind(ctx, repo, kind, opts, retrievedAt, call.ID)
 	if err != nil {
-		res := agentic.ToolResult{
-			CallID:    call.ID,
-			Name:      call.Name,
-			Error:     fmt.Sprintf("github_read %s (%s): %v", repo.Slug(), kind, err),
-			ErrorKind: ClassifyError(err),
+		errKind := ClassifyError(err)
+		failure := &RepositoryFailure{
+			Repository: repo.Slug(),
+			Kind:       kind,
+			Error:      err.Error(),
+			ErrorKind:  string(errKind),
 		}
-		return nil, 0, "", &res
+		var apiErr *APIError
+		if errors.As(err, &apiErr) {
+			failure.StatusCode = apiErr.StatusCode
+			failure.RateLimited = apiErr.StatusCode == http.StatusTooManyRequests ||
+				(apiErr.StatusCode == http.StatusForbidden && strings.Contains(strings.ToLower(apiErr.Message), "rate limit"))
+		}
+		return repoKindOutcome{failure: failure}, nil
 	}
 
 	records := make([]research.EvidenceRecord, 0, len(fetched))
@@ -324,7 +424,7 @@ func (e *Executor) executeRepoKind(
 				Error:     fmt.Sprintf("invalid evidence record for %s: %v", item.record.Locator, err),
 				ErrorKind: agentic.ToolErrorInternal,
 			}
-			return nil, 0, "", &res
+			return repoKindOutcome{}, &res
 		}
 
 		digest := VersionDigest(item.activityAt, item.record.RawBody)
@@ -340,21 +440,34 @@ func (e *Executor) executeRepoKind(
 		}
 	}
 
-	if err := e.cursors.Put(repoKey, kind, nextCursor); err != nil {
+	hasNewRecords := len(records) > 0
+	var persistErr error
+	if runStore, ok := e.cursors.(RunCursorStore); ok {
+		persistErr = runStore.StageForRun(runID, call.LoopID, repoKey, kind, nextCursor, hasNewRecords)
+	} else {
+		committed := applyCursorUpdate(prevCursor, hadPrev, nextCursor, hasNewRecords, retrievedAt)
+		persistErr = e.cursors.Put(repoKey, kind, committed)
+	}
+	if persistErr != nil {
 		res := agentic.ToolResult{
 			CallID:    call.ID,
 			Name:      call.Name,
-			Error:     fmt.Sprintf("persist cursor for %s (%s): %v", repo.Slug(), kind, err),
+			Error:     fmt.Sprintf("persist cursor for %s (%s): %v", repo.Slug(), kind, persistErr),
 			ErrorKind: agentic.ToolErrorInternal,
 		}
-		return nil, 0, "", &res
+		return repoKindOutcome{}, &res
 	}
 
 	watermark := ""
 	if !nextCursor.Watermark.IsZero() {
 		watermark = nextCursor.Watermark.UTC().Format(time.RFC3339Nano)
 	}
-	return records, unchangedCount, watermark, nil
+	return repoKindOutcome{
+		records:        records,
+		unchangedCount: unchangedCount,
+		watermark:      watermark,
+		isBaseline:     isBaseline,
+	}, nil
 }
 
 type fetchedRecord struct {

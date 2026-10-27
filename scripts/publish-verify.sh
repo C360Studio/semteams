@@ -18,8 +18,8 @@
 #   2. The peeled commit must be an ancestor of origin/main.
 #   3. Every Repository CI (ci.yml) run for the commit must be completed, so
 #      a rerun in flight cannot be outvoted by an older success. Its
-#      CI Status Check check-run does not exist until its other jobs finish.
-#   4. Among GitHub Actions check-runs named "CI Status Check" on the commit,
+#      Required check-run does not exist until its other jobs finish.
+#   4. Among GitHub Actions check-runs named "Required" on the commit,
 #      the one with the highest id (the most recently created) decides, and
 #      it must have concluded success.
 
@@ -84,21 +84,21 @@ if grep -qvx 'completed' <<<"$statuses"; then
   fail "Repository CI still running for ${sha}; wait for it to finish, then re-run Publish"
 fi
 
-# 4. The newest CI Status Check check-run (highest id) must have succeeded.
+# 4. The newest Required check-run (highest id) must have succeeded.
 runs=$(gh api --paginate \
-  "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?check_name=CI%20Status%20Check&filter=all&per_page=100" \
+  "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?check_name=Required&filter=all&per_page=100" \
   --jq '.check_runs[]
-    | select(.name == "CI Status Check" and .app.slug == "github-actions")
+    | select(.name == "Required" and .app.slug == "github-actions")
     | [.id, (.conclusion // .status)]
     | @tsv') ||
   fail "cannot list check-runs for ${sha}"
-[[ -n "$runs" ]] || fail "no CI Status Check found for ${sha}"
+[[ -n "$runs" ]] || fail "no Required check-run found for ${sha}"
 newest=$(printf '%s\n' "$runs" | sort -n -k1,1 | tail -n 1)
 result=${newest##*$'\t'}
 [[ "$result" == "success" ]] ||
-  fail "newest CI Status Check for ${sha} is ${result}, not success"
+  fail "newest Required check-run for ${sha} is ${result}, not success"
 
-echo "verified ${version} at ${sha}: on main, Repository CI complete, CI Status Check success"
+echo "verified ${version} at ${sha}: on main, Repository CI complete, Required success"
 {
   echo "version=${version}"
   echo "sha=${sha}"

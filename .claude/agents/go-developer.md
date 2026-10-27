@@ -3,6 +3,7 @@ name: go-developer
 description: Implement SemTeams backend, product-shell, pack, and contract-test changes through the canonical project contract.
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 model: opus
+effort: medium
 ---
 
 # SemTeams Go developer adapter

@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "Playwright is used only for browser E2E tests in ui/e2e and never runs inside the production SemEngine broker.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Playwright\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Playwright\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:software:playwright": "Playwright (software): Browser automation and end-to-end testing framework for web applications",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Playwright\" is \"production message broker routing NATS subjects inside SemEngine\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 739,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.00014859205144256577,
+          "organization": 5.135203888499281e-05,
+          "software": 0.9981957036594451,
+          "repository": 2.1406714644207403e-05,
+          "specification": 1.6671566127894835e-05,
+          "event": 8.382989903336251e-06,
+          "concept": 4.8240776130667804e-05,
+          "not_an_entity": 8.9236463012658e-06,
+          "unsure": 0.0015007265571200413
+        },
+        "confidence": 0.9979701666168758
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:playwright",
+        "probabilities": {
+          "entity:software:playwright": 0.9988930770295118,
+          "new": 7.476895075852796e-05,
+          "unsure": 0.001032154019729769
+        },
+        "confidence": 0.9983396155442675
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.0015978454657884398
+      }
+    },
+    "usage": {
+      "input_tokens": 550,
+      "output_tokens": 3
+    }
+  }
+}

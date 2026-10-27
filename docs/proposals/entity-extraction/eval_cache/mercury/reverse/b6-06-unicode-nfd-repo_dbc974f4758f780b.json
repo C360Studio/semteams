@@ -1,0 +1,75 @@
+{
+  "request": {
+    "state": "⚛️ München-Lab/quantum-sim provides open-source Rust bindings for cryogenic ion-trap gate simulation.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"München-Lab/quantum-sim\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"München-Lab/quantum-sim\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"München-Lab/quantum-sim\" is \"source repository providing Rust bindings for ion-trap gates\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 281,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "repository",
+        "probabilities": {
+          "unsure": 0.0012354357762374842,
+          "not_an_entity": 0.00029344171751176037,
+          "concept": 0.00011491342767930915,
+          "event": 0.00011491342767930915,
+          "specification": 0.00012232470701988276,
+          "repository": 0.9912075944891199,
+          "software": 0.006678702706631972,
+          "organization": 0.0001671980506977444,
+          "person": 6.547569742262939e-05
+        },
+        "confidence": 0.9901085438002598
+      },
+      "link": {
+        "type": "choice",
+        "choice": "new",
+        "probabilities": {
+          "unsure": 0.0850990542883219,
+          "new": 0.914900945711678
+        },
+        "confidence": 0.8298018914233563
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9796676487721513
+      }
+    },
+    "usage": {
+      "input_tokens": 549,
+      "output_tokens": 3
+    }
+  }
+}

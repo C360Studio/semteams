@@ -1,0 +1,119 @@
+{
+  "request": {
+    "state": "Inception's Mercury Decide model returns typed decisions without generating text.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is the actor \"Mercury\"? Use only the supplied text. Choose unsure if the text does not settle it.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, regulator or other group of people",
+          "software": "A software product, library, framework, service or model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol or formal specification",
+          "event": "A release, incident, meeting or other dated occurrence",
+          "concept": "An idea, technique, market or phenomenon that is not one of the above",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The text does not allow a confident answer"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the quote, on its own, support that \"Mercury\" is decision model from Inception?"
+      },
+      "centrality": {
+        "type": "score",
+        "instructions": "How central is \"Mercury\" to what the quote says?",
+        "criteria": [
+          "Not mentioned",
+          "Mentioned in passing",
+          "The main subject"
+        ]
+      },
+      "mentions": {
+        "type": "extract",
+        "instructions": "Mark named entities in the text.",
+        "criteria": {
+          "person": "Names of people",
+          "organization": "Names of companies or organizations",
+          "software": "Names of software products, libraries, services or models"
+        }
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 383,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.0342,
+          "organization": 0.0738,
+          "software": 0.6042,
+          "repository": 0.0075,
+          "specification": 0.0017,
+          "event": 0.0017,
+          "concept": 0.0204,
+          "not_an_entity": 0.0679,
+          "unsure": 0.1886
+        },
+        "confidence": 0.5547
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9923
+      },
+      "centrality": {
+        "type": "score",
+        "score": 1.7404,
+        "legend": {
+          "0": "Not mentioned",
+          "1": "Mentioned in passing",
+          "2": "The main subject"
+        },
+        "probabilities": {
+          "0": 0.0093,
+          "1": 0.241,
+          "2": 0.7497
+        },
+        "confidence": 0.6245
+      },
+      "mentions": {
+        "type": "extract",
+        "spans": {
+          "person": [],
+          "organization": [],
+          "software": [
+            {
+              "text": "Inception",
+              "start": 0,
+              "end": 9,
+              "confidence": 0.485
+            },
+            {
+              "text": "Mercury Decide model",
+              "start": 12,
+              "end": 32,
+              "confidence": 0.5452
+            }
+          ]
+        },
+        "not_stated": {
+          "person": 0.9989,
+          "organization": 0.6939,
+          "software": 0.2135
+        }
+      }
+    },
+    "usage": {
+      "input_tokens": 399,
+      "output_tokens": 0,
+      "cost": 0.0
+    },
+    "elapsedMs": 181.2
+  }
+}

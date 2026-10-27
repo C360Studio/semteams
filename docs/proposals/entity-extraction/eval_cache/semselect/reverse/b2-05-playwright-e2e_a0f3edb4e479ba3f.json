@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "Playwright drives headless Chromium browser journeys against the local Docker Compose stack.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Playwright Test Runner\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Playwright Test Runner\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:playwright": "Playwright (software): Browser automation and end-to-end testing framework for web applications"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Playwright Test Runner\" is \"end-to-end browser test framework driving Chromium against the Docker stack\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 815,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.1062281280152049,
+          "not_an_entity": 0.08744384705653575,
+          "concept": 0.09457945490849179,
+          "event": 0.007327649860523031,
+          "specification": 0.019884750880667417,
+          "repository": 0.027678349210489606,
+          "software": 0.5956600073236481,
+          "organization": 0.015169380694477338,
+          "person": 0.04602843204996216
+        },
+        "confidence": 0.5451175082391041
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:playwright",
+        "probabilities": {
+          "unsure": 0.11628320445803965,
+          "new": 0.13672509837895927,
+          "entity:software:playwright": 0.7469916971630011
+        },
+        "confidence": 0.6204875457445016
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.602390288801999
+      }
+    },
+    "usage": {
+      "input_tokens": 383,
+      "output_tokens": 0
+    }
+  }
+}

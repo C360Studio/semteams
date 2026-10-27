@@ -1,0 +1,79 @@
+{
+  "request": {
+    "state": "SemEngine owns the shared substrate (graph, transport, mutation, rule engine, lifecycle/projection, and generic durability).",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"SemEngine\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"SemEngine\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:repo:c360studio/semengine": "C360Studio/semengine (repository): SemEngine shared graph, transport, mutation, and rule substrate repository",
+          "entity:software:semengine": "SemEngine (software): Shared graph and rule substrate with graph-ingest as sole writer to ENTITY_STATES",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"SemEngine\" is \"shared substrate owning graph ingest, transport, mutation, and the rule engine\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 288,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.00037860784029348913,
+          "organization": 0.00075295159826929,
+          "software": 0.9959984021575295,
+          "repository": 0.00013928204071029547,
+          "specification": 0.00010190091781523458,
+          "event": 3.9904972779975926e-05,
+          "concept": 0.00035566915085530186,
+          "not_an_entity": 5.454363083717868e-05,
+          "unsure": 0.0021787376909096624
+        },
+        "confidence": 0.9954982024272209
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:repo:c360studio/semengine",
+        "probabilities": {
+          "entity:repo:c360studio/semengine": 0.35126523172803215,
+          "entity:software:semengine": 0.35126523172803215,
+          "new": 0.023903899008385698,
+          "unsure": 0.27356563753554997
+        },
+        "confidence": 0.13502030897070952
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.24508500761839525
+      }
+    },
+    "usage": {
+      "input_tokens": 600,
+      "output_tokens": 3
+    }
+  }
+}

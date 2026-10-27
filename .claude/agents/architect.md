@@ -3,6 +3,7 @@ name: architect
 description: Design API, runtime, pack, and UI contracts for SemTeams through the canonical read-only project contract.
 tools: Read, Bash, Grep, Glob, Skill
 model: opus
+effort: medium
 ---
 
 # SemTeams architect adapter

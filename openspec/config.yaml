@@ -31,8 +31,10 @@ context: |
   does not activate a component or pack.
 
   Repository CI runs unconditional Go, UI, and Governance/OpenSpec jobs for
-  pull requests to main and reports one CI Status Check aggregate. Required
-  mock E2E and a main-branch ruleset remain future work.
+  pull requests to main and reports one Required aggregate. The live main
+  branch ruleset (main-required-checks) requires Required with strict
+  up-to-date (strict_required_status_checks_policy=true) and squash-only PR
+  merges, while required mock E2E in CI remains future work.
 
   Authority split: GitHub issues own wanted work, decisions, blockers, and
   holds; milestones own release membership; draft PRs own claims and

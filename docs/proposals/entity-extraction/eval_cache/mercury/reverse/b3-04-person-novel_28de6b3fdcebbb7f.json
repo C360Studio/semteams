@@ -1,0 +1,75 @@
+{
+  "request": {
+    "state": "NATS was created by Derek Collison, who later founded Synadia to steward the project.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Derek Collison\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Derek Collison\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Derek Collison\" is \"creator of NATS and founder of Synadia\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 261,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "person",
+        "probabilities": {
+          "unsure": 0.00016862857866142792,
+          "not_an_entity": 2.1438717941408056e-05,
+          "concept": 1.669649032081557e-05,
+          "event": 2.7527858737967436e-05,
+          "specification": 1.0780064372152135e-05,
+          "repository": 5.092141845799735e-06,
+          "software": 4.5385766238115295e-05,
+          "organization": 1.669649032081557e-05,
+          "person": 0.9996877538915615
+        },
+        "confidence": 0.9996487231280068
+      },
+      "link": {
+        "type": "choice",
+        "choice": "new",
+        "probabilities": {
+          "unsure": 0.06008665017400762,
+          "new": 0.9399133498259924
+        },
+        "confidence": 0.8798266996519848
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9953904287479123
+      }
+    },
+    "usage": {
+      "input_tokens": 512,
+      "output_tokens": 3
+    }
+  }
+}

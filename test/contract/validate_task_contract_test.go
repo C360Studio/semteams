@@ -50,6 +50,7 @@ func expectedCIStepMappings() []ciStepMapping {
 		{job: "ui", ciRun: "npm run test:unit -- --run", validateFragment: "npm run test:unit -- --run"},
 		{job: "ui", ciRun: "npm run generate-types:check", validateFragment: "npm run generate-types:check"},
 		{job: "ui", ciRun: "npm run build", validateFragment: "npm run build"},
+		{job: "governance", ciRun: "task ateam:doctor", validateFragment: "task ateam:doctor"},
 		{job: "governance", ciRun: "task openspec:validate", validateFragment: "task openspec:validate"},
 		{job: "governance", ciRun: "task openspec:queue-test", validateFragment: "task openspec:queue-test"},
 		{job: "governance", ciRun: "task publish:verify-test", validateFragment: "task publish:verify-test"},
@@ -67,7 +68,7 @@ func isToolInstallStep(run string) bool {
 		if line == "" {
 			continue
 		}
-		if !strings.HasPrefix(line, "go install ") && !strings.HasPrefix(line, "npm install ") {
+		if !strings.HasPrefix(line, "go install ") && !strings.HasPrefix(line, "GOTOOLCHAIN=auto go install ") && !strings.HasPrefix(line, "npm install ") {
 			return false
 		}
 	}
@@ -207,7 +208,7 @@ func newValidateWorktreeFixture(t *testing.T) *worktreeFixture {
 		}
 	}
 
-	writeFile(".gitignore", "ui/node_modules/\nui/build/\nui/.svelte-kit/\n")
+	writeFile(".gitignore", "ui/node_modules/\nui/build/\nui/.svelte-kit/\n.ateam/\n")
 	writeFile("schemas/agentic-loop.v1.json", "{\"$id\":\"agentic-loop.v1.json\"}\n")
 	writeFile("specs/openapi.v3.yaml", "openapi: 3.0.3\n")
 	writeFile("ui/src/lib/types/api.generated.ts", "export interface paths {}\n")
@@ -336,6 +337,7 @@ if [ "${FAKE_DOCKER_DOWN:-}" = "1" ]; then
 fi
 `)
 	writeStub("openspec", `echo "openspec $*" >> "$VALIDATE_TEST_LOG"`)
+	writeStub("ateam", `echo "ateam $*" >> "$VALIDATE_TEST_LOG"`)
 	writeStub("jq", `echo "jq $*" >> "$VALIDATE_TEST_LOG"`)
 }
 
@@ -383,7 +385,7 @@ func (fx *worktreeFixture) assertWorktreeUnchanged(t *testing.T) {
 	if got != fx.snapshot {
 		t.Fatalf("worktree state changed!\n--- want\n%s\n--- got\n%s", fx.snapshot, got)
 	}
-	for _, transient := range []string{"ui/build", "ui/.svelte-kit"} {
+	for _, transient := range []string{"ui/build", "ui/.svelte-kit", ".ateam"} {
 		if _, err := os.Stat(filepath.Join(fx.rootDir, transient)); !os.IsNotExist(err) {
 			t.Fatalf("expected transient directory %s to be cleaned up when it did not exist before validate", transient)
 		}
@@ -432,6 +434,7 @@ func TestValidateScriptCommandCompositionAndWorktreePreservation(t *testing.T) {
 			"npm run test:unit -- --run",
 			"npm run generate-types:check",
 			"npm run build",
+			"task ateam:doctor",
 			"task openspec:validate",
 			"task openspec:queue-test",
 			"task publish:verify-test",
@@ -520,7 +523,7 @@ func TestValidateScriptPrerequisiteFailures(t *testing.T) {
 	}
 	scriptPath := filepath.Join(repoRoot, "scripts", "validate.sh")
 
-	for _, missingTool := range []string{"go", "task", "revive", "node", "npm", "docker", "python3", "openspec", "jq"} {
+	for _, missingTool := range []string{"go", "task", "revive", "node", "npm", "docker", "python3", "openspec", "ateam", "jq"} {
 		t.Run("missing_"+missingTool, func(t *testing.T) {
 			fx := newValidateWorktreeFixture(t)
 			// Build a clean directory of symlinked system utilities plus stubs, omitting missingTool.
@@ -625,8 +628,29 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Taskfile.yml: %v", err)
 	}
-	if !strings.Contains(string(taskfileBytes), "validate:") || !strings.Contains(string(taskfileBytes), "scripts/validate.sh") {
+	taskfileText := string(taskfileBytes)
+	if !strings.Contains(taskfileText, "validate:") || !strings.Contains(taskfileText, "scripts/validate.sh") {
 		t.Fatal("Taskfile.yml must define top-level 'validate' task invoking scripts/validate.sh")
+	}
+	for _, wantTask := range []string{
+		"doctor:", "scripts/doctor.sh",
+		"ateam:doctor:", "env -u ATEAM_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_SESSION_ID -u GEMINI_SESSION_ID ateam doctor --check",
+		"fmt:", "fmt:check:", "tidy:check:",
+		"cleanup-roots:check:", "scripts/cleanup-roots-check.sh",
+		"merge:check:", "scripts/merge-check.sh",
+		"spec:check:", "spec:queue:",
+		"verify:", "scripts/verify.sh",
+	} {
+		if !strings.Contains(taskfileText, wantTask) {
+			t.Errorf("Taskfile.yml missing required SemEngine parity entry %q", wantTask)
+		}
+	}
+	verifyScriptBytes, err := os.ReadFile(filepath.Join(repoRoot, "scripts", "verify.sh"))
+	if err != nil {
+		t.Fatalf("read scripts/verify.sh: %v", err)
+	}
+	if !strings.Contains(string(verifyScriptBytes), "validate.sh") {
+		t.Fatal("scripts/verify.sh must delegate to scripts/validate.sh")
 	}
 
 	pkgBytes, err := os.ReadFile(filepath.Join(repoRoot, "ui", "package.json"))

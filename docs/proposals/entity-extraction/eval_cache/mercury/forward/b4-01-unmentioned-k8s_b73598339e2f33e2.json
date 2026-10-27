@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "SemEngine runs on NATS JetStream and needs no external database.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Kubernetes\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Kubernetes\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:software:kubernetes": "Kubernetes (software): Container orchestration system for automating deployment and scaling",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Kubernetes\" is \"graph database used by SemEngine\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 297,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "person": 0.00013889974384527663,
+          "organization": 0.00015739402986965364,
+          "software": 0.005906170214113472,
+          "repository": 5.109836014465685e-05,
+          "specification": 0.00020209793478754483,
+          "event": 3.511935509122256e-05,
+          "concept": 0.0001898534399070456,
+          "not_an_entity": 5.43939212337764e-05,
+          "unsure": 0.9932649730010072
+        },
+        "confidence": 0.9924230946261334
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "entity:software:kubernetes": 0.0012756264636433546,
+          "new": 0.03727926977236657,
+          "unsure": 0.9614451037639902
+        },
+        "confidence": 0.9421676556459853
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.0029810325969896125
+      }
+    },
+    "usage": {
+      "input_tokens": 546,
+      "output_tokens": 3
+    }
+  }
+}

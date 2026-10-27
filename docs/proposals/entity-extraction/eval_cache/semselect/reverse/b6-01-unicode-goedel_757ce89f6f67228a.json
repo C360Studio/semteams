@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "Zürich Instruments 🚀 released Gödel-SDK v2.1 for café robotics teams.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Gödel-SDK\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Gödel-SDK\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:goedel-sdk": "Gödel-SDK (software): Robotics control SDK released by Zürich Instruments"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Gödel-SDK\" is \"robotics SDK released by Zürich Instruments\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 829,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.048401061774607367,
+          "not_an_entity": 0.043808193145811025,
+          "concept": 0.03012525975951758,
+          "event": 0.013393198159260246,
+          "specification": 0.017280427150020882,
+          "repository": 0.01572827984437151,
+          "software": 0.8254874538719739,
+          "organization": 0.00467699764354718,
+          "person": 0.0010991286508904372
+        },
+        "confidence": 0.8036733856059706
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:goedel-sdk",
+        "probabilities": {
+          "unsure": 0.11166473532333715,
+          "new": 0.2552466988144284,
+          "entity:software:goedel-sdk": 0.6330885658622344
+        },
+        "confidence": 0.4496328487933516
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.9698202193656276
+      }
+    },
+    "usage": {
+      "input_tokens": 395,
+      "output_tokens": 0
+    }
+  }
+}

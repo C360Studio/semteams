@@ -25,6 +25,11 @@ type researchRuleJSON struct {
 		Role      string `json:"role,omitempty"`
 		Predicate string `json:"predicate,omitempty"`
 	} `json:"on_enter"`
+	Actions []struct {
+		Type      string `json:"type"`
+		Role      string `json:"role,omitempty"`
+		Predicate string `json:"predicate,omitempty"`
+	} `json:"actions"`
 }
 
 const researchPackDir = "../../configs/rules/research"
@@ -93,13 +98,13 @@ func TestResearchRulePack_NoChainMachinery(t *testing.T) {
 				}
 			}
 
-			for _, a := range rule.OnEnter {
+			for _, a := range append(rule.OnEnter, rule.Actions...) {
 				if a.Type != "add_triple" || a.Predicate == "" {
 					continue
 				}
 				for _, forbidden := range researchPackForbiddenConditionFields {
 					if strings.HasPrefix(a.Predicate, forbidden) {
-						t.Errorf("on_enter add_triple predicate %q starts with forbidden prefix %q — ADR-042 §Phase 2 redesign retires the chain.mode / phasevalidator / chainstall write surface; remove the add_triple",
+						t.Errorf("action add_triple predicate %q starts with forbidden prefix %q — ADR-042 §Phase 2 redesign retires the chain.mode / phasevalidator / chainstall write surface; remove the add_triple",
 							a.Predicate, forbidden)
 					}
 				}
@@ -131,7 +136,7 @@ func TestResearchRulePack_ExpectedRolesSpawned(t *testing.T) {
 		if err := json.Unmarshal(data, &rule); err != nil {
 			t.Fatalf("unmarshal %s: %v", path, err)
 		}
-		for _, a := range rule.OnEnter {
+		for _, a := range append(rule.OnEnter, rule.Actions...) {
 			if a.Type == "publish_agent" && a.Role != "" {
 				spawnedRoles[a.Role] = true
 			}
@@ -143,7 +148,7 @@ func TestResearchRulePack_ExpectedRolesSpawned(t *testing.T) {
 		"researcher-research-gather",
 		"researcher-research-synthesize",
 		"reviewer-research",
-		"coordinator", // wake-up on terminal approval
+		"coordinator", // wake-up on terminal approval and scheduled @pulse entry
 	}
 	for _, r := range want {
 		if !spawnedRoles[r] {
@@ -196,9 +201,10 @@ func TestResearchRulePack_RuleIDsUnique(t *testing.T) {
 	}
 }
 
-// TestResearchRulePack_AllEnabled asserts every rule in the pack is
-// enabled: true. A disabled rule in a curated pack is almost always a
-// commit-in-progress artifact — fail-loud catches it.
+// TestResearchRulePack_AllEnabled asserts every reactive expression rule in the
+// pack is enabled: true, while scheduled cron rules (such as
+// 10-scheduled-program-pulse.json) ship enabled: false by default so operators
+// enable them at runtime via Pattern-B RULE_CONFIG KV (#268).
 func TestResearchRulePack_AllEnabled(t *testing.T) {
 	files, err := filepath.Glob(filepath.Join(researchPackDir, "*.json"))
 	if err != nil {
@@ -213,8 +219,15 @@ func TestResearchRulePack_AllEnabled(t *testing.T) {
 		if err := json.Unmarshal(data, &rule); err != nil {
 			t.Fatalf("unmarshal %s: %v", path, err)
 		}
+		if rule.Type == "cron" {
+			if rule.Enabled {
+				t.Errorf("%s: cron rule enabled=true — scheduled cron rules must ship enabled=false by default and be toggled via Pattern-B RULE_CONFIG KV (#268)",
+					filepath.Base(path))
+			}
+			continue
+		}
 		if !rule.Enabled {
-			t.Errorf("%s: rule enabled=false — research pack rules must be enabled (commit-in-progress?)",
+			t.Errorf("%s: rule enabled=false — research pack expression rules must be enabled (commit-in-progress?)",
 				filepath.Base(path))
 		}
 	}

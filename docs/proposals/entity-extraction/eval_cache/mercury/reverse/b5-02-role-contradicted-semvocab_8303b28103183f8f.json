@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "Domain packs are written as SHACL shapes and compiled offline with semvocab shacl.Compile; semvocab runs no inference server.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"semvocab\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"semvocab\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:semvocab": "semvocab (software): SHACL vocabulary compiler and CCO catalog for SemEngine"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"semvocab\" is \"runtime HTTP server that executes live LLM inference requests\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 371,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.002180664634469912,
+          "not_an_entity": 0.0005513583647650778,
+          "concept": 0.00021591493500103487,
+          "event": 3.752038970497637e-05,
+          "specification": 4.251617155265845e-05,
+          "repository": 5.81127163916276e-05,
+          "software": 0.996879136374999,
+          "organization": 2.0083217392074866e-05,
+          "person": 1.4693195723574988e-05
+        },
+        "confidence": 0.996489028421874
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:semvocab",
+        "probabilities": {
+          "unsure": 0.00752025964168226,
+          "new": 0.00752025964168226,
+          "entity:software:semvocab": 0.9849594807166355
+        },
+        "confidence": 0.9774392210749533
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.00048785713458966414
+      }
+    },
+    "usage": {
+      "input_tokens": 558,
+      "output_tokens": 3
+    }
+  }
+}

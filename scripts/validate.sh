@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # validate.sh — authoritative read-only local validation mirroring Repository CI
-# (.github/workflows/ci.yml: go, ui, and governance lanes, #310).
+# (.github/workflows/ci.yml: go, ui, and governance lanes, #310 / #344).
+# Invoked by both `task validate` and `task verify`.
 #
 # Guarantees:
 #   1. Fails explicitly before running lanes when any prerequisite tool or
 #      daemon is missing (go, gofmt, task, revive, python3, node, npm, docker,
-#      openspec, jq, diff, git, or ui/node_modules).
+#      openspec, ateam, jq, diff, git, or ui/node_modules).
 #   2. Writes Go build artifacts and generated schemas/OpenAPI specs only to a
 #      temporary directory outside the repository, then compares generated
 #      output against tracked schemas/ and specs/openapi.v3.yaml.
 #   3. Preserves all tracked, staged, unstaged, and untracked worktree content
 #      whether validation passes or fails.
-#   4. Never invokes paid LLM calls, Playwright journeys, or mock E2E stacks.
+#   4. Reports per-lane wall-clock timings using bash's builtin SECONDS.
+#   5. Never invokes paid LLM calls, Playwright journeys, or mock E2E stacks.
 
 set -euo pipefail
 
@@ -49,7 +51,7 @@ trap cleanup EXIT
 check_prereqs() {
   local missing=()
   local tool
-  for tool in go gofmt task revive python3 node npm docker openspec jq diff git; do
+  for tool in go gofmt task revive python3 node npm docker openspec ateam jq diff git; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       missing+=("$tool")
     fi
@@ -69,8 +71,10 @@ check_prereqs
 
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/semteams-validate.XXXXXX")
 export PYTHONDONTWRITEBYTECODE=1
+SECONDS=0
 
 echo "=== [1/3] Go lane ==="
+go_start=$SECONDS
 task lint
 task test:race
 task test:browser-runner
@@ -84,8 +88,10 @@ go run ./cmd/openapi-generator -out "$TMP_DIR/schemas" -openapi "$TMP_DIR/specs/
 if ! diff -ru schemas "$TMP_DIR/schemas" || ! diff -u specs/openapi.v3.yaml "$TMP_DIR/specs/openapi.v3.yaml"; then
   fail "generated schemas/OpenAPI drifted from tracked schemas/ or specs/openapi.v3.yaml; run 'task schema:generate' and commit"
 fi
+go_elapsed=$((SECONDS - go_start))
 
 echo "=== [2/3] UI lane ==="
+ui_start=$SECONDS
 (
   cd "$REPO_ROOT/ui"
   export OPENAPI_SPEC_PATH="../specs/openapi.v3.yaml"
@@ -96,10 +102,19 @@ echo "=== [2/3] UI lane ==="
   npm run generate-types:check
   npm run build
 )
+ui_elapsed=$((SECONDS - ui_start))
 
 echo "=== [3/3] Governance lane ==="
+gov_start=$SECONDS
+task ateam:doctor
 task openspec:validate
 task openspec:queue-test
 task publish:verify-test
+gov_elapsed=$((SECONDS - gov_start))
 
+echo
+echo "lane timings:"
+echo "  go          ${go_elapsed}s"
+echo "  ui          ${ui_elapsed}s"
+echo "  governance  ${gov_elapsed}s"
 echo "✅ validate: all Repository CI lanes passed (Go, UI, Governance)"

@@ -3,6 +3,7 @@ name: technical-writer
 description: Maintain SemTeams durable documentation and conservative OpenSpec task truth through the canonical project contract.
 tools: Read, Edit, Write, Bash, Grep, Glob, Skill
 model: sonnet
+effort: medium
 ---
 
 # SemTeams technical writer adapter

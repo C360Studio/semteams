@@ -205,10 +205,12 @@ task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
 
 The single `Repository CI` workflow runs on every pull request to
 `main`. Its Go, UI, and Governance jobs feed the always-reported
-`CI Status Check` aggregate. The Governance job strictly validates
-OpenSpec and its queue reporter. Required mock E2E and a main-branch
-ruleset remain future work; workflow presence alone is not branch
-protection.
+`Required` aggregate. The Governance job strictly validates
+ATeam multi-agent parity, OpenSpec, and its queue reporter. The live
+`main` branch ruleset (`main-required-checks`) requires `Required` with
+strict up-to-date (`strict_required_status_checks_policy=true`) and
+squash-only PR merges, while required mock E2E in CI remains future
+work.
 
 Before pushing:
 

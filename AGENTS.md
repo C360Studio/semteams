@@ -22,9 +22,9 @@ SemDev as a separately qualified development pack. Extraction, SemEngine adoptio
 changes; preserve existing recovery and never create a competing journal or workflow engine.
 
 Deterministic structural portfolio visibility lives on `/work` (`#309`), while the read-only, evidence-backed **Program
-Pulse** (`#267`) runs as an operator profile (`/pulse`) of the `research` pack using `github_read` (`#273`) under the
-`1..4` fan-out and loop containment budget (`#272`). Scheduled cadence and custom work classification (`#268`) are
-deferred to `horizon:post-mvp`.
+Pulse** (`#267`, `#268`) runs as an operator profile (`/pulse` and opt-in cron `10-scheduled-program-pulse.json`) of
+the `research` pack using replay-safe incremental `github_read` cursors (`#273`, `#268`) under the `1..4` fan-out and
+loop containment budget (`#272`). Custom work-classification buckets remain deferred to `horizon:post-mvp`.
 
 ## Architecture, Config Layering, and Product-Shell Wiring
 
@@ -62,16 +62,25 @@ coordinator `decide(action=<category>)` ([ADR-042](docs/adr/042-coordinator-inst
 ## Commands
 
 ```bash
+task doctor               # Report tool versions and Docker reachability against pins
+task ateam:doctor         # Check ATeam multi-agent, hook, MCP, skill, and review-policy parity
 task build                # Build bin/semteams
-task lint                 # Go fmt, vet, and pinned revive
+task fmt                  # Format Go sources (worktree-safe)
+task fmt:check            # Check Go source formatting without writes
+task tidy:check           # Fail if go.mod or go.sum is not tidy
+task cleanup-roots:check  # Fail on unbounded context.Background/TODO test cleanup
+task lint                 # Go vet, fmt:check, tidy:check, revive, cleanup-roots, lint-test-ports
 task test                 # Run Go tests (fast)
+task test:unit            # Go unit/contract tests with -race at -cpu 1
 task test:race            # Go unit/contract tests with -race
+task test:repeat          # Run unit tests 5x shuffled at -cpu 1 without -race
 task test:integration     # Integration tests (testcontainers; sequential w/ -p 1 on macOS)
 task schema:generate      # Regenerate schemas/ + specs/openapi.v3.yaml
-task openspec:validate    # Strict OpenSpec validation
-task openspec:queue       # In-flight OpenSpec changes and their Hold: lines
+task spec:check           # Strict OpenSpec validation + stray Hold: + ateam spec-check (alias: openspec:validate)
+task spec:queue           # In-flight OpenSpec changes and Hold: lines (alias: openspec:queue)
 task openspec:queue-test  # Fixture test for OpenSpec queue reporter
 task publish:verify-test  # Fixture test for release publication gate
+task merge:check -- <pr>  # Run ateam review gate (Required ruleset, review policy/record, class:flake)
 task ui:lint              # ESLint
 task ui:check             # svelte-check (TypeScript)
 task ui:test              # Vitest unit/component tests
@@ -79,7 +88,7 @@ task ui:build             # Production UI build
 task ui:test:e2e          # Playwright E2E tests (auto-manages Docker stack)
 task check                # Go lint + test
 task check:all            # Go + UI lint + type-check + test + build
-task validate             # Read-only local CI parity gate (Go, UI, Governance)
+task validate             # Read-only local CI parity gate (Go, UI, Governance) (alias: task verify)
 ```
 
 Before pushing:
@@ -88,7 +97,7 @@ Before pushing:
 task validate
 ```
 
-Gate selection per diff and evidence rules: [`.agents/skills/semteams-preflight/SKILL.md`](.agents/skills/semteams-preflight/SKILL.md).
+Gate selection per diff and evidence rules: [`.agents/skills/preflight/SKILL.md`](.agents/skills/preflight/SKILL.md).
 
 ## Rules and what enforces them
 
@@ -110,7 +119,7 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | `review` | Before adding a tool in `cmd/semteams/tools/`, rule action shape, local payload type, KV bucket, or stream, complete a framework-alignment review (`cmd/semteams/tools/README.md`) and classify as substrate (SemEngine), agent runtime (SemTeams), or pack | `arch`, `go-dev`, `go-rev`; ADR-061 |
 | `review` | Never build a competing generic execution journal, effect ledger, or workflow engine while SemEngine #24 durability contracts are pending | `arch`, `go-dev`, `go-rev`; ADR-061 |
 | `review` | Production structs never retain `context.Context`; failure paths fail closed and any skip, drop, or degrade is declared and tested | `go-dev`, `go-rev` |
-| `verify` | Pinned `revive` (`revive.toml`), `gofmt`, and `go vet` pass with zero errors | `task lint` (`task validate`) |
+| `verify` | Pinned `revive` (`revive.toml`), worktree-safe `gofmt`, `go mod tidy -diff`, and `go vet` pass with zero errors | `task lint` (`task validate`) |
 
 ### 2. Packs, rules, predicates, and personas
 
@@ -130,15 +139,16 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | `verify+review` | Browser reads of portfolio and work state go through scoped SvelteKit server routes (`/api/work/*`), never direct browser NATS connections or admin credentials | `svelte-dev`, `svelte-rev`; `observable-work` spec |
 | `verify+review` | Graph-derived overlays carry explicit `known | none | unknown` states; never collapse a failed, partial, or unsupported lookup into `none` or simulate unshipped pulse/attention state | `svelte-dev`, `svelte-rev`; ADR-061 §3; `observable-work` spec |
 | `verify+review` | Svelte 5 runes (`$state`, `$derived`, `$effect`, `$props`) avoid subscription/SSE reconnect loops and preserve keyboard focus order, `aria-busy`/`aria-disabled`, and WCAG 2.5.3 compliance | `svelte-dev`, `svelte-rev`; `task ui:check`, `task ui:test` |
-| `verify` | Frontend `npm run lint`, `npm run check`, `npm run test:unit`, `npm run generate-types:check`, and `npm run build` pass without overwriting tracked generated types | `task validate`; `TestValidateTaskContract` |
+| `verify` | Frontend `npm run lint`, `npm run check`, `npm run test:unit`, `npm run generate-types:check`, and `npm run build` pass without overwriting tracked generated types | `task validate`; `TestValidateTaskMirrorsRepositoryCI`, `TestValidateTaskAndDocsContract` |
 
 ### 4. Testing, E2E, and verification
 
 | Gate | Rule | Where |
 | --- | --- | --- |
-| `verify+review` | `task validate` runs the read-only local parity gate (Go, UI, Governance) without mutating tracked, staged, unstaged, or untracked worktree files | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestValidateTaskContract` |
+| `verify+review` | `task validate` (and `task verify`) runs the read-only local parity gate (Go, UI, Governance) without mutating tracked, staged, unstaged, or untracked worktree files | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestValidateScriptCommandCompositionAndWorktreePreservation` |
 | `verify+review` | Tests use an independent oracle and are shown able to fail; structural guards carry paired sensitivity tests | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestAgentSetupParitySensitivity` |
-| `review` | Integration tests run sequentially (`-p 1`) under `task test:integration`; serialize heavy Docker/testcontainers runs across concurrent sessions on a shared host | `go-dev`, `go-rev`; `semteams-preflight` skill |
+| `verify` | Tests bind ephemeral TCP ports (`net.Listen("tcp", "127.0.0.1:0")`) and bound `.Stop`/`.Close`/`.Terminate` cleanup with `context.WithTimeout`, never `context.Background()`/`context.TODO()` | `task lint`; `scripts/lint-test-ports.sh`, `scripts/cleanup-roots-check.sh`; `TestCleanupRootsCheckSensitivity` |
+| `review` | Integration tests run sequentially (`-p 1`) under `task test:integration`; serialize heavy Docker/testcontainers runs across concurrent sessions on a shared host | `go-dev`, `go-rev`; `preflight` skill |
 | `review` | Playwright E2E journeys (`task ui:test:e2e`) run in background and are monitored every 20–30s via test output, backend Docker logs, and `/message-logger/entries`, aborting early on loops with quoted log evidence | `svelte-dev`, `svelte-rev` |
 | `review` | Never run a git command that can discard working-tree state (`checkout --`, `restore`, `stash`, `clean`, `reset --hard`); temporary in-tree fault checks use `cp` backup + verified `shasum -a 256` restore | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`, `writer` |
 | `review` | Added or edited statements on how frozen SemStreams, SemEngine, NATS, or SvelteKit behaves cite `file:line` at the pinned commit or a named test/probe, or state it is not promised | `arch`, `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`, `writer` |
@@ -147,21 +157,21 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 
 | Gate | Rule | Where |
 | --- | --- | --- |
-| `spec:check+review` | OpenSpec changes and specs are well formed (`task openspec:validate`) and truthful against code | `writer`, `go-rev`, `svelte-rev`; `task validate` |
-| `spec:check+review` | Every OpenSpec task can be ticked in or before the archive commit; holds are written as `Hold:` inside the unticked task they stop (`task openspec:queue-test`) | `protocol`; `writer`, `go-rev`, `svelte-rev` |
+| `spec:check+review` | OpenSpec changes and specs are well formed (`task openspec:validate` / `task spec:check`) and truthful against code | `writer`, `go-rev`, `svelte-rev`; `task validate` |
+| `spec:check+review` | Every OpenSpec task can be ticked in or before the archive commit; holds are written as `Hold:` inside the unticked task they stop (`scripts/openspec-queue.sh --check`, `ateam state spec-check`, `TestSpecQueueCheck`) | `protocol`; `writer`, `go-rev`, `svelte-rev`; `task validate` |
 | `verify+review` | Steps end when `task validate` passes locally on a clean tree; reviewer `APPROVE` cites commit SHA + local verification run, never CI (#171) | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `protocol` |
-| `CI required` | A merge needs `Repository CI` (`CI Status Check`) green on a head up to date with `main` | `protocol`; `repository-governance` spec |
-| `review` | No merge while a known flake (`class:flake` issue) is open in a required job unless the PR closes every open one with before/after reproduction evidence | `protocol` |
-| `review` | Code/UI PRs require review by the appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) and cross-agent review (`implemented-by:` and `reviewed-by:` naming model family `claude`, `codex`, or `gemini`); docs-only PRs take any agent's reviewer | `protocol`; `go-rev`, `svelte-rev` |
+| `CI required` | A merge needs `Repository CI` (`Required`) green on a head up to date with `main` (`task merge:check -- <pr>`) | `protocol`; `repository-governance` spec; `TestMergeCheckUpToDateRule` |
+| `verify+review` | No merge while a known flake (`class:flake` issue) is open in a required job unless the PR closes every open one with before/after reproduction evidence (`task merge:check -- <pr>`) | `protocol`; `scripts/merge-check.sh` (`ateam review gate`); `TestMergeCheckKnownFlake` |
+| `verify+review` | Code/UI PRs require review by the appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) and cross-agent review (`implemented-by:` and `reviewed-by:` with `(<model>, <effort>)` + commit-bound review record; `task merge:check -- <pr>`); docs-only PRs take any agent's reviewer | `protocol`; `go-rev`, `svelte-rev`; `scripts/merge-check.sh` (`ateam review gate`); `TestMergeCheckReview` |
 | `review` | Any defect found in repo code not fixed in the active change is filed as a GitHub issue (`status:blocked` while its code is only on a PR branch), never left in comments | `protocol`; `go-rev`, `svelte-rev` |
 | `review` | A finding needing an unchosen condition (library timing/ordering, OS state, mid-op fault, test-only call sequence) is `BLOCKING`/`HIGH` only with a named routine real-world trigger; else `MEDIUM` at most (#185) | `go-rev`, `svelte-rev`, `go-dev`, `svelte-dev`; `protocol` |
 | `verify+review` | A new repo-wide or agent-conduct rule names what enforces it and adds its row to both `AGENTS.md` and `.agents/rules-index.md` | `go-rev`, `svelte-rev`; `TestAgentSetupParity` |
 | `review` | Before claiming work, mutating state, or spawning role subagents on an underspecified prompt, check named issues/PRs/files first, then confirm Deliverable, Scope/non-goals, Definition of Done/verification, and Stop boundary | `protocol`; `.agents/README.md` |
 | `review` | Role-agent briefs carry the owner's intent and the artifact itself, not a paraphrase; resume for continuity, start fresh for mechanics; designs cap at 3 review rounds before escalating to the owner | `.agents/README.md`; `arch` |
-| `verify+review` | `architect`, `go-developer`, `go-reviewer`, `svelte-developer`, and `svelte-reviewer` run on the frontier model tier (`opus` / `gpt-6-astra` or `gpt-6-sol` / Gemini `inherit` or `pro`); `technical-writer` runs on `sonnet` / `gpt-6-sol` / Gemini `inherit` (or `flash` when requested); effort defaults match `.agents/README.md` | `.agents/README.md`; `TestAgentSetupParity` |
-| `verify+review` | `CLAUDE.md` only imports `@AGENTS.md`, `AGENTS.md` stays strictly `< 24,000` bytes and matches `.agents/rules-index.md` in numbered domains and row counts, and all role/skill adapters match their canonical contracts | `.agents/README.md`; `TestAgentSetupParity`, `TestAgentSetupParitySensitivity` |
+| `verify+review` | `architect`, `go-developer`, `go-reviewer`, `svelte-developer`, and `svelte-reviewer` run on the frontier model tier (`opus` / `gpt-6-astra` or `gpt-6-sol` / Gemini `inherit` or `pro`); `technical-writer` runs on `sonnet` / `gpt-6-sol` / Gemini `inherit` (or `flash` when requested); effort defaults match `.agents/README.md` | `.agents/README.md`; `.agents/review-policy.json`; `TestAgentSetupParity` |
+| `verify+review` | `CLAUDE.md` only imports `@AGENTS.md`, `AGENTS.md` stays strictly `< 24,000` bytes and matches `.agents/rules-index.md` in numbered domains and row counts, and all role/skill/hook/MCP adapters pass parity checks | `.agents/README.md`; `task ateam:doctor`; `TestAgentSetupParity`, `TestAgentSetupParitySensitivity` |
 | `review` | Pushed claim branches live in dedicated worktrees (`../semteams-wt/<branch>` or `.worktrees/<branch>`) and update by merging `origin/main`, never by rebase or force-push | `protocol` |
-| `review` | Evidence cited in a PR or task can be opened on another machine; git-ignored paths are named as local only, and task choices not in the design go in `openspec/changes/<id>/notes/<task>.md` | `semteams-handoff`, `semteams-preflight` skills; `protocol` |
+| `review` | Evidence cited in a PR or task can be opened on another machine; git-ignored paths are named as local only, and task choices not in the design go in `openspec/changes/<id>/notes/<task>.md` | `handoff`, `preflight` skills; `protocol` |
 | `review` | Docs are written for a working developer: shipped vs. target behavior kept distinct (`docs/demo-mvp-claims.md`), coined terms defined at first use, no marketing register | `writer`, `go-rev`, `svelte-rev` |
 
 ## Shared work protocol (Claude, Codex, and Gemini)
@@ -181,10 +191,10 @@ The canonical protocol is [`.agents/protocol.md`](.agents/protocol.md); role con
   `.worktrees/<branch>`) with `Closes #n` (or `Addresses #n` for an epic). No draft PR, no claim. Primary checkout is
   discovery-only. Verify worktree path and branch before every edit, commit, push, or PR mutation.
 - **Merge:** appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) + cross-agent review on
-  code/UI PRs (`Review request` / `Review record` comments; `implemented-by:` and `reviewed-by:` in the PR body naming
-  model family `claude`, `codex`, or `gemini`) → archive/spec sync (`openspec archive <id>`) as the final content
-  commit → `task validate` and `Repository CI` (`CI Status Check`) green on a head up to date with `main` with no open
-  unfixed `class:flake` → squash merge.
+  code/UI PRs (`Review request` and `reviewed-by:` + `Reviewed at <sha>` + `Verdict:` comments; `implemented-by:` and
+  `reviewed-by:` with `(<model>, <effort>)` in the PR body) → archive/spec sync (`openspec archive <id>`) as the final
+  content commit → `task validate`, `task merge:check -- <pr>`, and `Repository CI` (`Required`) green on a head up to
+  date with `main` with no open unfixed `class:flake` → squash merge.
 - **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` or the squash merge of an approved PR that
   declared `Closes #n`.
 

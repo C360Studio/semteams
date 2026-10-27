@@ -1,0 +1,82 @@
+{
+  "request": {
+    "state": "C360Studio/semteams owns product wiring, category packs, personas, and the SvelteKit UI.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"c360studio/sem-teams\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"c360studio/sem-teams\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:repo:c360studio/semteams": "C360Studio/semteams (repository): SemTeams always-on program manager repository for a configurable portfolio",
+          "entity:software:semsparql": "semsparql (software): Read-only SPARQL query consumer over projected graph triples",
+          "entity:software:semvocab": "semvocab (software): SHACL vocabulary compiler and CCO catalog for SemEngine",
+          "entity:repo:c360studio/semengine": "C360Studio/semengine (repository): SemEngine shared graph, transport, mutation, and rule substrate repository",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"c360studio/sem-teams\" is \"program manager repository owning category packs and UI\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 1129,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "organization",
+        "probabilities": {
+          "person": 0.003871888157058083,
+          "organization": 0.4145258483661346,
+          "software": 0.04951338601663683,
+          "repository": 0.3702549349735562,
+          "specification": 0.008318161130333191,
+          "event": 0.005119057920899373,
+          "concept": 0.023549967183910427,
+          "not_an_entity": 0.040550831469259294,
+          "unsure": 0.08429592478221189
+        },
+        "confidence": 0.34134157941190146
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:repo:c360studio/semteams",
+        "probabilities": {
+          "entity:repo:c360studio/semteams": 0.40483001098616683,
+          "entity:software:semsparql": 0.006751648856486203,
+          "entity:software:semvocab": 0.035674738083052215,
+          "entity:repo:c360studio/semengine": 0.047583465040109005,
+          "new": 0.3186569340141407,
+          "unsure": 0.18650320302004506
+        },
+        "confidence": 0.2857960131834002
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.5849829038049105
+      }
+    },
+    "usage": {
+      "input_tokens": 520,
+      "output_tokens": 0
+    }
+  }
+}

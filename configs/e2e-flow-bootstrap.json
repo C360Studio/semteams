@@ -44,22 +44,28 @@
   "model_registry": {
     "endpoints": {
       "general": {
+        "_comment": "Synthetic mock-LLM test pricing (#248 / #301 Slice 1, dated 2026-10-18): mirrors gemini-flash ($0.50 / 1M input tokens, $3.00 / 1M output tokens) so mock-LLM loops and E2E journeys exercise agent.loop.cost-usd stamping.",
         "provider": "openai",
         "url": "http://mock-llm:8080/v1",
         "model": "mock-model",
         "max_tokens": 16384,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": true
+        "stream": true,
+        "input_price_per_1m_tokens": 0.5,
+        "output_price_per_1m_tokens": 3.0
       },
       "fast": {
+        "_comment": "Synthetic mock-LLM test pricing (#248 / #301 Slice 1, dated 2026-10-18): mirrors gemini-flash ($0.50 / 1M input tokens, $3.00 / 1M output tokens) so mock-LLM fallback loops exercise agent.loop.cost-usd stamping.",
         "provider": "openai",
         "url": "http://mock-llm:8080/v1",
         "model": "mock-model",
         "max_tokens": 8192,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": false
+        "stream": false,
+        "input_price_per_1m_tokens": 0.5,
+        "output_price_per_1m_tokens": 3.0
       }
     },
     "defaults": {
@@ -322,6 +328,7 @@
           "/app/configs/rules/research/07-reviewer-approved-to-coordinator.json",
           "/app/configs/rules/research/08-loop-failed-pause.json",
           "/app/configs/rules/research/09-loop-failed-run-outcome.json",
+          "/app/configs/rules/research/10-scheduled-program-pulse.json",
           "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json",
           "/app/configs/rules/autoresearch/03-propose-to-execute.json",
           "/app/configs/rules/autoresearch/04a-execute-stamp-completion.json",

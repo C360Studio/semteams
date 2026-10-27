@@ -16,7 +16,7 @@ tasks:
       Read from tasks.md every run, so the program baton does not carry
       these caveats and cannot drift from them.
     cmds:
-      - scripts/openspec-queue.sh
+      - ateam state spec-queue
 
   queue-strict:
     desc: |
@@ -28,11 +28,13 @@ tasks:
       - scripts/openspec-queue.sh --strict
 
   queue-test:
-    desc: Verify the queue reporter catches the caveat shapes it claims to
+    desc: Verify scripts/openspec-queue.sh (--check and --strict) catches the caveat shapes it claims to
     cmds:
       - scripts/openspec-queue_fixture_test.sh
 
   validate:
-    desc: Validate all OpenSpec changes and specs strictly
+    desc: Validate all OpenSpec changes and specs strictly, and fail on a hold written outside every task
     cmds:
       - openspec validate --all --strict
+      - scripts/openspec-queue.sh --check
+      - ateam state spec-check

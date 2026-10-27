@@ -74,6 +74,13 @@ managers may gain durable context, cadence, and delegated work; the program mana
 instead of reprocessing every repository directly. A project manager is assigned to a project, not automatically to
 each repository.
 
+[ADR-064](../adr/064-rule-pack-coordination-and-source-observation.md) defines the target coordination boundary for
+those future managers: source adapters produce scoped observations, category rule packs decide bounded follow-up, and
+typed requests carry explicit program/project authority. Outbound GitHub polling is the first planned proof for
+deployments without inbound webhooks. SemSource indexing is recommended when code or documentation evidence is needed,
+but it is optional for forge observation. These are design commitments; the current Program Pulse profile does not
+run durable Project Managers or an inter-manager inbox.
+
 ## The program-management loop
 
 SemTeams grows through one coherent loop:
@@ -99,7 +106,7 @@ and the shared substrate and generic durability to SemEngine; those transfers ar
 
 | Capability | Purpose | Product posture |
 |---|---|---|
-| `program-report` (`/pulse`) | Evidence-backed program pulse and project drill-down over configured portfolio repositories. | Shipped as an operator profile of `research` (`/pulse` + `github_read`, [#267](https://github.com/C360Studio/semteams/issues/267)) alongside deterministic structural state on `/work` ([#309](https://github.com/C360Studio/semteams/issues/309)). |
+| `program-report` (`/pulse`) | Evidence-backed program pulse and project drill-down over configured portfolio repositories. | Shipped as an operator profile of `research` (`/pulse` + opt-in scheduled cron `10-scheduled-program-pulse.json` + replay-safe incremental `github_read`, [#267](https://github.com/C360Studio/semteams/issues/267), [#268](https://github.com/C360Studio/semteams/issues/268)) alongside deterministic structural state on `/work` ([#309](https://github.com/C360Studio/semteams/issues/309)). |
 | `research` (`/research`) | Configurable-depth evidence gathering (`github_read`, `web_search`, `bash`), synthesis, and review. | Shipped foundation; powers both `/pulse` and `/research`. |
 | `project-plan` | Propose sequencing, milestones, risks, and issue-shaped work. | Valid post-MVP capability. |
 | `design-review` | Develop or assess product and technical designs in project context. | Valid post-MVP capability. |
@@ -118,8 +125,9 @@ gatherers read GitHub through the product-owned `github_read` adapter (and exter
 emits a research artifact whose every factual claim carries an evidence record, and review enforces mechanical
 derivation (every cited object appears in a tool result in the run's own trajectory) plus plan conformance. Deterministic
 structural portfolio inspection lives on `/work`; semantic cross-project status, risk synthesis, and recommendations run
-through `/pulse`. Scheduled cadence and custom work-classification buckets ([#268](https://github.com/C360Studio/semteams/issues/268))
-are deferred to `horizon:post-mvp`.
+through `/pulse` on demand or via the opt-in `scheduled_program_pulse` cron rule (`configs/rules/research/10-scheduled-program-pulse.json`,
+toggled live via Pattern-B `RULE_CONFIG` KV) backed by run-scoped, replay-safe incremental cursors ([#268](https://github.com/C360Studio/semteams/issues/268)).
+Custom work-classification buckets remain deferred to `horizon:post-mvp`.
 
 `autoresearch` (`/optimize`) remains a shipped demonstration pack alongside `research`. It is not part of the initial
 program-manager MVP story unless a concrete program-management journey requires metric optimization.

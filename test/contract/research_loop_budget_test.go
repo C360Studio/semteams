@@ -48,7 +48,7 @@ func TestResearchSpawnLoopBudgets(t *testing.T) {
 			data, err := os.ReadFile(path)
 			require.NoError(t, err)
 			require.NoError(t, json.Unmarshal(data, &definition))
-			for phase, actions := range map[string][]rule.Action{"on_enter": definition.OnEnter, "on_exit": definition.OnExit} {
+			for phase, actions := range map[string][]rule.Action{"on_enter": definition.OnEnter, "on_exit": definition.OnExit, "actions": definition.Actions} {
 				for i, action := range actions {
 					if action.Type != rule.ActionTypePublishAgent {
 						continue

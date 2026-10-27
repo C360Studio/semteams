@@ -1,0 +1,75 @@
+{
+  "request": {
+    "state": "All entity state mutations flow through graph-ingest into the NATS JetStream ENTITY_STATES bucket.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"PostgreSQL\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"PostgreSQL\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"PostgreSQL\" is \"relational database storing ENTITY_STATES triples\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 306,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "person": 0.00018385210895777355,
+          "organization": 0.00012635958336978741,
+          "software": 0.03729563888264656,
+          "repository": 5.2674511129264447e-05,
+          "specification": 0.00011870384322924673,
+          "event": 3.853749558929369e-05,
+          "concept": 0.00026750324009301057,
+          "not_an_entity": 4.948312383214483e-05,
+          "unsure": 0.961867247211153
+        },
+        "confidence": 0.9571006531125472
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "new": 0.015906390079040187,
+          "unsure": 0.9840936099209598
+        },
+        "confidence": 0.9681872198419197
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.00407013806132537
+      }
+    },
+    "usage": {
+      "input_tokens": 505,
+      "output_tokens": 3
+    }
+  }
+}

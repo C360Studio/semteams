@@ -1,0 +1,81 @@
+{
+  "request": {
+    "state": "Actor: Derek Collison\nRole: creator of NATS\nQuote: NATS was created by Derek Collison, who later founded Synadia to steward the project.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is the actor \"Derek Collison\"? Use only the supplied text. Choose unsure if the text does not settle it.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, regulator or other group of people",
+          "software": "A software product, library, framework, service or model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol or formal specification",
+          "event": "A release, incident, meeting or other dated occurrence",
+          "concept": "An idea, technique, market or phenomenon that is not one of the above",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The text does not allow a confident answer"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the quote, on its own, support that \"Derek Collison\" is creator of NATS?"
+      },
+      "centrality": {
+        "type": "score",
+        "instructions": "How central is \"Derek Collison\" to what the quote says?",
+        "criteria": [
+          "Not mentioned",
+          "Mentioned in passing",
+          "The main subject"
+        ]
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 840,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "person",
+        "probabilities": {
+          "person": 0.9280886690587813,
+          "organization": 0.00416094124620404,
+          "software": 0.0044792397513704636,
+          "repository": 0.006333643529606626,
+          "specification": 0.002191283680522936,
+          "event": 0.0011909176715910823,
+          "concept": 0.014325566092855882,
+          "not_an_entity": 0.023905664632870964,
+          "unsure": 0.015324074336196819
+        },
+        "confidence": 0.919099752691129
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.969732146430578
+      },
+      "centrality": {
+        "type": "score",
+        "score": 1.880245484031575,
+        "legend": {
+          "0": "Not mentioned",
+          "1": "Mentioned in passing",
+          "2": "The main subject"
+        },
+        "probabilities": {
+          "0": 0.033569597918225585,
+          "1": 0.05261532013197353,
+          "2": 0.9138150819498008
+        },
+        "confidence": 0.8203682260473629
+      }
+    },
+    "usage": {
+      "input_tokens": 328,
+      "output_tokens": 0
+    }
+  }
+}

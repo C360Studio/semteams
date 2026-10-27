@@ -1,0 +1,74 @@
+{
+  "request": {
+    "state": "Gather loops publish completion events to NATS JetStream subjects consumed by rule-processor.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"Apache Kafka\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"Apache Kafka\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"Apache Kafka\" is \"message broker transporting gather completion events\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 764,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "unsure": 0.23786342615683156,
+          "not_an_entity": 0.21830279629144184,
+          "concept": 0.12424193414479744,
+          "event": 0.03864381399177483,
+          "specification": 0.07041591558732098,
+          "repository": 0.020708730107824303,
+          "software": 0.23461807999476178,
+          "organization": 0.04936408022266202,
+          "person": 0.005841223502585033
+        },
+        "confidence": 0.14259635442643553
+      },
+      "link": {
+        "type": "choice",
+        "choice": "unsure",
+        "probabilities": {
+          "unsure": 0.5731718227544588,
+          "new": 0.42682817724554123
+        },
+        "confidence": 0.14634364550891754
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.008217633979874227
+      }
+    },
+    "usage": {
+      "input_tokens": 352,
+      "output_tokens": 0
+    }
+  }
+}

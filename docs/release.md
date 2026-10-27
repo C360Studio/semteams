@@ -11,7 +11,7 @@ metadata) and the tagged commit:
 
 - is an ancestor of `main`;
 - has no `Repository CI` run still queued or in progress;
-- has a newest `CI Status Check` check-run (highest id) that concluded `success`.
+- has a newest `Required` check-run (highest id) that concluded `success`.
 
 The second job builds `linux/amd64` and `linux/arm64` from `docker/Dockerfile` at the verified commit, pushes the
 image tags, and creates the GitHub release. It refuses a tag that already has a release.
@@ -49,7 +49,7 @@ pushing or creating a release. Clearing `dry_run` fails verification: manual pub
 ## Recovery
 
 A tag pushed before `main`'s CI finishes fails verification with `Repository CI still running` or
-`no CI Status Check found`. Wait for `Repository CI` to finish on that commit, then re-run the failed `Publish` run;
+`no Required check-run found`. Wait for `Repository CI` to finish on that commit, then re-run the failed `Publish` run;
 do not move or re-push the tag. Runs publish one at a time: a second tag waits for the first, and GitHub keeps only
 one waiting run, so a third tag pushed meanwhile cancels the waiting one, which then needs a re-run.
 

@@ -1,0 +1,74 @@
+{
+  "request": {
+    "state": "The HTTP adapter enforces RFC 9110 retry-after semantics on 429 and 503 responses.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"RFC 9110\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"RFC 9110\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"RFC 9110\" is \"IETF HTTP Semantics specification governing status codes and retry headers\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 873,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "specification",
+        "probabilities": {
+          "unsure": 0.0514421310564933,
+          "not_an_entity": 0.04042997849429586,
+          "concept": 0.03859468548817887,
+          "event": 0.005354377009378107,
+          "specification": 0.8497622867338962,
+          "repository": 0.003110280724388491,
+          "software": 0.006483669170039067,
+          "organization": 0.004148590232176778,
+          "person": 0.0006740010911533326
+        },
+        "confidence": 0.8309825725756333
+      },
+      "link": {
+        "type": "choice",
+        "choice": "new",
+        "probabilities": {
+          "unsure": 0.3985607547035645,
+          "new": 0.6014392452964356
+        },
+        "confidence": 0.2028784905928711
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.6711285469833991
+      }
+    },
+    "usage": {
+      "input_tokens": 394,
+      "output_tokens": 0
+    }
+  }
+}

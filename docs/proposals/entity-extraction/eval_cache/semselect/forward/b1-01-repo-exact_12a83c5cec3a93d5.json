@@ -1,0 +1,82 @@
+{
+  "request": {
+    "state": "C360Studio/semengine owns the shared graph, transport, mutation, and rule substrate.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"C360Studio/semengine\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"C360Studio/semengine\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:repo:c360studio/semengine": "C360Studio/semengine (repository): SemEngine shared graph, transport, mutation, and rule substrate repository",
+          "entity:software:semvocab": "semvocab (software): SHACL vocabulary compiler and CCO catalog for SemEngine",
+          "entity:software:semengine": "SemEngine (software): Shared graph and rule substrate with graph-ingest as sole writer to ENTITY_STATES",
+          "entity:repo:c360studio/semteams": "C360Studio/semteams (repository): SemTeams always-on program manager repository for a configurable portfolio",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"C360Studio/semengine\" is \"shared graph and rule substrate repository\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 1135,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "organization",
+        "probabilities": {
+          "person": 0.004392610893394158,
+          "organization": 0.33957921176936434,
+          "software": 0.1860567658162996,
+          "repository": 0.20975105101398028,
+          "specification": 0.0208592750320549,
+          "event": 0.0034593300740117516,
+          "concept": 0.04628786640910091,
+          "not_an_entity": 0.05961985924039904,
+          "unsure": 0.12999402975139496
+        },
+        "confidence": 0.2570266132405349
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:repo:c360studio/semengine",
+        "probabilities": {
+          "entity:repo:c360studio/semengine": 0.561816176870016,
+          "entity:software:semvocab": 0.012024671236236642,
+          "entity:software:semengine": 0.13510413522776146,
+          "entity:repo:c360studio/semteams": 0.011490051111227848,
+          "new": 0.15996389519965437,
+          "unsure": 0.11960107035510376
+        },
+        "confidence": 0.47417941224401916
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.8658569489185528
+      }
+    },
+    "usage": {
+      "input_tokens": 507,
+      "output_tokens": 0
+    }
+  }
+}

@@ -170,11 +170,20 @@ func isNilResolver(r ToolResultResolver) bool {
 //     kind for web_search snippets, and revision from the producing loop) are
 //     stamped or verified on the EvidenceRecord in place.
 func VerifyDerivation(ctx context.Context, resolver ToolResultResolver, call agentic.ToolCall, a *research.Artifact) error {
+	_, err := verifyDerivationWithLoops(ctx, resolver, call, a)
+	return err
+}
+
+func verifyDerivationWithLoops(ctx context.Context, resolver ToolResultResolver, call agentic.ToolCall, a *research.Artifact) ([]string, error) {
 	if isNilResolver(resolver) || a == nil {
-		return nil
+		return nil, nil
 	}
 
 	cache := make(map[string]*ResolvedToolResult)
+	var citedRefs []string
+	var producerLoops []string
+	seenLoops := make(map[string]bool)
+
 	resolve := func(ref string) (*ResolvedToolResult, error) {
 		if cached, ok := cache[ref]; ok {
 			return cached, nil
@@ -187,6 +196,11 @@ func VerifyDerivation(ctx context.Context, resolver ToolResultResolver, call age
 			return nil, newInvalidArgsErr("tool_result_ref %q resolved to nil result", ref)
 		}
 		cache[ref] = res
+		citedRefs = append(citedRefs, ref)
+		if l := strings.TrimSpace(res.LoopID); l != "" && !seenLoops[l] {
+			seenLoops[l] = true
+			producerLoops = append(producerLoops, l)
+		}
 		return res, nil
 	}
 
@@ -196,10 +210,10 @@ func VerifyDerivation(ctx context.Context, resolver ToolResultResolver, call age
 			ev := &actor.Evidence[j]
 			res, err := resolve(ev.ToolResultRef)
 			if err != nil {
-				return wrapWithContext(fmt.Sprintf("actors[%d] (%s) evidence[%d]", i, actor.Name, j), err)
+				return nil, wrapWithContext(fmt.Sprintf("actors[%d] (%s) evidence[%d]", i, actor.Name, j), err)
 			}
 			if err := verifyCitationAgainstResult(ev, res); err != nil {
-				return wrapWithContext(fmt.Sprintf("actors[%d] (%s) evidence[%d]", i, actor.Name, j), err)
+				return nil, wrapWithContext(fmt.Sprintf("actors[%d] (%s) evidence[%d]", i, actor.Name, j), err)
 			}
 		}
 	}
@@ -210,21 +224,72 @@ func VerifyDerivation(ctx context.Context, resolver ToolResultResolver, call age
 			ev := &ip.Evidence[j]
 			res, err := resolve(ev.ToolResultRef)
 			if err != nil {
-				return wrapWithContext(fmt.Sprintf("integration_points[%d] (%s -> %s) evidence[%d]", i, ip.From, ip.To, j), err)
+				return nil, wrapWithContext(fmt.Sprintf("integration_points[%d] (%s -> %s) evidence[%d]", i, ip.From, ip.To, j), err)
 			}
 			if err := verifyCitationAgainstResult(ev, res); err != nil {
-				return wrapWithContext(fmt.Sprintf("integration_points[%d] (%s -> %s) evidence[%d]", i, ip.From, ip.To, j), err)
+				return nil, wrapWithContext(fmt.Sprintf("integration_points[%d] (%s -> %s) evidence[%d]", i, ip.From, ip.To, j), err)
 			}
 		}
 	}
 
+	if err := verifyPartialRepoFailureDisclosure(citedRefs, cache, a.OpenGaps); err != nil {
+		return nil, err
+	}
+
+	return producerLoops, nil
+}
+
+// verifyPartialRepoFailureDisclosure enforces that any partial repository
+// failures recorded in cited github_read tool results are explicitly disclosed
+// in artifact.OpenGaps (#268).
+func verifyPartialRepoFailureDisclosure(citedRefs []string, cache map[string]*ResolvedToolResult, openGaps []string) error {
+	for _, ref := range citedRefs {
+		res := cache[ref]
+		if res == nil || strings.TrimSpace(res.Content) == "" {
+			continue
+		}
+		var env evidenceRecordsEnvelope
+		if err := json.Unmarshal([]byte(res.Content), &env); err != nil || len(env.Failures) == 0 {
+			continue
+		}
+		for _, failure := range env.Failures {
+			repo := strings.TrimSpace(failure.Repository)
+			if repo == "" {
+				continue
+			}
+			if !openGapsDiscloseRepository(openGaps, repo) {
+				return newInvalidArgsErr(
+					"tool_result_ref %q reported partial repository failure for %q (%s: %s), which must be disclosed in open_gaps",
+					ref, repo, failure.Kind, failure.Error,
+				)
+			}
+		}
+	}
 	return nil
 }
 
+func openGapsDiscloseRepository(openGaps []string, repoSlug string) bool {
+	want := strings.ToLower(strings.TrimSpace(repoSlug))
+	if want == "" {
+		return true
+	}
+	for _, gap := range openGaps {
+		if strings.Contains(strings.ToLower(gap), want) {
+			return true
+		}
+	}
+	return false
+}
+
 // evidenceRecordsEnvelope matches structured tool outputs like github_read
-// that return {"records": [...]}.
+// that return {"records": [...], "failures": [...]}.
 type evidenceRecordsEnvelope struct {
-	Records []research.EvidenceRecord `json:"records"`
+	Records  []research.EvidenceRecord `json:"records"`
+	Failures []struct {
+		Repository string `json:"repository"`
+		Kind       string `json:"kind"`
+		Error      string `json:"error"`
+	} `json:"failures"`
 }
 
 func verifyCitationAgainstResult(ev *research.EvidenceRecord, res *ResolvedToolResult) error {

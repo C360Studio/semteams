@@ -1,0 +1,76 @@
+{
+  "request": {
+    "state": "The otel-collector sidecar receives OpenTelemetry OTLP traces over gRPC and exports batch spans.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"OpenTelemetry Collector\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "person": "A named human individual",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "unsure": "The supplied text does not allow a confident answer"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"OpenTelemetry Collector\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "entity:software:opentelemetry": "OpenTelemetry (software): Observability framework and collector for traces, metrics, and logs",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "unsure": "The text does not provide enough evidence to link or reject"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"OpenTelemetry Collector\" is \"telemetry receiver ingesting OTLP traces over gRPC\"?"
+      }
+    }
+  },
+  "status": 200,
+  "latency_ms": 883,
+  "response": {
+    "model": "semselect-kev-4b",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "person": 0.001093220525178077,
+          "organization": 0.01171029504019205,
+          "software": 0.765963390327821,
+          "repository": 0.0209653494580701,
+          "specification": 0.026112230962532727,
+          "event": 0.005059783767266264,
+          "concept": 0.0490008867109325,
+          "not_an_entity": 0.054171086742058956,
+          "unsure": 0.06592375646594822
+        },
+        "confidence": 0.7367088141187987
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:opentelemetry",
+        "probabilities": {
+          "entity:software:opentelemetry": 0.6670161918361103,
+          "new": 0.17832386505426517,
+          "unsure": 0.15465994310962455
+        },
+        "confidence": 0.5005242877541654
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.828915876412909
+      }
+    },
+    "usage": {
+      "input_tokens": 403,
+      "output_tokens": 0
+    }
+  }
+}

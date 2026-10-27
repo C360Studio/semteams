@@ -3,6 +3,7 @@ name: go-reviewer
 description: Review every nontrivial SemTeams backend, rule-pack, and contract change through the canonical read-only project contract.
 tools: Read, Bash, Grep, Glob, Skill
 model: opus
+effort: high
 ---
 
 # SemTeams Go reviewer adapter

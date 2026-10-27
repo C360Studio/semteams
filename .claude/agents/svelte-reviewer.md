@@ -3,6 +3,7 @@ name: svelte-reviewer
 description: Review every nontrivial SemTeams Svelte UI change through the canonical read-only project contract.
 tools: Read, Bash, Grep, Glob, Skill
 model: opus
+effort: high
 ---
 
 # SemTeams Svelte reviewer adapter

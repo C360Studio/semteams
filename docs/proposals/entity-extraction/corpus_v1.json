@@ -1,0 +1,881 @@
+{
+  "schema": "semteams.entity-eval.corpus.v1",
+  "version": "1.0.0",
+  "created_at": "2026-10-21T15:50:00Z",
+  "description": "Phase 0 laptop-sized banded golden corpus for research entity extraction (12 research.artifact.v1 snapshots, 36 labeled actor claims across bands B1..B6, plus seed portfolio/alias catalog).",
+  "gate_thresholds": {
+    "coverage_floor": 0.80,
+    "wrong_confident_ceiling": 0.05,
+    "false_merge_ceiling": 0.00,
+    "confidence_threshold_mercury": 0.55,
+    "confidence_threshold_semselect": 0.55,
+    "support_threshold_yes": 0.60,
+    "support_threshold_no": 0.40,
+    "contradiction_threshold_mercury": 0.01,
+    "contradiction_threshold_semselect": 0.055
+  },
+  "seed_catalog": [
+    {
+      "id": "entity:repo:c360studio/semteams",
+      "name": "C360Studio/semteams",
+      "type": "repository",
+      "aliases": ["semteams", "c360studio/semteams", "c360studio/sem-teams"],
+      "description": "SemTeams always-on program manager repository for a configurable portfolio"
+    },
+    {
+      "id": "entity:repo:c360studio/semengine",
+      "name": "C360Studio/semengine",
+      "type": "repository",
+      "aliases": ["c360studio/semengine", "semengine-repo"],
+      "description": "SemEngine shared graph, transport, mutation, and rule substrate repository"
+    },
+    {
+      "id": "entity:software:semstreams",
+      "name": "SemStreams",
+      "type": "software",
+      "aliases": ["semstreams", "c360studio/semstreams"],
+      "description": "Frozen Go stream processing and agentic runtime library consumed by SemTeams"
+    },
+    {
+      "id": "entity:software:semengine",
+      "name": "SemEngine",
+      "type": "software",
+      "aliases": ["semengine"],
+      "description": "Shared graph and rule substrate with graph-ingest as sole writer to ENTITY_STATES"
+    },
+    {
+      "id": "entity:software:semsparql",
+      "name": "semsparql",
+      "type": "software",
+      "aliases": ["sem-sparql", "c360studio/semsparql"],
+      "description": "Read-only SPARQL query consumer over projected graph triples"
+    },
+    {
+      "id": "entity:software:semvocab",
+      "name": "semvocab",
+      "type": "software",
+      "aliases": ["sem-vocab", "c360studio/semvocab", "shacl.Compile"],
+      "description": "SHACL vocabulary compiler and CCO catalog for SemEngine"
+    },
+    {
+      "id": "entity:software:nats-jetstream",
+      "name": "NATS JetStream",
+      "type": "software",
+      "aliases": ["JetStream", "NATS", "NATS Server"],
+      "description": "NATS persistence engine providing streams and key-value buckets"
+    },
+    {
+      "id": "entity:org:synadia",
+      "name": "Synadia",
+      "type": "organization",
+      "aliases": ["Synadia Communications", "Synadia Inc."],
+      "description": "Company founded by Derek Collison that stewards the NATS ecosystem"
+    },
+    {
+      "id": "entity:spec:adr-061",
+      "name": "ADR-061",
+      "type": "specification",
+      "aliases": ["061-agent-runtime-ownership-and-observable-work"],
+      "description": "Architecture Decision Record defining SemEngine substrate and SemTeams runtime boundary"
+    },
+    {
+      "id": "entity:software:kubernetes",
+      "name": "Kubernetes",
+      "type": "software",
+      "aliases": ["K8s", "k8s"],
+      "description": "Container orchestration system for automating deployment and scaling"
+    },
+    {
+      "id": "entity:software:eclipse-mosquitto",
+      "name": "Eclipse Mosquitto",
+      "type": "software",
+      "aliases": ["Mosquitto"],
+      "description": "Open-source lightweight MQTT broker written in C for constrained edge devices"
+    },
+    {
+      "id": "entity:software:opentelemetry",
+      "name": "OpenTelemetry",
+      "type": "software",
+      "aliases": ["OTel", "otel-collector"],
+      "description": "Observability framework and collector for traces, metrics, and logs"
+    },
+    {
+      "id": "entity:software:playwright",
+      "name": "Playwright",
+      "type": "software",
+      "aliases": ["Microsoft Playwright"],
+      "description": "Browser automation and end-to-end testing framework for web applications"
+    },
+    {
+      "id": "entity:spec:mqtt",
+      "name": "MQTT Specification",
+      "type": "specification",
+      "aliases": ["MQTT", "MQTT v5.0", "MQTT 5.0", "OASIS MQTT"],
+      "description": "OASIS standard pub/sub messaging protocol for constrained IoT devices"
+    },
+    {
+      "id": "entity:software:mercury-decide",
+      "name": "Mercury",
+      "type": "software",
+      "aliases": ["Mercury Decide", "mercury-decide"],
+      "description": "Inception Labs System One decision model serving /v1/decisions"
+    },
+    {
+      "id": "entity:org:mercury-bank",
+      "name": "Mercury",
+      "type": "organization",
+      "aliases": ["Mercury Financial", "Mercury Technologies"],
+      "description": "Financial technology company offering banking and treasury accounts for startups"
+    },
+    {
+      "id": "entity:software:hashicorp-vault",
+      "name": "Vault",
+      "type": "software",
+      "aliases": ["HashiCorp Vault"],
+      "description": "HashiCorp secrets management and encryption transit service"
+    },
+    {
+      "id": "entity:software:ansible-vault",
+      "name": "Vault",
+      "type": "software",
+      "aliases": ["Ansible Vault"],
+      "description": "Red Hat Ansible feature for encrypting playbooks and variable files"
+    },
+    {
+      "id": "entity:software:goedel-sdk",
+      "name": "Gödel-SDK",
+      "type": "software",
+      "aliases": ["Goedel-SDK", "Gödel SDK"],
+      "description": "Robotics control SDK released by Zürich Instruments"
+    },
+    {
+      "id": "entity:org:zurich-instruments",
+      "name": "Zürich Instruments",
+      "type": "organization",
+      "aliases": ["Zurich Instruments", "Zuerich Instruments"],
+      "description": "Swiss scientific instrumentation and robotics hardware company"
+    },
+    {
+      "id": "entity:spec:angstrom-bus",
+      "name": "Ångström-Bus",
+      "type": "specification",
+      "aliases": ["Angstrom-Bus", "Ångström Bus v1.2"],
+      "description": "Low-latency cryogenic sensor bus timing specification"
+    },
+    {
+      "id": "entity:person:francois-chollet",
+      "name": "François Chollet",
+      "type": "person",
+      "aliases": ["Francois Chollet"],
+      "description": "AI researcher, creator of Keras and the Abstraction and Reasoning Corpus (ARC)"
+    },
+    {
+      "id": "entity:software:cafe-mesh",
+      "name": "Café-Mesh",
+      "type": "software",
+      "aliases": ["Cafe-Mesh", "Café Mesh"],
+      "description": "Local robot telemetry buffering mesh used by Zürich Instruments"
+    }
+  ],
+  "cases": [
+    {
+      "id": "b1-01-repo-exact",
+      "artifact_id": "art-01-substrate",
+      "band": "B1",
+      "band_name": "exact_or_alias",
+      "name": "C360Studio/semengine",
+      "role": "shared graph and rule substrate repository",
+      "quote": "C360Studio/semengine owns the shared graph, transport, mutation, and rule substrate.",
+      "locator": "github://c360studio/semteams/blob/main/AGENTS.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_agents",
+      "expect": {
+        "type": "repository",
+        "link": "entity:repo:c360studio/semengine",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b1-02-software-portfolio",
+      "artifact_id": "art-01-substrate",
+      "band": "B1",
+      "band_name": "exact_or_alias",
+      "name": "SemStreams",
+      "role": "frozen runtime dependency supplying agentic and graph components",
+      "quote": "The current runtime composes agentic, graph, rule and I/O components from the frozen SemStreams dependency.",
+      "locator": "github://c360studio/semteams/blob/main/AGENTS.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_agents",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:semstreams",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b1-03-alias-exact",
+      "artifact_id": "art-02-messaging",
+      "band": "B1",
+      "band_name": "exact_or_alias",
+      "name": "NATS JetStream",
+      "role": "persistence layer for agent loop state",
+      "quote": "SemStreams stores agent loop state in NATS JetStream key-value buckets.",
+      "locator": "https://docs.nats.io/nats-concepts/jetstream",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_nats_1",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:nats-jetstream",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b1-04-adr-pattern",
+      "artifact_id": "art-02-messaging",
+      "band": "B1",
+      "band_name": "exact_or_alias",
+      "name": "ADR-061",
+      "role": "architecture decision record defining runtime ownership boundaries",
+      "quote": "ADR-061 records the approved ownership boundary between SemEngine and SemTeams.",
+      "locator": "github://c360studio/semteams/blob/main/docs/adr/061-agent-runtime-ownership-and-observable-work.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_adr061",
+      "expect": {
+        "type": "specification",
+        "link": "entity:spec:adr-061",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role expands ADR to 'architecture decision record', which is not stated in the quote"
+      }
+    },
+    {
+      "id": "b1-05-rfc-pattern-new",
+      "artifact_id": "art-03-standards",
+      "band": "B1",
+      "band_name": "exact_or_alias",
+      "name": "RFC 9110",
+      "role": "IETF HTTP Semantics specification governing status codes and retry headers",
+      "quote": "The HTTP adapter enforces RFC 9110 retry-after semantics on 429 and 503 responses.",
+      "locator": "https://www.rfc-editor.org/rfc/rfc9110",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_rfc9110",
+      "expect": {
+        "type": "specification",
+        "link": "new",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'IETF HTTP Semantics' and 'governing status codes', which are not stated in the quote"
+      }
+    },
+    {
+      "id": "b1-06-org-exact",
+      "artifact_id": "art-03-standards",
+      "band": "B1",
+      "band_name": "exact_or_alias",
+      "name": "Synadia",
+      "role": "company that stewards the NATS project",
+      "quote": "NATS was created by Derek Collison, who later founded Synadia to steward the project.",
+      "locator": "https://www.synadia.com/about",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_synadia",
+      "expect": {
+        "type": "organization",
+        "link": "entity:org:synadia",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b2-01-k8s-abbrev",
+      "artifact_id": "art-04-infra",
+      "band": "B2",
+      "band_name": "lexical_variant",
+      "name": "K8s",
+      "role": "container orchestrator scheduling the stateless worker pods",
+      "quote": "Stateless worker pods are scheduled across regional Kubernetes (K8s) clusters.",
+      "locator": "https://kubernetes.io/docs/concepts/overview/",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_k8s",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:kubernetes",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: quote states pods are scheduled across Kubernetes (K8s) clusters but does not state K8s is a 'container orchestrator'"
+      }
+    },
+    {
+      "id": "b2-02-mosquitto-bm25",
+      "artifact_id": "art-04-infra",
+      "band": "B2",
+      "band_name": "lexical_variant",
+      "name": "Mosquitto MQTT Broker",
+      "role": "lightweight C MQTT broker running in under 2MB RAM on ARM edge nodes",
+      "quote": "Reference implementation Eclipse Mosquitto runs in under 2MB resident memory on constrained ARM edge nodes.",
+      "locator": "https://mosquitto.org/documentation/",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_mosquitto",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:eclipse-mosquitto",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'lightweight C MQTT broker', which is not stated in the quote"
+      }
+    },
+    {
+      "id": "b2-03-repo-punct-variant",
+      "artifact_id": "art-05-observability",
+      "band": "B2",
+      "band_name": "lexical_variant",
+      "name": "c360studio/sem-teams",
+      "role": "program manager repository owning category packs and UI",
+      "quote": "C360Studio/semteams owns product wiring, category packs, personas, and the SvelteKit UI.",
+      "locator": "github://c360studio/semteams/blob/main/README.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_readme",
+      "expect": {
+        "type": "repository",
+        "link": "entity:repo:c360studio/semteams",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'program manager', which is not stated in the quote"
+      }
+    },
+    {
+      "id": "b2-04-otel-collector",
+      "artifact_id": "art-05-observability",
+      "band": "B2",
+      "band_name": "lexical_variant",
+      "name": "OpenTelemetry Collector",
+      "role": "telemetry receiver ingesting OTLP traces over gRPC",
+      "quote": "The otel-collector sidecar receives OpenTelemetry OTLP traces over gRPC and exports batch spans.",
+      "locator": "https://opentelemetry.io/docs/collector/",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_otel",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:opentelemetry",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b2-05-playwright-e2e",
+      "artifact_id": "art-06-testing",
+      "band": "B2",
+      "band_name": "lexical_variant",
+      "name": "Playwright Test Runner",
+      "role": "end-to-end browser test framework driving Chromium against the Docker stack",
+      "quote": "Playwright drives headless Chromium browser journeys against the local Docker Compose stack.",
+      "locator": "https://playwright.dev/docs/intro",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_playwright",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:playwright",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'end-to-end browser test framework', whereas the quote only states it drives headless Chromium browser journeys"
+      }
+    },
+    {
+      "id": "b2-06-mqtt-spec-variant",
+      "artifact_id": "art-06-testing",
+      "band": "B2",
+      "band_name": "lexical_variant",
+      "name": "MQTT v5.0 Protocol",
+      "role": "OASIS pub/sub protocol specification with three QoS delivery levels",
+      "quote": "The MQTT v5.0 specification defines three QoS delivery levels for lightweight pub/sub messaging.",
+      "locator": "https://mqtt.org/specification",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_mqtt",
+      "expect": {
+        "type": "specification",
+        "link": "entity:spec:mqtt",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'OASIS', which is not stated in the quote"
+      }
+    },
+    {
+      "id": "b3-01-mercury-model",
+      "artifact_id": "art-07-ambiguous",
+      "band": "B3",
+      "band_name": "ambiguous_name",
+      "name": "Mercury",
+      "role": "System One decision model from Inception Labs",
+      "quote": "Inception's Mercury model returns calibrated choice and noul probabilities on /v1/decisions without generating chat text.",
+      "locator": "https://docs.inceptionlabs.ai/get-started/models",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_inception",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:mercury-decide",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'System One' and 'Labs', which are not stated in the quote"
+      }
+    },
+    {
+      "id": "b3-02-mercury-bank",
+      "artifact_id": "art-07-ambiguous",
+      "band": "B3",
+      "band_name": "ambiguous_name",
+      "name": "Mercury",
+      "role": "fintech provider holding startup treasury and operating accounts",
+      "quote": "Mercury provides FDIC-insured treasury accounts and wire APIs for venture-backed technology companies.",
+      "locator": "https://mercury.com/treasury",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_mercury_bank",
+      "expect": {
+        "type": "organization",
+        "link": "entity:org:mercury-bank",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role adds 'fintech' and 'operating accounts', which are not stated in the quote"
+      }
+    },
+    {
+      "id": "b3-03-vault-hashicorp",
+      "artifact_id": "art-08-novel",
+      "band": "B3",
+      "band_name": "ambiguous_name",
+      "name": "Vault",
+      "role": "secrets manager issuing short-lived dynamic database credentials",
+      "quote": "HashiCorp Vault leases dynamic PostgreSQL credentials and rotates transit encryption keys every hour.",
+      "locator": "https://developer.hashicorp.com/vault/docs",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_vault",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:hashicorp-vault",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b3-04-person-novel",
+      "artifact_id": "art-08-novel",
+      "band": "B3",
+      "band_name": "ambiguous_name",
+      "name": "Derek Collison",
+      "role": "creator of NATS and founder of Synadia",
+      "quote": "NATS was created by Derek Collison, who later founded Synadia to steward the project.",
+      "locator": "https://www.synadia.com/about",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_synadia",
+      "expect": {
+        "type": "person",
+        "link": "new",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b3-05-event-novel",
+      "artifact_id": "art-08-novel",
+      "band": "B3",
+      "band_name": "ambiguous_name",
+      "name": "KubeCon North America 2026",
+      "role": "conference where the SemEngine durability benchmark was presented",
+      "quote": "Maintainers presented the SemEngine durability benchmark at the KubeCon North America 2026 conference in Salt Lake City.",
+      "locator": "https://events.linuxfoundation.org/kubecon-cloudnativecon-north-america/",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_kubecon",
+      "expect": {
+        "type": "event",
+        "link": "new",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b3-06-concept-novel",
+      "artifact_id": "art-08-novel",
+      "band": "B3",
+      "band_name": "ambiguous_name",
+      "name": "Compare-And-Swap Optimistic Concurrency",
+      "role": "concurrency control technique using revision numbers instead of distributed locks",
+      "quote": "Writers use Compare-And-Swap Optimistic Concurrency on KV revision numbers to detect conflicting updates without locks.",
+      "locator": "https://docs.nats.io/nats-concepts/jetstream/key-value-store",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_kv_cas",
+      "expect": {
+        "type": "concept",
+        "link": "new",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b4-01-unmentioned-k8s",
+      "artifact_id": "art-09-unsupported",
+      "band": "B4",
+      "band_name": "unsupported_claim",
+      "name": "Kubernetes",
+      "role": "graph database used by SemEngine",
+      "quote": "SemEngine runs on NATS JetStream and needs no external database.",
+      "locator": "github://c360studio/semengine/blob/main/README.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_semengine_readme",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:kubernetes",
+        "mention": false,
+        "support": false
+      }
+    },
+    {
+      "id": "b4-02-unmentioned-kafka",
+      "artifact_id": "art-09-unsupported",
+      "band": "B4",
+      "band_name": "unsupported_claim",
+      "name": "Apache Kafka",
+      "role": "message broker transporting gather completion events",
+      "quote": "Gather loops publish completion events to NATS JetStream subjects consumed by rule-processor.",
+      "locator": "github://c360studio/semteams/blob/main/configs/flow-bootstrap.json",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_bootstrap",
+      "expect": {
+        "type": "software",
+        "link": "new",
+        "mention": false,
+        "support": false
+      }
+    },
+    {
+      "id": "b4-03-unmentioned-postgres",
+      "artifact_id": "art-09-unsupported",
+      "band": "B4",
+      "band_name": "unsupported_claim",
+      "name": "PostgreSQL",
+      "role": "relational database storing ENTITY_STATES triples",
+      "quote": "All entity state mutations flow through graph-ingest into the NATS JetStream ENTITY_STATES bucket.",
+      "locator": "github://c360studio/semengine/blob/main/AGENTS.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_semengine_agents",
+      "expect": {
+        "type": "software",
+        "link": "new",
+        "mention": false,
+        "support": false
+      }
+    },
+    {
+      "id": "b4-04-unmentioned-redis",
+      "artifact_id": "art-10-unsupported",
+      "band": "B4",
+      "band_name": "unsupported_claim",
+      "name": "Redis Cluster",
+      "role": "distributed lock manager for rule reconciliation",
+      "quote": "Initial rule reconciliation runs inside the service readiness barrier before message consumption starts.",
+      "locator": "github://c360studio/semteams/blob/main/cmd/semteams/main.go",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_main_go",
+      "expect": {
+        "type": "software",
+        "link": "new",
+        "mention": false,
+        "support": false
+      }
+    },
+    {
+      "id": "b4-05-unmentioned-person",
+      "artifact_id": "art-10-unsupported",
+      "band": "B4",
+      "band_name": "unsupported_claim",
+      "name": "Mitchell Hashimoto",
+      "role": "author of the SemTeams research containment rules",
+      "quote": "Every publish_agent rule action sets an explicit loop_max_iterations ceiling under the research containment budget.",
+      "locator": "github://c360studio/semteams/blob/main/docs/adr/060-program-manager-direction-and-research-design.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_adr060",
+      "expect": {
+        "type": "person",
+        "link": "new",
+        "mention": false,
+        "support": false
+      }
+    },
+    {
+      "id": "b4-06-unmentioned-graphql",
+      "artifact_id": "art-10-unsupported",
+      "band": "B4",
+      "band_name": "unsupported_claim",
+      "name": "Apollo GraphQL Router",
+      "role": "browser-facing API gateway for the SemTeams work board",
+      "quote": "Browser reads of portfolio and work state go through scoped SvelteKit server routes (/api/work/*).",
+      "locator": "github://c360studio/semteams/blob/main/AGENTS.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_agents",
+      "expect": {
+        "type": "software",
+        "link": "new",
+        "mention": false,
+        "support": false
+      }
+    },
+    {
+      "id": "b5-01-role-contradicted-semsparql",
+      "artifact_id": "art-11-roles",
+      "band": "B5",
+      "band_name": "role_only_support",
+      "name": "semsparql",
+      "role": "primary graph writer that mutates ENTITY_STATES triples during updates",
+      "quote": "graph-ingest is the sole writer to ENTITY_STATES; semsparql is an indirect read-only query consumer.",
+      "locator": "github://c360studio/semteams/blob/main/AGENTS.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_agents",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:semsparql",
+        "mention": true,
+        "support": false,
+        "support_note": "explicit_contradiction: quote states graph-ingest is the sole writer and semsparql is a read-only query consumer"
+      }
+    },
+    {
+      "id": "b5-02-role-contradicted-semvocab",
+      "artifact_id": "art-11-roles",
+      "band": "B5",
+      "band_name": "role_only_support",
+      "name": "semvocab",
+      "role": "runtime HTTP server that executes live LLM inference requests",
+      "quote": "Domain packs are written as SHACL shapes and compiled offline with semvocab shacl.Compile; semvocab runs no inference server.",
+      "locator": "github://c360studio/semvocab/blob/main/README.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_semvocab_readme",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:semvocab",
+        "mention": true,
+        "support": false,
+        "support_note": "explicit_contradiction: quote states semvocab compiles SHACL shapes offline and runs no inference server"
+      }
+    },
+    {
+      "id": "b5-03-role-contradicted-playwright",
+      "artifact_id": "art-11-roles",
+      "band": "B5",
+      "band_name": "role_only_support",
+      "name": "Playwright",
+      "role": "production message broker routing NATS subjects inside SemEngine",
+      "quote": "Playwright is used only for browser E2E tests in ui/e2e and never runs inside the production SemEngine broker.",
+      "locator": "github://c360studio/semteams/blob/main/AGENTS.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_agents",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:playwright",
+        "mention": true,
+        "support": false,
+        "support_note": "explicit_contradiction: quote states Playwright is used only for browser E2E tests and never runs inside the production SemEngine broker"
+      }
+    },
+    {
+      "id": "b5-04-role-supported-semengine",
+      "artifact_id": "art-11-roles",
+      "band": "B5",
+      "band_name": "role_only_support",
+      "name": "SemEngine",
+      "role": "shared substrate owning graph ingest, transport, mutation, and the rule engine",
+      "quote": "SemEngine owns the shared substrate (graph, transport, mutation, rule engine, lifecycle/projection, and generic durability).",
+      "locator": "github://c360studio/semteams/blob/main/docs/adr/061-agent-runtime-ownership-and-observable-work.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_read_adr061",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:semengine",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role claims 'graph ingest' whereas quote states 'graph, transport, mutation, rule engine' without 'ingest'"
+      }
+    },
+    {
+      "id": "b5-05-role-supported-semvocab",
+      "artifact_id": "art-11-roles",
+      "band": "B5",
+      "band_name": "role_only_support",
+      "name": "semvocab",
+      "role": "SHACL compiler and ontology catalog used to compile vocabulary shape packs",
+      "quote": "The vocabulary pack is written as SHACL shapes and compiled with semvocab shacl.Compile against the CCO catalog.",
+      "locator": "github://c360studio/semvocab/blob/main/README.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_semvocab_readme",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:semvocab",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role calls semvocab an 'ontology catalog' whereas quote says it compiles SHACL shapes against the CCO catalog"
+      }
+    },
+    {
+      "id": "b5-06-role-supported-jetstream",
+      "artifact_id": "art-11-roles",
+      "band": "B5",
+      "band_name": "role_only_support",
+      "name": "NATS JetStream",
+      "role": "durable stream and key-value storage backing ENTITY_STATES and agent loops",
+      "quote": "NATS JetStream provides the durable streams and key-value buckets that back ENTITY_STATES and agent loop state.",
+      "locator": "https://docs.nats.io/nats-concepts/jetstream",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_nats_1",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:nats-jetstream",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b6-01-unicode-goedel",
+      "artifact_id": "art-12-unicode",
+      "band": "B6",
+      "band_name": "non_ascii",
+      "name": "Gödel-SDK",
+      "role": "robotics SDK released by Zürich Instruments",
+      "quote": "Zürich Instruments 🚀 released Gödel-SDK v2.1 for café robotics teams.",
+      "locator": "https://example.com/zurich-goedel-sdk",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_zurich_1",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:goedel-sdk",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b6-02-unicode-zurich",
+      "artifact_id": "art-12-unicode",
+      "band": "B6",
+      "band_name": "non_ascii",
+      "name": "Zürich Instruments",
+      "role": "Swiss instrumentation company that released Gödel-SDK v2.1",
+      "quote": "Zürich Instruments 🚀 released Gödel-SDK v2.1 for café robotics teams.",
+      "locator": "https://example.com/zurich-goedel-sdk",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_zurich_1",
+      "expect": {
+        "type": "organization",
+        "link": "entity:org:zurich-instruments",
+        "mention": true,
+        "support": false,
+        "support_note": "unstated_gloss: role claims 'Swiss instrumentation company' which is not stated in the quote"
+      }
+    },
+    {
+      "id": "b6-03-unicode-angstrom",
+      "artifact_id": "art-12-unicode",
+      "band": "B6",
+      "band_name": "non_ascii",
+      "name": "Ångström-Bus",
+      "role": "low-latency sensor bus timing specification",
+      "quote": "The Ångström-Bus v1.2 specification ✨ defines sub-microsecond frame timing for cryogenic sensors.",
+      "locator": "https://example.com/angstrom-bus-spec",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_angstrom",
+      "expect": {
+        "type": "specification",
+        "link": "entity:spec:angstrom-bus",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b6-04-unicode-chollet-folded",
+      "artifact_id": "art-12-unicode",
+      "band": "B6",
+      "band_name": "non_ascii",
+      "name": "Francois Chollet",
+      "role": "creator of the Abstraction and Reasoning Corpus (ARC) benchmark",
+      "quote": "🧪 In 2019, François Chollet introduced the Abstraction and Reasoning Corpus (ARC) to measure fluid intelligence.",
+      "locator": "https://arxiv.org/abs/1911.01547",
+      "channel": "web",
+      "source_class": "primary",
+      "tool_result_ref": "call_web_arc",
+      "expect": {
+        "type": "person",
+        "link": "entity:person:francois-chollet",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b6-05-unicode-cafe-mesh",
+      "artifact_id": "art-12-unicode",
+      "band": "B6",
+      "band_name": "non_ascii",
+      "name": "Cafe-Mesh",
+      "role": "local robot telemetry buffering mesh used by Zürich Instruments",
+      "quote": "Zürich Instruments 🚀 deploys Café-Mesh for local robot telemetry buffering on edge controllers.",
+      "locator": "https://example.com/cafe-mesh",
+      "channel": "web",
+      "source_class": "official",
+      "tool_result_ref": "call_web_cafemesh",
+      "expect": {
+        "type": "software",
+        "link": "entity:software:cafe-mesh",
+        "mention": true,
+        "support": true
+      }
+    },
+    {
+      "id": "b6-06-unicode-nfd-repo",
+      "artifact_id": "art-12-unicode",
+      "band": "B6",
+      "band_name": "non_ascii",
+      "name": "Mu\u0308nchen-Lab/quantum-sim",
+      "role": "source repository providing Rust bindings for ion-trap gates",
+      "quote": "⚛️ München-Lab/quantum-sim provides open-source Rust bindings for cryogenic ion-trap gate simulation.",
+      "locator": "github://munchen-lab/quantum-sim/blob/main/README.md",
+      "channel": "github",
+      "source_class": "primary",
+      "tool_result_ref": "call_gh_quantum_sim",
+      "expect": {
+        "type": "repository",
+        "link": "new",
+        "mention": true,
+        "support": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "request": {
+    "state": "Stateless worker pods are scheduled across regional Kubernetes (K8s) clusters.",
+    "questions": {
+      "type": {
+        "type": "choice",
+        "instructions": "What kind of entity is \"K8s\"? Judge using the supplied text and standard technical meaning of the named entity in context. Choose unsure if the text does not allow a confident answer.",
+        "criteria": {
+          "unsure": "The supplied text does not allow a confident answer",
+          "not_an_entity": "The actor name is not a nameable entity",
+          "concept": "A technical concept, algorithm, technique, or pattern that is not a specific product or standard",
+          "event": "A conference, release, incident, meeting, or dated occurrence",
+          "specification": "A standard, protocol, RFC, ADR, or formal specification",
+          "repository": "A source-code repository, e.g. owner/name on GitHub",
+          "software": "A software product, library, framework, service, CLI tool, or AI model",
+          "organization": "A company, foundation, agency, institution, or group of people",
+          "person": "A named human individual"
+        }
+      },
+      "link": {
+        "type": "choice",
+        "instructions": "Which catalog entity does \"K8s\" refer to in this text? Choose new if it is a real entity not in the catalog list, or unsure if the text does not settle it.",
+        "criteria": {
+          "unsure": "The text does not provide enough evidence to link or reject",
+          "new": "A valid entity mentioned in the text that is not one of the listed catalog entities",
+          "entity:software:kubernetes": "Kubernetes (software): Container orchestration system for automating deployment and scaling"
+        }
+      },
+      "support": {
+        "type": "noul",
+        "instructions": "Does the supplied text, on its own, support the claim that \"K8s\" is \"container orchestrator scheduling the stateless worker pods\"?"
+      }
+    },
+    "model": "mercury-decide"
+  },
+  "status": 200,
+  "latency_ms": 259,
+  "response": {
+    "model": "mercury-decide",
+    "answers": {
+      "type": {
+        "type": "choice",
+        "choice": "software",
+        "probabilities": {
+          "unsure": 0.0016989144737105466,
+          "not_an_entity": 0.0002952269269065168,
+          "concept": 0.00042955284883980816,
+          "event": 7.464505686972115e-05,
+          "specification": 0.00016821523234942493,
+          "repository": 2.7460381807443546e-05,
+          "software": 0.9972379451078143,
+          "organization": 4.527451558747901e-05,
+          "person": 2.276545611472203e-05
+        },
+        "confidence": 0.9968926882462912
+      },
+      "link": {
+        "type": "choice",
+        "choice": "entity:software:kubernetes",
+        "probabilities": {
+          "unsure": 0.0013227718855579704,
+          "new": 0.0016984727215364024,
+          "entity:software:kubernetes": 0.9969787553929057
+        },
+        "confidence": 0.9954681330893586
+      },
+      "support": {
+        "type": "noul",
+        "noul": 0.4378234991142019
+      }
+    },
+    "usage": {
+      "input_tokens": 545,
+      "output_tokens": 3
+    }
+  }
+}
