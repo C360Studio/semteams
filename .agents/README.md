@@ -4,42 +4,19 @@ The files in `contracts/` are the tracked, platform-neutral behavioral authority
 thin and must point to exactly one canonical contract. Adapted from SemEngine (`C360Studio/semengine`, `.agents/`),
 SemVocab, and SemSparql; where a rule differs, this tree is authoritative.
 
-## Role and platform mapping
+## Roles
 
-- SemTeams architect (read-only)
-  - Canonical: `.agents/contracts/architect.md`
-  - Claude: `.claude/agents/architect.md`
-  - Codex: `.codex/agents/architect.toml`
-  - Gemini (Antigravity): `define_subagent` (`name = "architect"`, `enable_write_tools = false`)
-- SemTeams Go developer
-  - Canonical: `.agents/contracts/go-developer.md`
-  - Claude: `.claude/agents/go-developer.md`
-  - Codex: `.codex/agents/go-developer.toml`
-  - Gemini (Antigravity): `define_subagent` (`name = "go-developer"`, `enable_write_tools = true`)
-- SemTeams Go reviewer (independent; read-only)
-  - Canonical: `.agents/contracts/go-reviewer.md`
-  - Claude: `.claude/agents/go-reviewer.md`
-  - Codex: `.codex/agents/go-reviewer.toml`
-  - Gemini (Antigravity): `define_subagent` (`name = "go-reviewer"`, `enable_write_tools = false`)
-- SemTeams Svelte developer
-  - Canonical: `.agents/contracts/svelte-developer.md`
-  - Claude: `.claude/agents/svelte-developer.md`
-  - Codex: `.codex/agents/svelte-developer.toml`
-  - Gemini (Antigravity): `define_subagent` (`name = "svelte-developer"`, `enable_write_tools = true`)
-- SemTeams Svelte reviewer (independent; read-only)
-  - Canonical: `.agents/contracts/svelte-reviewer.md`
-  - Claude: `.claude/agents/svelte-reviewer.md`
-  - Codex: `.codex/agents/svelte-reviewer.toml`
-  - Gemini (Antigravity): `define_subagent` (`name = "svelte-reviewer"`, `enable_write_tools = false`)
-- SemTeams technical writer
-  - Canonical: `.agents/contracts/technical-writer.md`
-  - Claude: `.claude/agents/technical-writer.md`
-  - Codex: `.codex/agents/technical-writer.toml`
-  - Gemini (Antigravity): `define_subagent` (`name = "technical-writer"`, `enable_write_tools = true`)
+SemTeams carries six cross-stack specialist roles alongside ATeam's base
+[`.agents/contracts/developer.md`](contracts/developer.md) and [`.agents/contracts/reviewer.md`](contracts/reviewer.md)
+contracts and [`.agents/review-policy.json`](review-policy.json). Each role's canonical contract is
+`.agents/contracts/<role>.md`; its Claude adapter is `.claude/agents/<role>.md` and its Codex adapter
+`.codex/agents/<role>.toml`. Gemini (Antigravity) registers roles at runtime (see below).
 
-SemTeams carries six cross-stack specialist roles (`architect`, `go-developer`, `go-reviewer`, `svelte-developer`,
-`svelte-reviewer`, `technical-writer`) alongside ATeam's base [`.agents/contracts/developer.md`](contracts/developer.md)
-and [`.agents/contracts/reviewer.md`](contracts/reviewer.md) contracts and [`.agents/review-policy.json`](review-policy.json);
+- Backend and pack work: `go-developer`, reviewed by `go-reviewer`.
+- `ui/` work: `svelte-developer`, reviewed by `svelte-reviewer`; a cross-stack change goes through both lanes.
+- Designs and inventories: `architect`; durable docs and OpenSpec task truth: `technical-writer`.
+- Read-only roles: `architect`, `go-reviewer`, `svelte-reviewer`. The other three write.
+
 SemStreams' explorer and judge contracts are not carried. Add a role only with a recorded owner decision.
 
 ## Model routing
@@ -140,22 +117,10 @@ cross-agent review). `CLAUDE.md` imports `AGENTS.md`, which points to `.agents/p
 
 ## Shared skills
 
-Canonical skills live in `skills/`. Read the relevant `SKILL.md` fully; the platform adapters in `.claude/skills/` and
+Canonical skills live in `skills/`. Read the relevant `SKILL.md` fully; the adapters in `.claude/skills/` and
 `.gemini/commands/*.toml` add discovery metadata and argument handling, not another rule set. Repository protocol and
-role contracts remain authoritative.
-
-Canonical ATeam workflow skills:
-
-- [pickup](skills/pickup/SKILL.md): reconcile live git/worktree, GitHub, and `.ateam/state.json` state and verify write
-  ownership (`ateam state pickup`). Claude `/pickup`; Gemini `.gemini/commands/pickup.toml`.
-- [handoff](skills/handoff/SKILL.md): checkpoint unfinished work across Claude, Codex, and Gemini sessions and emit the
-  5-field pickup prompt (`ateam state handoff`). Claude `/handoff`; Gemini `.gemini/commands/handoff.toml`.
-- [preflight](skills/preflight/SKILL.md): scope SemTeams verification gates (`task validate` / `task verify`, Go, UI,
-  Governance, Playwright E2E) and record portable evidence. Claude `/preflight`; Gemini `.gemini/commands/preflight.toml`.
-- [ponytail](skills/ponytail/SKILL.md): smallest complete change discipline ladder, `// shortcut:` tracking, and
-  1–2 line skipped/risk summary. Claude `/ponytail`; Gemini `.gemini/commands/ponytail.toml`.
-- [review-pr](skills/review-pr/SKILL.md): independent read-only cross-agent PR review and commit-bound `reviewed-by:` +
-  `Reviewed at <sha>` + `Verdict:` comment record. Claude `/review-pr`; Gemini `.gemini/commands/review-pr.toml`.
+role contracts remain authoritative. ATeam supplies the workflow skills (`pickup`, `handoff`, `preflight`, `ponytail`,
+`review-pr`); `preflight` carries SemTeams's gate selection.
 
 SemTeams architecture and runtime-capability skills (`adopter_skills` in `ateam doctor`):
 
@@ -166,56 +131,15 @@ SemTeams architecture and runtime-capability skills (`adopter_skills` in `ateam 
 - [query-pattern](skills/query-pattern/SKILL.md): choose how code reads the graph (GraphQL, MCP, or NATS Direct).
   Claude `/query-pattern`.
 
-Codex can invoke canonical names with `$` or read their paths directly. Antigravity (Gemini) automatically discovers
+Codex can invoke canonical names with `$` or read their paths directly. Antigravity (Gemini) discovers
 `.agents/skills/<name>/SKILL.md` from the workspace root, and Gemini CLI loads `.gemini/commands/*.toml`. Claude Code
 uses `.claude/skills/<name>/SKILL.md`. A private memory reference cannot be required to interpret a shared rule.
 
-## Read-only parity smoke
+## Parity checks
 
-Steps 1–8 are enforced automatically by `task ateam:doctor` (`ateam doctor --check`: Step 5 and the Step 7 checks for
-ateam's canonical skills) and `TestAgentSetupParity` / `TestAgentSetupParitySensitivity`
-(`test/contract/shared_work_protocol_contract_test.go`, run by `task test:race` and `task validate`: role adapters and
-the adopter skill adapters doctor checks only for resolving links). Run Step 9 after changing a contract, adapter, or repository routing rule.
-
-1. Confirm all six specialist contracts (`.agents/contracts/{architect,go-developer,go-reviewer,svelte-developer,svelte-reviewer,technical-writer}.md`),
-   ATeam's `.agents/contracts/{developer,reviewer}.md`, `.agents/review-policy.json`, six Claude adapters
-   (`.claude/agents/*.md`), and six Codex adapters (`.codex/agents/*.toml`) exist, and that `.agents/protocol.md` and
-   `.agents/rules-index.md` exist.
-2. Confirm each adapter names-and-links only its matching `.agents/contracts/<role>.md` path and says to read it fully
-   first.
-3. Confirm the Claude read-only adapters (`architect`, `go-reviewer`, `svelte-reviewer`) list tools
-   `Read, Bash, Grep, Glob, Skill`, and that write adapters (`go-developer`, `svelte-developer`, `technical-writer`)
-   add `Edit` and `Write`, with no `Task`, `LSP`, or other delegation tool (`gopls` is reached through `Bash`; an
-   unresolved tool name makes Claude Code refuse to launch the agent).
-4. Confirm the Codex read-only adapters (`architect`, `go-reviewer`, `svelte-reviewer`) set
-   `sandbox_mode = "read-only"`; write adapters (`go-developer`, `svelte-developer`, `technical-writer`) have no
-   sandbox override and inherit the parent workspace permissions.
-5. Confirm `CLAUDE.md` only imports `@AGENTS.md` and carries no rules of its own, that `AGENTS.md` stays strictly under
-   `24,000` bytes (`wc -c AGENTS.md`), and that every rule row in `AGENTS.md` has its corresponding audit row in
-   `.agents/rules-index.md` (`task ateam:doctor` checks numbered domain headings and per-domain row counts; semantic
-   correspondence of individual rows is review only).
-6. Confirm role adapters stay within 20 lines and contain no copied checklist (`- [ ]` or `- [x]`).
-7. For every skill in `.agents/skills/<name>/SKILL.md`, confirm the canonical file and Claude adapter exist, the
-   adapter points to that canonical file and says to read it fully, stays within 25 lines, and contains no copied
-   checklist.
-8. Confirm the Claude (`.claude/agents/*.md` `model` and `effort`) and Codex (`.codex/agents/*.toml` `model` and
-   `model_reasoning_effort`) settings match the table above.
-9. Validate changed skill frontmatter and relative links, then walk the applicable scenarios below without private
-   memory.
-
-Use these semantic fixtures when reading the routing text:
-
-- "Implement a nontrivial backend or pack change" routes first to `go-developer` and then `go-reviewer`.
-- "Implement a nontrivial `ui/` change" routes first to `svelte-developer` and then `svelte-reviewer`.
-- "Implement a cross-stack backend + `ui/` change" routes through both developer/reviewer lanes before landing.
-- "Review a nontrivial SemTeams change" routes to `go-reviewer` and/or `svelte-reviewer` in read-only mode.
-- "Design an API, runtime extraction slice, pack contract, or OpenSpec target" routes to `architect` (ownership and
-  seam inventories first, drafts as text); binding rulings and approval stay with the owner session.
-- "Update durable docs or reconcile OpenSpec task truth" routes to `technical-writer`.
-- "Prepare a docs-only PR" retains protocol review/CI gates and selects checks for the changed artifacts.
-- "The previous revision was green" preserves that evidence as historical, not current-head proof.
-- "Continue without private memory" resolves shared state and verifies ownership through `pickup` and
-  `.agents/protocol.md`.
-
-The smoke passes only when Claude, Codex, and Gemini resolve the same logical role and canonical contract for every
-fixture.
+`task ateam:doctor` checks the harness: ateam's skill adapters, hook and MCP configs, the review policy, `CLAUDE.md`,
+the `AGENTS.md` size cap, and its row parity with `rules-index.md`. `TestAgentSetupParity` and its sensitivity test
+(`test/contract/shared_work_protocol_contract_test.go`) check what doctor does not: the required agent files, the six
+specialist role adapters (contract link, tools, sandbox mode, line cap, and model/effort pins against constants that
+mirror the table above), and every non-ATeam skill adapter. Correspondence between that table and the test's
+constants, skill frontmatter, and relative links inside `SKILL.md` bodies are review only.

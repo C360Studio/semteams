@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The parts of .agents/README.md's read-only parity smoke that `ateam doctor --check`
+// The parts of the agent setup (.agents/README.md, "Parity checks") that `ateam doctor --check`
 // (task ateam:doctor) does not hold: the six specialist role adapters and the adopter skill
 // adapters. Doctor owns CLAUDE.md, the AGENTS.md size cap, AGENTS.md/rules-index parity, and
 // ateam's canonical skill adapters (ateam v0.3.2 internal/bootstrap/bootstrap.go
@@ -42,6 +42,8 @@ var (
 		{name: "svelte-reviewer", readOnly: true, claudeModel: "opus", claudeEffort: "high", codexModel: "gpt-6-astra", codexEffort: "high"},
 		{name: "technical-writer", readOnly: false, claudeModel: "sonnet", claudeEffort: "medium", codexModel: "gpt-6-sol", codexEffort: "medium"},
 	}
+	// No Task, LSP, or other delegation tool: gopls is reached through Bash, and an unresolved
+	// tool name makes Claude Code refuse to launch the agent.
 	readOnlyClaudeTools = []string{"Read", "Bash", "Grep", "Glob", "Skill"}
 	writeClaudeTools    = []string{"Read", "Edit", "Write", "Bash", "Grep", "Glob", "Skill"}
 	adopterSkills       = []string{"kv-or-stream", "new-payload", "orchestration-check", "query-pattern"}
@@ -345,6 +347,7 @@ func checkCodexRoleAdapter(root string, role agentRoleSpec) []string {
 	if role.readOnly && sandboxVal != "read-only" {
 		out = append(out, fmt.Sprintf("%s: read-only role must set sandbox_mode = \"read-only\" (got %q)", rel, sandboxVal))
 	}
+	// Write roles inherit the parent workspace permissions, so they carry no sandbox override.
 	if !role.readOnly && hasSandbox {
 		out = append(out, fmt.Sprintf("%s: write role must not set sandbox_mode (got %q)", rel, sandboxVal))
 	}
