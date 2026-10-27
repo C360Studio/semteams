@@ -90,7 +90,10 @@ rewired parked pack, or an unproved composition-root invariant.
   (`openspec archive <id>`, moving the change into `openspec/changes/archive/` + spec sync) as the final content commit
   → narrow reviewer check of the archive/spec sync (any agent's reviewer) → undraft → `task validate`,
   `task merge:check -- <pr>`, and `Repository CI` (`Required`) green on a head up to date with `main` and with **no
-  known flake open** → squash merge. A correction after archive re-enters reconciliation and final review. State
+  known flake open** → squash merge. On a non-draft code/UI PR, `Merge check` (and so `Required`) is red until the
+  review record and the `reviewed-by:` line exist; once the run has finished, the reviewer reruns the failed job
+  (`gh run rerun <run> --failed`, ateam main's `review-pr` § 5) rather than updating the branch. That red is expected,
+  not a flake. A correction after archive re-enters reconciliation and final review. State
   `implemented-by: <agent> (<model>, <effort>)` in the PR body naming the implementing model family (`claude`, `codex`,
   or `gemini`), resolved model, and reasoning effort (`implemented-by: gemini (gemini-4-argon, high)`), and
   `reviewed-by: <agent> (<model>, <effort>)` once the reviewing agent's newest record approves. Never write unresolved
