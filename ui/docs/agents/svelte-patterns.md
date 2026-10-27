@@ -644,12 +644,11 @@ export async function fetchApi<T>(
 // a comment explaining why the change was needed.
 ```
 
-### Attack Tests (Reviewer)
+### Attack Tests
 
 ```typescript
 // src/lib/components/ComponentName.attack.test.ts
-// Attack tests by Reviewer Agent.
-// These test adversarial inputs and edge cases.
+// Attack tests: adversarial inputs and edge cases.
 ```
 
 ### E2E Tests
