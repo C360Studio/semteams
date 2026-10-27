@@ -172,9 +172,10 @@ uses `.claude/skills/<name>/SKILL.md`. A private memory reference cannot be requ
 
 ## Read-only parity smoke
 
-Steps 1–8 are enforced automatically by `task ateam:doctor` (`ateam doctor --check`) and `TestAgentSetupParity` /
-`TestAgentSetupParitySensitivity` (`test/contract/shared_work_protocol_contract_test.go`, run by `task test:race` and
-`task validate`). Run Step 9 after changing a contract, adapter, or repository routing rule.
+Steps 1–8 are enforced automatically by `task ateam:doctor` (`ateam doctor --check`: Step 5 and the Step 7 checks for
+ateam's canonical skills) and `TestAgentSetupParity` / `TestAgentSetupParitySensitivity`
+(`test/contract/shared_work_protocol_contract_test.go`, run by `task test:race` and `task validate`: role adapters and
+the adopter skill adapters doctor checks only for resolving links). Run Step 9 after changing a contract, adapter, or repository routing rule.
 
 1. Confirm all six specialist contracts (`.agents/contracts/{architect,go-developer,go-reviewer,svelte-developer,svelte-reviewer,technical-writer}.md`),
    ATeam's `.agents/contracts/{developer,reviewer}.md`, `.agents/review-policy.json`, six Claude adapters
@@ -191,7 +192,7 @@ Steps 1–8 are enforced automatically by `task ateam:doctor` (`ateam doctor --c
    sandbox override and inherit the parent workspace permissions.
 5. Confirm `CLAUDE.md` only imports `@AGENTS.md` and carries no rules of its own, that `AGENTS.md` stays strictly under
    `24,000` bytes (`wc -c AGENTS.md`), and that every rule row in `AGENTS.md` has its corresponding audit row in
-   `.agents/rules-index.md` (`TestAgentSetupParity` checks numbered domain headings and per-domain row counts; semantic
+   `.agents/rules-index.md` (`task ateam:doctor` checks numbered domain headings and per-domain row counts; semantic
    correspondence of individual rows is review only).
 6. Confirm role adapters stay within 20 lines and contain no copied checklist (`- [ ]` or `- [x]`).
 7. For every skill in `.agents/skills/<name>/SKILL.md`, confirm the canonical file and Claude adapter exist, the
