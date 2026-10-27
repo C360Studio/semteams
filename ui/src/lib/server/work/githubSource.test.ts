@@ -480,6 +480,9 @@ describe("githubSource parsing helpers", () => {
     for (const [verdictLine, expectedVerdict] of [
       ["Verdict: REQUEST CHANGES see H1", "blocking"],
       ["Verdict: APPROVE on a1b2c3d4", "pass"],
+      ["Verdict: APPROVE at a1b2c3d4", "pass"],
+      ["Verdict: APPROVE citing a1b2c3d4 and task validate", "pass"],
+      ["Verdict: REQUEST CHANGES at a1b2c3d4", "blocking"],
       ["Verdict: REQUEST CHANGES for H1 and M1", "blocking"],
       ["Verdict: REQUEST CHANGES pending H1 fix", "blocking"],
       ["Verdict: APPROVE after re-verification", "pass"],
@@ -675,6 +678,45 @@ describe("githubSource parsing helpers", () => {
 
     expect(parsed).toEqual({});
     expect(elapsedMs).toBeLessThan(100);
+  });
+
+  it("ignores inline-code meta discussion of `Verdict`, `reviewed-by`, and `Reviewed at <sha>` in requests and records", () => {
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "## Review request",
+            "",
+            "- **Reviewer lanes:** `go-reviewer`, `svelte-reviewer`",
+            "- **Commit SHA:** `12f8042a71239c8eb1e09d88f05a556902575fd4`",
+            "- `Verdict`: splits clauses on `at` and `citing`",
+            "- `reviewed-by`: checks vendor token",
+            "- Narrowed `Reviewed at 43d0967e` in `githubSource.ts`",
+          ].join("\n"),
+        },
+        {
+          body: [
+            "reviewed-by: claude (`claude-opus-5-5, high`)",
+            "Reviewed at `12f8042a71239c8eb1e09d88f05a556902575fd4`",
+            "Verdict: `APPROVE`",
+            "",
+            "Verified parser fixes against earlier `Reviewed at 43d0967e`:",
+            "- `Verdict`: `at` and `citing` clauses parse cleanly",
+            "- `reviewed-by`: full Claude model ID accepted",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_request: {
+        sha: "12f8042a71239c8eb1e09d88f05a556902575fd4",
+        reviewer_lane: "go-reviewer, svelte-reviewer",
+      },
+      review_record: {
+        sha: "12f8042a71239c8eb1e09d88f05a556902575fd4",
+        verdict: "pass",
+        reviewed_by: "claude (claude-opus-5-5, high)",
+      },
+    });
   });
 
   it("parses plain ## Review request and #-less Review request comments and never treats records as requests", () => {

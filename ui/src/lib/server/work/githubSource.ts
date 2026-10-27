@@ -610,6 +610,12 @@ function stripBlockquotes(text: string): string {
     .join("\n");
 }
 
+function stripKeywordInlineCode(text: string): string {
+  return text.replace(/`+([^`\r\n]+)`+/g, (full, inner: string) =>
+    /\b(?:reviewed[- \t_]*by|(?:re-)?reviewed[ \t]+at|verdict)\b/i.test(inner) ? "" : full,
+  );
+}
+
 function resolveSingleCommitSha(candidates: string[]): string | undefined {
   if (candidates.length === 0) return undefined;
   const normalized = candidates.map((sha) => sha.toLowerCase());
@@ -632,13 +638,13 @@ const LEADING_AGENT_RE = /^(claude|codex|gemini)(?![a-z0-9])(.*)$/i;
 const MULTI_AGENT_CONTINUATION_RE =
   /^(?:\||\/|;|,|\b(?:and|or)\b)[ \t]*[`*]*(?:claude|codex|gemini)(?![a-z0-9])/i;
 const REVIEWED_BY_LINE_RE =
-  /^[ \t]*(?:[-*][ \t]*)?(?:\*{1,2}reviewed[- \t_]*by\*{0,2}|`reviewed[- \t_]*by`|reviewed[- \t_]*by)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
+  /^[ \t]*(?:[-*][ \t]*)?(?:\*{1,2}reviewed[- \t_]*by\*{0,2}|reviewed[- \t_]*by)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
 const CROSS_AGENT_HEADING_RE =
   /^[ \t]*#{1,6}[ \t]+independent[ \t]+cross-agent[ \t]+review\b([^\r\n]*)$/gim;
 const VERDICT_LINE_RE =
-  /^[ \t]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}verdict\*{0,2}|`verdict`|verdict)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
+  /^[ \t]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}verdict\*{0,2}|verdict)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
 const VERDICT_CLAUSE_SPLIT_RE =
-  /[ \t]*(?:\(|—|–|,|:|\.|!|[ \t]-[ \t]|[ \t]+(?:with|see|on|for|pending|after|until|once|because)\b)/i;
+  /[ \t]*(?:\(|—|–|,|:|\.|!|[ \t]-[ \t]|[ \t]+(?:with|see|on|at|citing|for|pending|after|until|once|because)\b)/i;
 const REVIEWER_LANE_LINE_RE =
   /^[ \t]*(?:[-*][ \t]*)?(?:\*{1,2}(?:reviewer[- \t_]*lanes?|review[- \t_]*lanes?|lanes?)\*{0,2}|`(?:reviewer[- \t_]*lanes?|review[- \t_]*lanes?|lanes?)`|(?:reviewer[- \t_]*lanes?|review[- \t_]*lanes?|lanes?))[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]+)/im;
 const REVIEW_REQUEST_HEADING_RE = /^[ \t]*#{1,6}[ \t]+review[ \t]+request\b/im;
@@ -646,7 +652,7 @@ const REVIEW_REQUEST_PLAIN_FIRST_LINE_RE =
   /^[ \t]*(?:\*{1,2})?review[ \t]+request(?:\*{1,2})?(?:[ \t]*[:—–-][^\r\n]*)?[ \t]*$/i;
 const REVIEW_RECORD_HEADING_RE = /^[ \t]*#{1,6}[ \t]+review[ \t]+record\b/im;
 const REVIEWED_AT_LINE_RE =
-  /^[ \t]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}(?:re-)?reviewed[ \t]+at\b\*{0,2}|`(?:re-)?reviewed[ \t]+at\b`|(?:re-)?reviewed[ \t]+at\b)[ \t]*:?[*` \t]*\b([0-9a-f]{7,40})\b(?!\.\.)/im;
+  /^[ \t]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}(?:re-)?reviewed[ \t]+at\b\*{0,2}|(?:re-)?reviewed[ \t]+at\b)[ \t]*:?[*` \t]*\b([0-9a-f]{7,40})\b(?!\.\.)/im;
 const RECORD_SHA_RE =
   /\b(?:re-)?reviewed[ \t]+at\b[*` \t]*:?[*` \t]*\b([0-9a-f]{7,40})\b(?!\.\.)/gi;
 const REQUEST_SHA_LINE_RE =
@@ -919,17 +925,18 @@ export function parseReviewComments(comments: unknown[]): {
     }
     if (matchedLegacy) continue;
 
-    const ateamRecord = parseAteamReviewRecord(unquoted);
+    const ateamBody = stripKeywordInlineCode(unquoted);
+    const ateamRecord = parseAteamReviewRecord(ateamBody);
     if (ateamRecord) {
       review_record = ateamRecord;
       continue;
     }
-    if (hasRecordSignals(unquoted)) {
+    if (hasRecordSignals(ateamBody)) {
       review_unparsed = true;
       continue;
     }
 
-    const plainRequest = parsePlainReviewRequest(unquoted);
+    const plainRequest = parsePlainReviewRequest(ateamBody);
     if (plainRequest) {
       review_request = plainRequest;
     }
