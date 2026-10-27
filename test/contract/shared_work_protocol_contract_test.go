@@ -12,13 +12,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Steps 1–8 of .agents/README.md's read-only parity smoke, held by a contract test and its
-// paired sensitivity test (adapted from SemEngine's harness-boundaries spec, "Agent setup and
-// rule-index parity", and SemVocab/SemSparql's agentsetup_test.go). Expected roles, tool lists,
-// sandbox modes, model/effort pins, and caps are constants here rather than read from .agents/README.md.
+// The parts of .agents/README.md's read-only parity smoke that `ateam doctor --check`
+// (task ateam:doctor) does not hold: the six specialist role adapters and the adopter skill
+// adapters. Doctor owns CLAUDE.md, the AGENTS.md size cap, AGENTS.md/rules-index parity, and
+// ateam's canonical skill adapters (ateam v0.3.2 internal/bootstrap/bootstrap.go
+// checkRulesAndSizeParity, inspectSkills); doctor checks adopter skill adapters only for links
+// that resolve. Expected roles, tool lists, sandbox modes, model/effort pins, and caps are
+// constants here rather than read from .agents/README.md.
 const (
-	maxAgentsMDBytes    = 24000
-	maxClaudeMDLines    = 10
 	maxRoleAdapterLines = 20
 	maxSkillLines       = 25
 )
@@ -43,24 +44,10 @@ var (
 	}
 	readOnlyClaudeTools = []string{"Read", "Bash", "Grep", "Glob", "Skill"}
 	writeClaudeTools    = []string{"Read", "Edit", "Write", "Bash", "Grep", "Glob", "Skill"}
-	sharedSkills        = []struct{ canonical, claude string }{
-		{"handoff", "handoff"},
-		{"kv-or-stream", "kv-or-stream"},
-		{"new-payload", "new-payload"},
-		{"orchestration-check", "orchestration-check"},
-		{"pickup", "pickup"},
-		{"ponytail", "ponytail"},
-		{"preflight", "preflight"},
-		{"query-pattern", "query-pattern"},
-		{"review-pr", "review-pr"},
-	}
-	expectedRuleDomains = []string{
-		"1. Go, composition root, and runtime ownership",
-		"2. Packs, rules, predicates, and personas",
-		"3. Svelte UI and observable work",
-		"4. Testing, E2E, and verification",
-		"5. Workflow, review, and merge gates",
-	}
+	adopterSkills       = []string{"kv-or-stream", "new-payload", "orchestration-check", "query-pattern"}
+	// ateamCanonicalSkills are checked by ateam doctor (canonicalSkills in ateam v0.3.2
+	// internal/bootstrap/bootstrap.go), so they are skipped here.
+	ateamCanonicalSkills = []string{"handoff", "pickup", "ponytail", "preflight", "review-pr"}
 )
 
 func TestAgentSetupParity(t *testing.T) {
@@ -118,18 +105,6 @@ func TestAgentSetupParitySensitivity(t *testing.T) {
 		{"write codex adapter sets sandbox_mode with inline comment", edit(".codex/agents/go-developer.toml", func(s string) string {
 			return s + "sandbox_mode = \"read-only\" # override\n"
 		}), []string{".codex/agents/go-developer.toml", "sandbox_mode"}},
-		{"CLAUDE.md drops @AGENTS.md import", edit("CLAUDE.md", func(string) string {
-			return "# SemTeams\n\nCustom rules here.\n"
-		}), []string{"CLAUDE.md", "@AGENTS.md"}},
-		{"CLAUDE.md adds section heading", edit("CLAUDE.md", func(s string) string {
-			return s + "\n## Local Rule\n"
-		}), []string{"CLAUDE.md", "section heading"}},
-		{"AGENTS.md reaches 24000 bytes", edit("AGENTS.md", func(s string) string {
-			return s + strings.Repeat("x", maxAgentsMDBytes)
-		}), []string{"AGENTS.md", "24000"}},
-		{"AGENTS.md and rules-index.md row count mismatch", edit("AGENTS.md", func(s string) string {
-			return strings.Replace(s, "| `verify` | Pinned `revive` (`revive.toml`), worktree-safe `gofmt`, `go mod tidy -diff`, and `go vet` pass with zero errors | `task lint` (`task validate`) |\n", "", 1)
-		}), []string{"AGENTS.md", ".agents/rules-index.md", "1. Go, composition root, and runtime ownership"}},
 		{"role adapter contains checkbox", edit(".claude/agents/go-developer.md", func(s string) string {
 			return s + "- [ ] copied checklist item\n"
 		}), []string{".claude/agents/go-developer.md", "checkbox"}},
@@ -138,9 +113,17 @@ func TestAgentSetupParitySensitivity(t *testing.T) {
 		}), []string{".codex/agents/go-developer.toml", "lines"}},
 		{"missing review policy", edit(".agents/review-policy.json", nil),
 			[]string{".agents/review-policy.json", "missing"}},
-		{"skill adapter points to wrong canonical skill", edit(".claude/skills/preflight/SKILL.md", func(s string) string {
-			return strings.ReplaceAll(s, "preflight/SKILL.md", "handoff/SKILL.md")
-		}), []string{".claude/skills/preflight/SKILL.md", "../../../.agents/skills/preflight/SKILL.md"}},
+		{"adopter skill adapter points to wrong canonical skill", edit(".claude/skills/kv-or-stream/SKILL.md", func(s string) string {
+			return strings.ReplaceAll(s, "kv-or-stream/SKILL.md", "new-payload/SKILL.md")
+		}), []string{".claude/skills/kv-or-stream/SKILL.md", "../../../.agents/skills/kv-or-stream/SKILL.md"}},
+		{"adopter skill adapter exceeds line limit", edit(".claude/skills/query-pattern/SKILL.md", func(s string) string {
+			return s + strings.Repeat("extra line\n", maxSkillLines)
+		}), []string{".claude/skills/query-pattern/SKILL.md", "lines"}},
+		{"adopter skill adapter contains checkbox", edit(".claude/skills/new-payload/SKILL.md", func(s string) string {
+			return s + "- [ ] copied checklist item\n"
+		}), []string{".claude/skills/new-payload/SKILL.md", "checkbox"}},
+		{"missing adopter canonical skill", edit(".agents/skills/orchestration-check/SKILL.md", nil),
+			[]string{".agents/skills/orchestration-check/SKILL.md", "missing canonical skill"}},
 		{"new canonical skill missing claude adapter", edit(".agents/skills/new-review-skill/SKILL.md", func(string) string {
 			return "# New Skill\n"
 		}), []string{".claude/skills/new-review-skill/SKILL.md", "missing Claude skill adapter"}},
@@ -249,7 +232,6 @@ func agentSetupViolations(root string) []string {
 		out = append(out, checkClaudeRoleAdapter(root, role)...)
 		out = append(out, checkCodexRoleAdapter(root, role)...)
 	}
-	out = append(out, checkRulesAndSizeParity(root)...)
 	out = append(out, checkSkillAdapters(root)...)
 	return out
 }
@@ -473,86 +455,15 @@ func checkAdapterCommon(rel, roleName, text string) []string {
 	return out
 }
 
-type ruleSectionCount struct {
-	title string
-	rows  int
-}
-
-func checkRulesAndSizeParity(root string) []string {
-	var out []string
-	claudeData, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
-	if err == nil {
-		claudeText := string(claudeData)
-		if !strings.Contains(claudeText, "@AGENTS.md") {
-			out = append(out, "CLAUDE.md: missing @AGENTS.md import")
-		}
-		lines := strings.Count(strings.TrimRight(claudeText, "\n"), "\n") + 1
-		if lines > maxClaudeMDLines {
-			out = append(out, fmt.Sprintf("CLAUDE.md: %d lines exceeds max %d lines", lines, maxClaudeMDLines))
-		}
-		if strings.Contains(claudeText, "\n## ") || strings.Contains(claudeText, "\n|") {
-			out = append(out, "CLAUDE.md: must not carry its own section heading or rule table")
-		}
-	}
-
-	agentsData, errA := os.ReadFile(filepath.Join(root, "AGENTS.md"))
-	indexData, errI := os.ReadFile(filepath.Join(root, ".agents", "rules-index.md"))
-	if errA != nil || errI != nil {
-		return out
-	}
-	if len(agentsData) >= maxAgentsMDBytes {
-		out = append(out, fmt.Sprintf("AGENTS.md: %d bytes is not strictly under %d bytes", len(agentsData), maxAgentsMDBytes))
-	}
-	agentsCounts := parseRuleSectionCounts(string(agentsData), "### ")
-	indexCounts := parseRuleSectionCounts(string(indexData), "## ")
-	if len(agentsCounts) != len(expectedRuleDomains) || len(indexCounts) != len(expectedRuleDomains) {
-		return append(out, fmt.Sprintf("AGENTS.md (%d sections) and .agents/rules-index.md (%d sections) must both have %d numbered rule sections",
-			len(agentsCounts), len(indexCounts), len(expectedRuleDomains)))
-	}
-	for i, wantTitle := range expectedRuleDomains {
-		a, b := agentsCounts[i], indexCounts[i]
-		if a.title != wantTitle || b.title != wantTitle {
-			out = append(out, fmt.Sprintf("rule section %d: AGENTS.md = %q, .agents/rules-index.md = %q, want %q", i+1, a.title, b.title, wantTitle))
-			continue
-		}
-		if a.rows == 0 || a.rows != b.rows {
-			out = append(out, fmt.Sprintf("AGENTS.md and .agents/rules-index.md disagree on row count in %q: AGENTS.md has %d, .agents/rules-index.md has %d",
-				wantTitle, a.rows, b.rows))
-		}
-	}
-	return out
-}
-
-func parseRuleSectionCounts(text, prefix string) []ruleSectionCount {
-	var sections []ruleSectionCount
-	cur := -1
-	for _, line := range strings.Split(text, "\n") {
-		if title, ok := strings.CutPrefix(line, prefix); ok && len(title) >= 3 && title[0] >= '1' && title[0] <= '9' && title[1] == '.' {
-			sections = append(sections, ruleSectionCount{title: strings.TrimSpace(title)})
-			cur = len(sections) - 1
-			continue
-		}
-		if cur >= 0 && strings.HasPrefix(line, "## ") && prefix != "## " {
-			cur = -1
-			continue
-		}
-		if cur < 0 || !strings.HasPrefix(line, "| ") {
-			continue
-		}
-		if strings.HasPrefix(line, "| ---") || strings.HasPrefix(line, "| Gate |") || strings.HasPrefix(line, "| Rule |") {
-			continue
-		}
-		sections[cur].rows++
-	}
-	return sections
-}
-
 func discoverSkills(root string) []struct{ canonical, claude string } {
-	skills := make([]struct{ canonical, claude string }, 0, len(sharedSkills))
-	seen := make(map[string]bool, len(sharedSkills))
-	for _, s := range sharedSkills {
-		skills = append(skills, s)
-		seen[s.canonical] = true
+	skills := make([]struct{ canonical, claude string }, 0, len(adopterSkills))
+	seen := make(map[string]bool, len(adopterSkills)+len(ateamCanonicalSkills))
+	for _, name := range ateamCanonicalSkills {
+		seen[name] = true
+	}
+	for _, name := range adopterSkills {
+		skills = append(skills, struct{ canonical, claude string }{name, name})
+		seen[name] = true
 	}
 	entries, err := os.ReadDir(filepath.Join(root, ".agents", "skills"))
 	if err == nil {
@@ -570,7 +481,10 @@ func discoverSkills(root string) []struct{ canonical, claude string } {
 func checkSkillAdapters(root string) []string {
 	var out []string
 	discovered := discoverSkills(root)
-	seenClaude := make(map[string]bool, len(discovered))
+	seenClaude := make(map[string]bool, len(discovered)+len(ateamCanonicalSkills))
+	for _, name := range ateamCanonicalSkills {
+		seenClaude[name] = true
+	}
 	for _, s := range discovered {
 		seenClaude[s.claude] = true
 		canonRel := ".agents/skills/" + s.canonical + "/SKILL.md"
