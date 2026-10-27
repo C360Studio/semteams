@@ -9,8 +9,8 @@ introducing a separate agent message bus or mutating GitHub state:
   assignee (`assignee`), including the pull request reference, draft status, `implemented-by` attribution, and declared
   stop-point when present.
 - **Review baton (`review`):** SHALL compare the active pull request's `HEAD` commit SHA against its latest structured
-  `Review request` and `Review record` comments — accepting both ATeam's canonical `reviewed-by:` (or
-  `### Independent Cross-Agent Review` heading naming a single agent vendor `claude`, `codex`, or `gemini`) +
+  `Review request` and `Review record` comments — accepting both ATeam's canonical `reviewed-by:` (or an
+  `Independent Cross-Agent Review` markdown heading naming a single agent vendor `claude`, `codex`, or `gemini`) +
   `(Re-)Reviewed at <sha>` + `Verdict: APPROVE | REQUEST CHANGES` PR comment records (outside CommonMark `0..3`-space
   fenced code blocks and `>` blockquotes) and historical `<!-- semteams-review-request -->` /
   `<!-- semteams-review-record -->` markers — and report `not_requested`, `requested`, `current` (when the latest
@@ -46,15 +46,15 @@ None of `claim`, `review`, or `gate` SHALL alter the work item's board column (`
 #### Scenario: ATeam upstream review record and historical SemTeams marker compatibility
 
 - **GIVEN** a pull request carrying an ATeam review record comment with vendor-identifying `reviewed-by: codex (gpt-6-astra, high)`
-  (or `### Independent Cross-Agent Review (<vendor>)`), `(Re-)Reviewed at <sha>`, and `Verdict: APPROVE` or
+  (or an `Independent Cross-Agent Review` heading naming `<vendor>`), `(Re-)Reviewed at <sha>`, and `Verdict: APPROVE` or
   `Verdict: REQUEST CHANGES` outside `0..3`-space code fences and `>` blockquotes
 - **WHEN** `parseReviewComments` inspects the pull request's comments alongside historical `<!-- semteams-review-* -->`
   comments
 - **THEN** ATeam's `APPROVE` and `REQUEST CHANGES` verdicts SHALL map to `pass` and `blocking` respectively at the
   single designated `<sha>` (ignoring fenced examples and quoted replies, and rejecting vendor-less headings,
   non-`Reviewed at` SHA lines, or ambiguous multi-commit comments)
-- **AND** historical `<!-- semteams-review-request -->` and `<!-- semteams-review-record -->` comments SHALL continue to
-  parse identically
+- **AND** valid historical `<!-- semteams-review-request -->` and `<!-- semteams-review-record -->` comments outside
+  code and blockquotes SHALL continue to parse to the same result
 
 #### Scenario: Unparseable review record fails closed to unknown
 

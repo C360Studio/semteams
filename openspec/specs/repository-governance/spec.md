@@ -3,26 +3,24 @@
 ## Purpose
 
 Define the repository-wide CI contract that every pull request to `main` must satisfy before merge.
-
 ## Requirements
-
 ### Requirement: One unconditional repository CI workflow reports one aggregate
 
 The repository SHALL run one workflow named `Repository CI` for every pull request targeting `main` and SHALL report
-the stable `CI Status Check` aggregate.
+the stable `Required` aggregate check-run expected by `ateam review gate` and `Publish`.
 
 #### Scenario: Any pull request reports the required context
 
 - GIVEN a pull request targets `main`
 - WHEN GitHub Actions evaluates its head commit
 - THEN `Repository CI` runs without workflow-level path filters
-- AND `CI Status Check` reports after all required jobs
+- AND `Required` reports after all required jobs
 
 #### Scenario: The aggregate fails closed
 
 - GIVEN a required job is unsuccessful, cancelled, or unexpectedly skipped
 - WHEN the aggregate evaluates its dependencies
-- THEN `CI Status Check` fails
+- THEN `Required` fails
 - AND missing evidence is not translated into success
 
 ### Requirement: Repository CI runs the obvious repository checks
@@ -48,9 +46,10 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 
 - GIVEN the governance job runs
 - WHEN it evaluates repository policy artifacts
-- THEN it runs `task openspec:validate` and `task openspec:queue-test`
+- THEN it runs `ateam doctor --check` with session-ID environment variables unset so multi-agent setup, hooks, MCP config, skills, and review-policy parity are verified without mutating the worktree
+- AND it runs `task openspec:validate` and `task openspec:queue-test`
 - AND it runs `task publish:verify-test`, which proves the publication evidence gate fails closed
-- AND OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
+- AND ATeam is v0.3.2, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
 - AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
 
@@ -65,8 +64,7 @@ missing, incomplete or unsuccessful.
 - GIVEN `Repository CI` runs on pushes to `main`
 - AND a `v*` SemVer tag points at a commit that is an ancestor of `main` and carries this `Publish` workflow
 - AND every `Repository CI` run for that commit has completed
-- AND the newest `CI Status Check` check-run created by GitHub Actions on that commit, by highest id, concluded
-  `success`
+- AND the newest `Required` check-run created by GitHub Actions on that commit, by highest id, concluded `success`
 - WHEN the `Publish` workflow runs for the tag push
 - THEN it builds the image for `linux/amd64` and `linux/arm64`
 - AND it pushes the semver version and `<major>.<minor>` image tags to `ghcr.io/c360studio/semteams` without `latest`
@@ -84,8 +82,8 @@ missing, incomplete or unsuccessful.
 #### Scenario: A tag without complete, successful CI evidence fails before building
 
 - GIVEN the tagged commit carries this `Publish` workflow
-- AND a `v*` tag points at a commit with a `Repository CI` run still queued or in progress, with no `CI Status Check`
-  check-run, or whose newest `CI Status Check` check-run did not conclude `success`
+- AND a `v*` tag points at a commit with a `Repository CI` run still queued or in progress, with no `Required`
+  check-run, or whose newest `Required` check-run did not conclude `success`
 - WHEN the `Publish` workflow verifies publication evidence
 - THEN verification fails
 - AND an older success does not outvote a newer or still-running check
