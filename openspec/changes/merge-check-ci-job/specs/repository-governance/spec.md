@@ -5,20 +5,23 @@
 `Repository CI` SHALL run a `Merge check` job that executes `scripts/merge-check.sh` (`ateam review gate`) from the
 pull request's base commit, and `Required` SHALL depend on it.
 
-#### Scenario: A pull request cannot loosen its own gate
+#### Scenario: The gate's script and policy come from the base commit
 
 - GIVEN a pull request targets `main`
 - WHEN the `Merge check` job runs
 - THEN it checks out the base commit, not the pull request head, without persisted credentials
 - AND it installs ATeam v0.3.2 and runs `scripts/merge-check.sh` with the pull request number
 - AND its token permissions are read-only for contents, issues, and pull requests
+- AND the workflow file itself is read from the pull request, so a change to it is caught by review only
 
 #### Scenario: A code pull request without an approving record fails Required
 
-- GIVEN a code pull request has no approving `reviewed-by:` record that names its head
+- GIVEN a non-draft code pull request has no `reviewed-by:` line in its description, or no review record naming one of
+  its commits with no later content commit
 - WHEN `Merge check` runs
 - THEN `Merge check` fails and `Required` fails
-- AND after an approving record is posted, rerunning the failed job lets `Required` pass
+- AND after the record is posted, rerunning the failed job lets `Required` pass
+- AND the gate does not read `Verdict:` at ATeam v0.3.2 (`C360Studio/ateam#201`), so the verdict stays review only
 
 #### Scenario: Marking a draft ready starts the gated run
 

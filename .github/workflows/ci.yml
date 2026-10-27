@@ -9,6 +9,12 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
 
+# As in ateam's ci.yml: superseded PR runs are cancelled, except the run that marking a draft ready starts, so its
+# Required lands after the run already in flight on the same head.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' }}
+
 jobs:
   go:
     name: Go
@@ -135,9 +141,9 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      # The base commit, not the pull request: the script, the review policy it reads, and the ateam pin must not come
-      # from the tree they judge, or a pull request could loosen its own gate (ateam #140). The pull request itself is
-      # read through the API.
+      # The base commit, not the pull request: the script and the review policy it reads are not taken from the tree
+      # they judge (ateam #140); the pull request itself is read through the API. This workflow file is read from the
+      # pull request, so a change to it is caught by review only (ateam's Gate files workflow is a non-goal, #372).
       - name: Checkout base commit
         uses: actions/checkout@v5
         with:

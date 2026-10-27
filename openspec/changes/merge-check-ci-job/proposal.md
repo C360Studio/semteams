@@ -9,6 +9,15 @@
 - Add a `merge-check` job (`name: Merge check`) to `.github/workflows/ci.yml`. It checks out the base commit (`github.event.pull_request.base.sha || github.sha`) without persisted credentials, installs `ateam@v0.3.2`, and runs `scripts/merge-check.sh "$PR_NUMBER"` with read-only `contents`, `issues` and `pull-requests` permissions.
 - `Required` needs `merge-check` alongside `go`, `ui` and `governance`.
 - Add a `repository-governance` requirement for the job.
+- Trigger `pull_request` on `ready_for_review` too, and adopt ateam's `concurrency` block, so the run that marking a
+  draft ready starts applies the review check and lands last.
+
+Recorded divergences from ateam: ATeam is installed from the pinned `go install` rather than built from the base tree
+(this is not the ATeam repository); `pull_request.branches: [main]` stays; exit 2 (a forge read was unavailable) gets no
+special handling beyond the gate's own `unavailable` log line, as in ateam. Known limits: `ci.yml` is read from the
+pull request, so editing the job is caught by review only; the shared concurrency group can cancel a *pending* push run
+on `main` when several merges land quickly, which leaves that commit without `Required` until rerun. ateam's
+`review-pr` § 5 rerun step is not in the v0.3.2 skill, so `.agents/protocol.md` carries it until #364.
 
 ## Non-goals
 
