@@ -98,6 +98,10 @@ rewired parked pack, or an unproved composition-root invariant.
   or `gemini`), resolved model, and reasoning effort (`implemented-by: gemini (gemini-4-argon, high)`), and
   `reviewed-by: <agent> (<model>, <effort>)` once the reviewing agent's newest record approves. Never write unresolved
   `inherit` in `implemented-by:` or `reviewed-by:`.
+  Once the squash merge has landed, the agent that claimed the branch removes its worktree (`git worktree remove
+  ../semteams-wt/<branch>` on the CLI, `.worktrees/<branch>` in Enjoy) and deletes the remote branch; a review checkout
+  is removed once its review record is posted. `ateam state pickup` labels every merged or PR-less worktree. Never
+  remove a worktree you do not own, and never one that is dirty or unpushed.
 - **Cross-agent review:** on a code/UI pull request the implementation review, and the re-review of a fix that changes
   code or UI, are done by an agent that wrote none of the commits under review, enforced by `task merge:check -- <pr>`
   (`scripts/merge-check.sh` → `ateam review gate`) against `.agents/review-policy.json` (`cross_provider: true`,
