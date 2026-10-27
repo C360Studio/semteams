@@ -16,7 +16,7 @@ tasks:
       Read from tasks.md every run, so the program baton does not carry
       these caveats and cannot drift from them.
     cmds:
-      - scripts/openspec-queue.sh
+      - ateam state spec-queue
 
   queue-strict:
     desc: |
@@ -37,3 +37,4 @@ tasks:
     cmds:
       - openspec validate --all --strict
       - scripts/openspec-queue.sh --check
+      - ateam state spec-check

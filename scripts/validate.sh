@@ -6,7 +6,7 @@
 # Guarantees:
 #   1. Fails explicitly before running lanes when any prerequisite tool or
 #      daemon is missing (go, gofmt, task, revive, python3, node, npm, docker,
-#      openspec, jq, diff, git, or ui/node_modules).
+#      openspec, ateam, jq, diff, git, or ui/node_modules).
 #   2. Writes Go build artifacts and generated schemas/OpenAPI specs only to a
 #      temporary directory outside the repository, then compares generated
 #      output against tracked schemas/ and specs/openapi.v3.yaml.
@@ -51,7 +51,7 @@ trap cleanup EXIT
 check_prereqs() {
   local missing=()
   local tool
-  for tool in go gofmt task revive python3 node npm docker openspec jq diff git; do
+  for tool in go gofmt task revive python3 node npm docker openspec ateam jq diff git; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       missing+=("$tool")
     fi
@@ -106,6 +106,7 @@ ui_elapsed=$((SECONDS - ui_start))
 
 echo "=== [3/3] Governance lane ==="
 gov_start=$SECONDS
+task ateam:doctor
 task openspec:validate
 task openspec:queue-test
 task publish:verify-test

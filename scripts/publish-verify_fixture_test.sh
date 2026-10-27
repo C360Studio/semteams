@@ -49,7 +49,7 @@ case "$url" in
       { echo "fake gh: workflow-runs URL must filter by head_sha and page by 100: $url" >&2; exit 2; }
     kind=workflow-runs fixture=$FAKE_WORKFLOW_RUNS ;;
   */check-runs*)
-    [[ "$url" == *"?check_name=CI%20Status%20Check&filter=all&per_page=100" ]] ||
+    [[ "$url" == *"?check_name=Required&filter=all&per_page=100" ]] ||
       { echo "fake gh: check-runs URL must name the check, use filter=all and page by 100: $url" >&2; exit 2; }
     kind=check-runs fixture=$FAKE_CHECK_RUNS ;;
   *) echo "fake gh: unexpected URL $url" >&2; exit 2 ;;
@@ -66,7 +66,7 @@ fx() { printf '%s\n' "$2" > "$ROOT/fx/$1.json"; }
 cr() { # cr <id> <status> <conclusion|null> [app]
   local conclusion=null
   [ "$3" = "null" ] || conclusion="\"$3\""
-  printf '{"id":%s,"name":"CI Status Check","status":"%s","conclusion":%s,"started_at":"2026-08-20T18:27:44Z","app":{"slug":"%s"}}' \
+  printf '{"id":%s,"name":"Required","status":"%s","conclusion":%s,"started_at":"2026-08-20T18:27:44Z","app":{"slug":"%s"}}' \
     "$1" "$2" "$conclusion" "${4:-github-actions}"
 }
 
@@ -84,7 +84,7 @@ fx checks_other_app "{\"check_runs\":[$(cr 501 completed success some-other-app)
 fx checks_tie "{\"check_runs\":[$(cr 202 completed failure),$(cr 201 completed success)]}"
 # A queued rerun with null started_at and conclusion is the newest.
 fx checks_null_started \
-  "{\"check_runs\":[$(cr 301 completed success),{\"id\":302,\"name\":\"CI Status Check\",\"status\":\"queued\",\"conclusion\":null,\"started_at\":null,\"app\":{\"slug\":\"github-actions\"}}]}"
+  "{\"check_runs\":[$(cr 301 completed success),{\"id\":302,\"name\":\"Required\",\"status\":\"queued\",\"conclusion\":null,\"started_at\":null,\"app\":{\"slug\":\"github-actions\"}}]}"
 fx checks_success_then_in_progress "{\"check_runs\":[$(cr 701 completed success),$(cr 702 in_progress null)]}"
 fx checks_success_then_failure "{\"check_runs\":[$(cr 601 completed success),$(cr 602 completed failure)]}"
 fx checks_failure_then_success "{\"check_runs\":[$(cr 801 completed failure),$(cr 802 completed success)]}"
@@ -111,7 +111,7 @@ SIDE_SHA=$(git -C "$WORK" rev-parse HEAD)
 OUT="$ROOT/github_output"
 
 # run_verify [KEY=VALUE...] — defaults describe a valid v0.1.0 tag on main with
-# completed CI and a successful CI Status Check; arguments override them.
+# completed CI and a successful Required check-run; arguments override them.
 run_verify() {
   : > "$OUT"
   (
@@ -170,7 +170,7 @@ tag_outputs() { # tag_outputs <version> <prerelease>
 }
 
 echo "=== CI evidence MUST fail closed ==="
-expect_fail "first run: CI running, no CI Status Check yet" "Repository CI still running" \
+expect_fail "first run: CI running, no Required check-run yet" "Repository CI still running" \
   FAKE_WORKFLOW_RUNS="$ROOT/fx/runs_in_progress.json" FAKE_CHECK_RUNS="$ROOT/fx/checks_empty.json"
 expect_fail "rerun in progress does not reuse an older success" "Repository CI still running" \
   FAKE_WORKFLOW_RUNS="$ROOT/fx/runs_in_progress.json"
@@ -180,7 +180,7 @@ expect_fail "queued Repository CI run" "Repository CI still running" \
   FAKE_WORKFLOW_RUNS="$ROOT/fx/runs_queued.json"
 expect_fail "no Repository CI run for the commit" "no Repository CI run found" \
   FAKE_WORKFLOW_RUNS="$ROOT/fx/runs_empty.json"
-expect_fail "completed CI without a CI Status Check" "no CI Status Check found" \
+expect_fail "completed CI without a Required check-run" "no Required check-run found" \
   FAKE_CHECK_RUNS="$ROOT/fx/checks_empty.json"
 expect_fail "same-second tie: newer failure beats older success" "is failure, not success" \
   FAKE_CHECK_RUNS="$ROOT/fx/checks_tie.json"
@@ -192,9 +192,9 @@ expect_fail "newer failure after success" "is failure, not success" \
   FAKE_CHECK_RUNS="$ROOT/fx/checks_success_then_failure.json"
 expect_fail "numeric id order: newest (10) failed" "is failure, not success" \
   FAKE_CHECK_RUNS="$ROOT/fx/checks_numeric_failure_newest.json"
-expect_fail "cancelled CI Status Check" "is cancelled, not success" \
+expect_fail "cancelled Required check-run" "is cancelled, not success" \
   FAKE_CHECK_RUNS="$ROOT/fx/checks_cancelled.json"
-expect_fail "CI Status Check from another app is ignored" "no CI Status Check found" \
+expect_fail "Required check-run from another app is ignored" "no Required check-run found" \
   FAKE_CHECK_RUNS="$ROOT/fx/checks_other_app.json"
 expect_fail "gh error listing Repository CI runs" "cannot list Repository CI runs" \
   FAKE_GH_FAIL=workflow-runs

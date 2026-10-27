@@ -43,13 +43,15 @@ var (
 	readOnlyClaudeTools = []string{"Read", "Bash", "Grep", "Glob", "Skill"}
 	writeClaudeTools    = []string{"Read", "Edit", "Write", "Bash", "Grep", "Glob", "Skill"}
 	sharedSkills        = []struct{ canonical, claude string }{
+		{"handoff", "handoff"},
 		{"kv-or-stream", "kv-or-stream"},
 		{"new-payload", "new-payload"},
 		{"orchestration-check", "orchestration-check"},
+		{"pickup", "pickup"},
+		{"ponytail", "ponytail"},
+		{"preflight", "preflight"},
 		{"query-pattern", "query-pattern"},
-		{"semteams-handoff", "semteams-handoff"},
-		{"semteams-pickup", "semteams-pickup"},
-		{"semteams-preflight", "preflight"},
+		{"review-pr", "review-pr"},
 	}
 	expectedRuleDomains = []string{
 		"1. Go, composition root, and runtime ownership",
@@ -133,12 +135,17 @@ func TestAgentSetupParitySensitivity(t *testing.T) {
 		{"role adapter exceeds line limit", edit(".codex/agents/go-developer.toml", func(s string) string {
 			return s + strings.Repeat("# extra line\n", 15)
 		}), []string{".codex/agents/go-developer.toml", "lines"}},
+		{"missing review policy", edit(".agents/review-policy.json", nil),
+			[]string{".agents/review-policy.json", "missing"}},
 		{"skill adapter points to wrong canonical skill", edit(".claude/skills/preflight/SKILL.md", func(s string) string {
-			return strings.Replace(s, "semteams-preflight/SKILL.md", "semteams-handoff/SKILL.md", 1)
-		}), []string{".claude/skills/preflight/SKILL.md", "../../../.agents/skills/semteams-preflight/SKILL.md"}},
+			return strings.ReplaceAll(s, "preflight/SKILL.md", "handoff/SKILL.md")
+		}), []string{".claude/skills/preflight/SKILL.md", "../../../.agents/skills/preflight/SKILL.md"}},
 		{"new canonical skill missing claude adapter", edit(".agents/skills/new-review-skill/SKILL.md", func(string) string {
 			return "# New Skill\n"
 		}), []string{".claude/skills/new-review-skill/SKILL.md", "missing Claude skill adapter"}},
+		{"orphan claude skill adapter without canonical skill", edit(".claude/skills/orphan-skill/SKILL.md", func(string) string {
+			return "# Orphan\n"
+		}), []string{".claude/skills/orphan-skill/SKILL.md", "missing canonical skill"}},
 		{"claude model mismatch", edit(".claude/agents/technical-writer.md", func(s string) string {
 			return strings.Replace(s, "model: sonnet", "model: opus", 1)
 		}), []string{".claude/agents/technical-writer.md", "model", "sonnet"}},
@@ -203,6 +210,9 @@ func copyAgentSetupFixture(t *testing.T, root string) map[string]string {
 		".agents/README.md",
 		".agents/protocol.md",
 		".agents/rules-index.md",
+		".agents/review-policy.json",
+		".agents/contracts/developer.md",
+		".agents/contracts/reviewer.md",
 	}
 	for _, r := range agentRoleSpecs {
 		rels = append(rels,
@@ -248,6 +258,9 @@ func checkRequiredAgentFiles(root string) []string {
 		".agents/README.md",
 		".agents/protocol.md",
 		".agents/rules-index.md",
+		".agents/review-policy.json",
+		".agents/contracts/developer.md",
+		".agents/contracts/reviewer.md",
 	}
 	for _, r := range agentRoleSpecs {
 		required = append(required,
@@ -539,11 +552,7 @@ func discoverSkills(root string) []struct{ canonical, claude string } {
 			if !entry.IsDir() || seen[entry.Name()] {
 				continue
 			}
-			claudeName := entry.Name()
-			if claudeName == "semteams-preflight" {
-				claudeName = "preflight"
-			}
-			skills = append(skills, struct{ canonical, claude string }{entry.Name(), claudeName})
+			skills = append(skills, struct{ canonical, claude string }{entry.Name(), entry.Name()})
 			seen[entry.Name()] = true
 		}
 	}
@@ -552,7 +561,10 @@ func discoverSkills(root string) []struct{ canonical, claude string } {
 
 func checkSkillAdapters(root string) []string {
 	var out []string
-	for _, s := range discoverSkills(root) {
+	discovered := discoverSkills(root)
+	seenClaude := make(map[string]bool, len(discovered))
+	for _, s := range discovered {
+		seenClaude[s.claude] = true
 		canonRel := ".agents/skills/" + s.canonical + "/SKILL.md"
 		if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(canonRel))); err != nil || info.IsDir() || info.Size() == 0 {
 			out = append(out, fmt.Sprintf("%s: missing canonical skill", canonRel))
@@ -574,6 +586,18 @@ func checkSkillAdapters(root string) []string {
 		}
 		if strings.Contains(text, "- [ ]") || strings.Contains(text, "- [x]") {
 			out = append(out, fmt.Sprintf("%s: contains copied checklist checkbox", adapterRel))
+		}
+	}
+	if claudeEntries, err := os.ReadDir(filepath.Join(root, ".claude", "skills")); err == nil {
+		for _, entry := range claudeEntries {
+			if !entry.IsDir() || seenClaude[entry.Name()] {
+				continue
+			}
+			adapterRel := ".claude/skills/" + entry.Name() + "/SKILL.md"
+			canonRel := ".agents/skills/" + entry.Name() + "/SKILL.md"
+			if info, err := os.Stat(filepath.Join(root, filepath.FromSlash(canonRel))); err != nil || info.IsDir() || info.Size() == 0 {
+				out = append(out, fmt.Sprintf("%s: missing canonical skill %s", adapterRel, canonRel))
+			}
 		}
 	}
 	return out

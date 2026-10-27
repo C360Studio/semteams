@@ -84,6 +84,385 @@ describe("githubSource parsing helpers", () => {
       },
     });
   });
+
+  it("parses ATeam APPROVE and REQUEST CHANGES review records", () => {
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: APPROVE",
+            "",
+            "Checked base-to-head diff and ran local verification.",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: gemini (gemini-4-argon, high)",
+            "Reviewer lane: go-reviewer",
+            "Reviewed at 99887766",
+            "Verdict: REQUEST CHANGES",
+            "",
+            "1 BLOCKING finding in scripts/merge-check.sh.",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "99887766",
+        verdict: "blocking",
+        reviewer_lane: "go-reviewer",
+        reviewed_by: "gemini (gemini-4-argon, high)",
+      },
+    });
+
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "- **reviewed-by**: `claude (opus, high)`",
+            "- **Re-reviewed at**: `feedface`",
+            "- **Verdict**: CHANGES REQUESTED",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "feedface",
+        verdict: "blocking",
+        reviewed_by: "claude (opus, high)",
+      },
+    });
+  });
+
+  it("supports ### Independent Cross-Agent Review fallback and rejects multi-agent records", () => {
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "### Independent Cross-Agent Review (claude)",
+            "",
+            "Reviewed at 0d948aac",
+            "**Verdict**: APPROVE (0 BLOCKING, 1 NIT)",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "0d948aac",
+        verdict: "pass",
+        reviewed_by: "claude",
+      },
+    });
+
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "### Independent Cross-Agent Review",
+            "",
+            "Reviewed base 1111111 -> head 0d948aac",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "0d948aac",
+        verdict: "pass",
+      },
+    });
+
+    // Multiple distinct agents in reviewed-by or heading must fail closed.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: claude | codex | gemini",
+            "Reviewed at 0d948aac",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+        {
+          body: [
+            "reviewed-by: claude (opus, high)",
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at 0d948aac",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+        {
+          body: [
+            "### Independent Cross-Agent Review (claude, codex)",
+            "Reviewed at 0d948aac",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({});
+  });
+
+  it("ignores fenced code blocks when scanning for ATeam records, SHAs, and verdicts", () => {
+    // Template example inside backtick or tilde fences alone never creates a record.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "Copy the canonical record format:",
+            "```text",
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at 1234567",
+            "Verdict: APPROVE",
+            "```",
+            "~~~markdown",
+            "### Independent Cross-Agent Review (claude)",
+            "Reviewed at 7654321",
+            "Verdict: REQUEST CHANGES",
+            "~~~",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({});
+
+    // Live record quoting a fenced example with a different SHA and verdict is not rejected.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: APPROVE",
+            "",
+            "Verified parser ignores fenced examples such as:",
+            "```text",
+            "reviewed-by: claude (opus, high)",
+            "Reviewed at 1234567",
+            "Head: 9988776",
+            "Verdict: REQUEST CHANGES",
+            "```",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+  });
+
+  it("rejects ambiguous multi-SHA ATeam comments while resolving prefix-matching SHAs", () => {
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d",
+            "Head: 9988776",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({});
+
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d",
+            "Head: a1b2c3d4e5f6",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4e5f6",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+
+    // Alternate gateDesignated forms (Reviewed commit, Reviewed head, Review of, Reviewed-commit, Head commit).
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: claude (opus, high)",
+            "Review of a1b2c3d4",
+            "Reviewed commit: a1b2c3d4",
+            "Reviewed head: a1b2c3d4",
+            "Reviewed-commit: a1b2c3d4",
+            "Head commit: a1b2c3d4",
+            "Verdict: APPROVED",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "pass",
+        reviewed_by: "claude (opus, high)",
+      },
+    });
+  });
+
+  it("fails closed when Verdict: is missing or conflicting in an ATeam comment", () => {
+    const invalidComments = [
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "",
+          "All checks look good, APPROVE.",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE | REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE",
+          "Verdict: REQUEST CHANGES",
+        ].join("\n"),
+      },
+    ];
+
+    expect(parseReviewComments(invalidComments)).toEqual({});
+
+    // A malformed follow-up comment must not overwrite an earlier valid blocking record.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at 11111111",
+            "Verdict: REQUEST CHANGES",
+          ].join("\n"),
+        },
+        ...invalidComments,
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "11111111",
+        verdict: "blocking",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+  });
+
+  it("parses plain ## Review request comments and never treats records as requests", () => {
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "## Review request",
+            "",
+            "Commit: a1b2c3d",
+            "Lane: go-reviewer, svelte-reviewer",
+            "Diff range: 0000000..a1b2c3d",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_request: {
+        sha: "a1b2c3d",
+        reviewer_lane: "go-reviewer, svelte-reviewer",
+      },
+    });
+
+    // A review record is never simultaneously treated as a review_request.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+  });
+
+  it("chronologically supersedes across legacy HTML markers, plain requests, and ATeam re-reviews", () => {
+    const comments = [
+      {
+        body: "<!-- semteams-review-request -->\ncommit: 1111111\nreviewer-lane: go-reviewer",
+      },
+      {
+        body: "<!-- semteams-review-record -->\ncommit: 1111111\nverdict: blocking\nreviewer-lane: go-reviewer\nreviewed-by: claude",
+      },
+      {
+        body: [
+          "### Review request",
+          "- **Commit to read:** `2222222` (clean tree)",
+          "- **Reviewer lane:** `go-reviewer`, `svelte-reviewer`",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at 2222222",
+          "Verdict: REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "## Review request",
+          "Commit: 3333333",
+          "Lane: go-reviewer, svelte-reviewer",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at 3333333",
+          "Verdict: APPROVE",
+          "",
+          "Verified `<!-- semteams-review-record -->` backward compatibility.",
+        ].join("\n"),
+      },
+    ];
+
+    expect(parseReviewComments(comments)).toEqual({
+      review_request: {
+        sha: "3333333",
+        reviewer_lane: "go-reviewer, svelte-reviewer",
+      },
+      review_record: {
+        sha: "3333333",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+  });
 });
 
 describe("createGithubSource", () => {
@@ -610,6 +989,91 @@ describe("createGithubSource", () => {
     });
     // priority_field is not configured on userBoardRepo.project_board, so priority stays unset.
     expect(listed.items[0]).not.toHaveProperty("priority");
+  });
+
+  it("derives claim and current review overlays from ATeam PR body lines and PR comments", async () => {
+    stubBackend((url) => {
+      if (url.pathname === "/repos/C360Studio/semteams/issues") {
+        return jsonResponse([
+          {
+            number: 362,
+            title: "Adopt ateam v0.3.2",
+            body: "Clean upstream adoption.",
+            state: "open",
+            labels: [{ name: "area:governance" }],
+            assignees: [],
+          },
+        ]);
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/pulls") {
+        return jsonResponse([
+          {
+            number: 363,
+            title: "chore(harness): adopt ateam v0.3.2 (#362)",
+            body: [
+              "Closes #362",
+              "",
+              "implemented-by: gemini (gemini-4-argon, high)",
+              "reviewed-by: codex (gpt-6-astra, high)",
+            ].join("\n"),
+            state: "open",
+            draft: false,
+            head: {
+              ref: "gemini/gh362-adopt-ateam-v032",
+              sha: "a1b2c3d4e5f6789012345678901234567890abcd",
+            },
+          },
+        ]);
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/issues/363/comments") {
+        return jsonResponse([
+          {
+            body: "## Review request\nCommit: a1b2c3d4\nLane: go-reviewer, svelte-reviewer",
+          },
+          {
+            body: [
+              "reviewed-by: codex (gpt-6-astra, high)",
+              "Reviewed at a1b2c3d4",
+              "Verdict: APPROVE",
+            ].join("\n"),
+          },
+        ]);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    const source = createGithubSource({ apiUrl: "http://github.test" });
+    const listed = await source.listItems(REPO);
+    expect(listed.lookup).toBe("complete");
+
+    const item362 = listed.items.find((i) => i.number === 362)!;
+    expect(item362).toMatchObject({
+      ref: "C360Studio/semteams#362",
+      claim: {
+        state: "known",
+        value: {
+          kind: "agent-pr",
+          agent_vendor: "gemini",
+          holder: "gemini (gemini-4-argon, high)",
+          implemented_by: "gemini (gemini-4-argon, high)",
+          pull_request: "C360Studio/semteams#363",
+          draft: false,
+        },
+      },
+      review: {
+        state: "known",
+        value: {
+          pull_request: "C360Studio/semteams#363",
+          status: "current",
+          head_sha: "a1b2c3d4e5f6789012345678901234567890abcd",
+          request_sha: "a1b2c3d4",
+          record_sha: "a1b2c3d4",
+          reviewer_lane: "go-reviewer, svelte-reviewer",
+          implemented_by: "gemini (gemini-4-argon, high)",
+          reviewed_by: "codex (gpt-6-astra, high)",
+        },
+      },
+    });
   });
 
   it("validates configs/portfolio-c360.json against validatePortfolio", async () => {

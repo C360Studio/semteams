@@ -31,7 +31,7 @@ context: |
   does not activate a component or pack.
 
   Repository CI runs unconditional Go, UI, and Governance/OpenSpec jobs for
-  pull requests to main and reports one CI Status Check aggregate. Required
+  pull requests to main and reports one Required aggregate. Required
   mock E2E and a main-branch ruleset remain future work.
 
   Authority split: GitHub issues own wanted work, decisions, blockers, and

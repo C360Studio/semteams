@@ -37,9 +37,10 @@ SemVocab, and SemSparql; where a rule differs, this tree is authoritative.
   - Codex: `.codex/agents/technical-writer.toml`
   - Gemini (Antigravity): `define_subagent` (`name = "technical-writer"`, `enable_write_tools = true`)
 
-SemTeams carries six cross-stack roles (`architect`, `go-developer`, `go-reviewer`, `svelte-developer`,
-`svelte-reviewer`, `technical-writer`); SemStreams' explorer and judge contracts are not carried. Add a role only with
-a recorded owner decision.
+SemTeams carries six cross-stack specialist roles (`architect`, `go-developer`, `go-reviewer`, `svelte-developer`,
+`svelte-reviewer`, `technical-writer`) alongside ATeam's base [`.agents/contracts/developer.md`](contracts/developer.md)
+and [`.agents/contracts/reviewer.md`](contracts/reviewer.md) contracts and [`.agents/review-policy.json`](review-policy.json);
+SemStreams' explorer and judge contracts are not carried. Add a role only with a recorded owner decision.
 
 ## Model routing
 
@@ -89,8 +90,10 @@ with Claude and Codex:
    - For `architect`, `go-developer`, and `svelte-developer`: state `medium` effort for bounded work, or escalate to
      `high` in the brief when crossing runtime/module boundaries, designing concurrency/durability contracts, or
      resolving a failed review round.
-4. **Model-family identity:** Antigravity can host both Gemini and Claude models; for `implemented-by:` and
-   `reviewed-by:` the agent is the **model family** (`claude`, `codex`, `gemini`), not the IDE or desktop shell
+4. **Model-family identity and attestation:** Antigravity can host both Gemini and Claude models; for `implemented-by:`
+   and `reviewed-by:` the agent is the **model family** (`claude`, `codex`, `gemini`), not the IDE or desktop shell, and
+   each line records the resolved model and reasoning effort (`implemented-by: gemini (gemini-4-argon, high)`), never
+   unresolved `inherit`, for comparison under [`.agents/review-policy.json`](review-policy.json)
    ([`.agents/protocol.md`](protocol.md), "Cross-agent review").
 
 The table does not rank one platform's models against another's; across agents the pairing is the owner's decision.
@@ -136,39 +139,46 @@ cross-agent review). `CLAUDE.md` imports `AGENTS.md`, which points to `.agents/p
 
 ## Shared skills
 
-Canonical skills live in `skills/`. Read the relevant `SKILL.md` fully; the platform adapters in `.claude/skills/` add
-discovery metadata and argument handling, not another rule set. Repository protocol and role contracts remain
-authoritative.
+Canonical skills live in `skills/`. Read the relevant `SKILL.md` fully; the platform adapters in `.claude/skills/` and
+`.gemini/commands/*.toml` add discovery metadata and argument handling, not another rule set. Repository protocol and
+role contracts remain authoritative.
 
-- [semteams-preflight](skills/semteams-preflight/SKILL.md): scope existing verification gates (`task validate`, Go, UI,
-  OpenSpec, E2E) and record their evidence. Claude command `/preflight`.
-- [semteams-handoff](skills/semteams-handoff/SKILL.md): publish shared state and preserve unfinished work across
-  Claude, Codex, and Gemini sessions. Claude command `/semteams-handoff`.
-- [semteams-pickup](skills/semteams-pickup/SKILL.md): reconcile current state and verify worktree ownership. Claude
-  command `/semteams-pickup`.
+Canonical ATeam workflow skills:
 
-Architecture and runtime-capability skills:
+- [pickup](skills/pickup/SKILL.md): reconcile live git/worktree, GitHub, and `.ateam/state.json` state and verify write
+  ownership (`ateam state pickup`). Claude `/pickup`; Gemini `.gemini/commands/pickup.toml`.
+- [handoff](skills/handoff/SKILL.md): checkpoint unfinished work across Claude, Codex, and Gemini sessions and emit the
+  5-field pickup prompt (`ateam state handoff`). Claude `/handoff`; Gemini `.gemini/commands/handoff.toml`.
+- [preflight](skills/preflight/SKILL.md): scope SemTeams verification gates (`task validate` / `task verify`, Go, UI,
+  Governance, Playwright E2E) and record portable evidence. Claude `/preflight`; Gemini `.gemini/commands/preflight.toml`.
+- [ponytail](skills/ponytail/SKILL.md): smallest complete change discipline ladder, `// shortcut:` tracking, and
+  1–2 line skipped/risk summary. Claude `/ponytail`; Gemini `.gemini/commands/ponytail.toml`.
+- [review-pr](skills/review-pr/SKILL.md): independent read-only cross-agent PR review and commit-bound `reviewed-by:` +
+  `Reviewed at <sha>` + `Verdict:` comment record. Claude `/review-pr`; Gemini `.gemini/commands/review-pr.toml`.
 
-- [kv-or-stream](skills/kv-or-stream/SKILL.md): choose a KV watch or a JetStream stream. Claude command `/kv-or-stream`.
-- [new-payload](skills/new-payload/SKILL.md): add a payload type to the registry. Claude command `/new-payload`.
+SemTeams architecture and runtime-capability skills (`adopter_skills` in `ateam doctor`):
+
+- [kv-or-stream](skills/kv-or-stream/SKILL.md): choose a KV watch or a JetStream stream. Claude `/kv-or-stream`.
+- [new-payload](skills/new-payload/SKILL.md): add a payload type to the registry. Claude `/new-payload`.
 - [orchestration-check](skills/orchestration-check/SKILL.md): decide whether logic belongs in a reactive rule, workflow,
-  or component. Claude command `/orchestration-check`.
+  or component. Claude `/orchestration-check`.
 - [query-pattern](skills/query-pattern/SKILL.md): choose how code reads the graph (GraphQL, MCP, or NATS Direct).
-  Claude command `/query-pattern`.
+  Claude `/query-pattern`.
 
 Codex can invoke canonical names with `$` or read their paths directly. Antigravity (Gemini) automatically discovers
-`.agents/skills/<name>/SKILL.md` from the workspace root. Claude Code uses the command names above; its adapters live
-in `.claude/skills/<command-name>/SKILL.md`. The `preflight` adapter deliberately maps to the canonical
-`semteams-preflight` name. A private memory reference cannot be required to interpret a shared rule.
+`.agents/skills/<name>/SKILL.md` from the workspace root, and Gemini CLI loads `.gemini/commands/*.toml`. Claude Code
+uses `.claude/skills/<name>/SKILL.md`. A private memory reference cannot be required to interpret a shared rule.
 
 ## Read-only parity smoke
 
-Steps 1–8 are enforced automatically by `TestAgentSetupParity` and `TestAgentSetupParitySensitivity`
-(`test/contract/shared_work_protocol_contract_test.go`, run by `task test:race` and `task validate`). Run Step 9 after
-changing a contract, adapter, or repository routing rule.
+Steps 1–8 are enforced automatically by `task ateam:doctor` (`ateam doctor --check`) and `TestAgentSetupParity` /
+`TestAgentSetupParitySensitivity` (`test/contract/shared_work_protocol_contract_test.go`, run by `task test:race` and
+`task validate`). Run Step 9 after changing a contract, adapter, or repository routing rule.
 
-1. Confirm all six canonical contracts (`.agents/contracts/*.md`), six Claude adapters (`.claude/agents/*.md`), and six
-   Codex adapters (`.codex/agents/*.toml`) exist, and that `.agents/protocol.md` and `.agents/rules-index.md` exist.
+1. Confirm all six specialist contracts (`.agents/contracts/{architect,go-developer,go-reviewer,svelte-developer,svelte-reviewer,technical-writer}.md`),
+   ATeam's `.agents/contracts/{developer,reviewer}.md`, `.agents/review-policy.json`, six Claude adapters
+   (`.claude/agents/*.md`), and six Codex adapters (`.codex/agents/*.toml`) exist, and that `.agents/protocol.md` and
+   `.agents/rules-index.md` exist.
 2. Confirm each adapter names-and-links only its matching `.agents/contracts/<role>.md` path and says to read it fully
    first.
 3. Confirm the Claude read-only adapters (`architect`, `go-reviewer`, `svelte-reviewer`) list tools
@@ -201,7 +211,7 @@ Use these semantic fixtures when reading the routing text:
 - "Update durable docs or reconcile OpenSpec task truth" routes to `technical-writer`.
 - "Prepare a docs-only PR" retains protocol review/CI gates and selects checks for the changed artifacts.
 - "The previous revision was green" preserves that evidence as historical, not current-head proof.
-- "Continue without private memory" resolves shared state and verifies ownership through `semteams-pickup` and
+- "Continue without private memory" resolves shared state and verifies ownership through `pickup` and
   `.agents/protocol.md`.
 
 The smoke passes only when Claude, Codex, and Gemini resolve the same logical role and canonical contract for every

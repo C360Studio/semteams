@@ -43,6 +43,11 @@ tasks:
     cmds:
       - scripts/doctor.sh
 
+  ateam:doctor:
+    desc: Check ATeam multi-agent setup, hook, MCP, skill, and review-policy parity without mutating worktree state
+    cmds:
+      - env -u ATEAM_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_SESSION_ID -u GEMINI_SESSION_ID ateam doctor --check
+
   # Both read git's file list (tracked plus unignored untracked), so a primary checkout never
   # walks .worktrees/; gofmt with no file argument would read stdin, hence the empty guard.
   fmt:
@@ -88,11 +93,12 @@ tasks:
     cmds:
       - openspec validate --all --strict
       - scripts/openspec-queue.sh --check
+      - ateam state spec-check
 
   spec:queue:
     desc: Show each in-flight OpenSpec change with its holds and blocking conditions
     cmds:
-      - scripts/openspec-queue.sh
+      - ateam state spec-queue
 
   # Observability shortcuts
   observe:up:

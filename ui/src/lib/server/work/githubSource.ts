@@ -571,6 +571,287 @@ function parsePullRequest(raw: Record<string, unknown>, repository: Repository):
   };
 }
 
+function stripFencedCodeBlocks(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  let fenceChar: "`" | "~" | null = null;
+  let fenceLen = 0;
+
+  for (const line of lines) {
+    if (fenceChar === null) {
+      const open = line.match(/^\s*(`{3,}|~{3,})(.*)$/);
+      if (open) {
+        const marker = open[1];
+        const rest = open[2];
+        const ch = marker[0] as "`" | "~";
+        if (ch === "~" || !rest.includes("`")) {
+          fenceChar = ch;
+          fenceLen = marker.length;
+          continue;
+        }
+      }
+      out.push(line);
+    } else {
+      const close = line.match(/^\s*(`{3,}|~{3,})\s*$/);
+      if (close && close[1][0] === fenceChar && close[1].length >= fenceLen) {
+        fenceChar = null;
+        fenceLen = 0;
+      }
+    }
+  }
+
+  return out.join("\n");
+}
+
+function resolveSingleCommitSha(candidates: string[]): string | undefined {
+  if (candidates.length === 0) return undefined;
+  const normalized = candidates.map((sha) => sha.toLowerCase());
+  let longest = normalized[0];
+  for (const sha of normalized) {
+    if (sha.length > longest.length) {
+      longest = sha;
+    }
+  }
+  for (const sha of normalized) {
+    if (!longest.startsWith(sha)) {
+      return undefined;
+    }
+  }
+  return longest;
+}
+
+const ATEAM_AGENT_TOKEN_RE = /(?<![a-z0-9])(claude|codex|gemini)(?![a-z0-9])/gi;
+const REVIEWED_BY_LINE_RE =
+  /^\s*(?:[-*]\s*)?(?:\*{1,2}reviewed[-\s_]*by\*{0,2}|`reviewed[-\s_]*by`|reviewed[-\s_]*by)\s*:(?:\*{1,2})?\s*(.+?)\s*$/gim;
+const CROSS_AGENT_HEADING_RE =
+  /^\s*#{1,6}\s+independent\s+cross-agent\s+review\b([^\r\n]*)$/gim;
+const VERDICT_LINE_RE =
+  /^\s*(?:(?:#{1,6}|[-*])\s+)?(?:\*{1,2}verdict\*{0,2}|`verdict`|verdict)\s*:(?:\*{1,2})?\s*(.+?)\s*$/gim;
+const REVIEWER_LANE_LINE_RE =
+  /^\s*(?:[-*]\s*)?(?:\*{1,2}(?:reviewer[-\s_]*lane|review[-\s_]*lane|lane)\*{0,2}|`(?:reviewer[-\s_]*lane|review[-\s_]*lane|lane)`|(?:reviewer[-\s_]*lane|review[-\s_]*lane|lane))\s*:(?:\*{1,2})?\s*([^\r\n]+)/im;
+const REVIEW_REQUEST_HEADING_RE = /^\s*#{1,4}\s+review\s+request\b/im;
+const REVIEW_RECORD_HEADING_RE = /^\s*#{1,6}\s+review\s+record\b/im;
+const REQUEST_SHA_LINE_RE =
+  /^\s*(?:[-*]\s*)?(?:\*{1,2}(?:commit(?:\s+sha)?(?:\s+to\s+read)?|head(?:[\s_]+(?:sha|commit))?|sha)\*{0,2}|`(?:commit(?:\s+sha)?(?:\s+to\s+read)?|head(?:[\s_]+(?:sha|commit))?|sha)`|(?:commit(?:\s+sha)?(?:\s+to\s+read)?|head(?:[\s_]+(?:sha|commit))?|sha))\s*:(?:\*{1,2})?\s*[*`]*\b([0-9a-f]{7,40})\b(?!\.\.)/gim;
+
+const RECORD_SHA_PATTERNS: readonly RegExp[] = [
+  /\b(?:re-)?reviewed\s+at\b[*`]*\s*:?\s*[*`]*\b([0-9a-f]{7,40})\b(?!\.\.)/gi,
+  /\breviewed\s+(?:commit|head)\b[*`]*\s*:?\s*[*`]*\b([0-9a-f]{7,40})\b(?!\.\.)/gi,
+  /\breview\s+of\b(?:\s+commit)?[*`]*\s*:?\s*[*`]*\b([0-9a-f]{7,40})\b(?!\.\.)/gi,
+  /\breviewed\s+base\b[*`]*\s*:?\s*[*`]*\b[0-9a-f]{7,40}\b[*`]*\s*(?:-+>|→)\s*head\b[*`]*\s*:?\s*[*`]*\b([0-9a-f]{7,40})\b(?!\.\.)/gi,
+  /^\s*(?:[-*]\s*)?(?:\*{1,2}(?:reviewed[-\s_]+commit|head(?:[\s_]+(?:commit|sha))?)\*{0,2}|`(?:reviewed[-\s_]+commit|head(?:[\s_]+(?:commit|sha))?)`|(?:reviewed[-\s_]+commit|head(?:[\s_]+(?:commit|sha))?))\s*:(?:\*{1,2})?\s*[*`]*\b([0-9a-f]{7,40})\b(?!\.\.)/gim,
+];
+
+function extractAgentVendors(text: string): Set<string> {
+  const agents = new Set<string>();
+  for (const match of text.matchAll(ATEAM_AGENT_TOKEN_RE)) {
+    agents.add(match[1].toLowerCase());
+  }
+  return agents;
+}
+
+function extractAteamReviewerIdentity(
+  unquoted: string,
+): { matched: boolean; reviewed_by?: string } {
+  const reviewedByMatches = [...unquoted.matchAll(REVIEWED_BY_LINE_RE)];
+  if (reviewedByMatches.length > 0) {
+    const allAgents = new Set<string>();
+    let display: string | undefined;
+    for (const match of reviewedByMatches) {
+      const rawVal = match[1];
+      const lineAgents = extractAgentVendors(rawVal);
+      if (lineAgents.size !== 1) {
+        return { matched: false };
+      }
+      for (const agent of lineAgents) {
+        allAgents.add(agent);
+      }
+      const cleaned = rawVal.replace(/[`*]/g, "").trim();
+      if (cleaned) display = cleaned;
+    }
+    if (allAgents.size !== 1 || !display) {
+      return { matched: false };
+    }
+    return { matched: true, reviewed_by: display };
+  }
+
+  const headingMatches = [...unquoted.matchAll(CROSS_AGENT_HEADING_RE)];
+  if (headingMatches.length === 0) {
+    return { matched: false };
+  }
+
+  const headingAgents = new Set<string>();
+  let headingDisplay: string | undefined;
+  for (const match of headingMatches) {
+    const suffix = match[1] ?? "";
+    const agents = extractAgentVendors(suffix);
+    for (const agent of agents) {
+      headingAgents.add(agent);
+    }
+    if (agents.size === 1) {
+      let cleaned = suffix
+        .replace(/^[\s:—–-]+/, "")
+        .replace(/[`*]/g, "")
+        .trim();
+      const unwrapped = cleaned.match(/^\(([^()]+)\)$/);
+      if (unwrapped) {
+        cleaned = unwrapped[1].trim();
+      }
+      if (cleaned) headingDisplay = cleaned;
+    }
+  }
+
+  if (headingAgents.size > 1) {
+    return { matched: false };
+  }
+
+  return {
+    matched: true,
+    ...(headingAgents.size === 1 && headingDisplay && { reviewed_by: headingDisplay }),
+  };
+}
+
+function extractDesignatedRecordSha(unquoted: string): string | undefined {
+  const candidates: string[] = [];
+  for (const pattern of RECORD_SHA_PATTERNS) {
+    for (const match of unquoted.matchAll(pattern)) {
+      candidates.push(match[1]);
+    }
+  }
+  return resolveSingleCommitSha(candidates);
+}
+
+function extractAteamVerdict(unquoted: string): PullRequestReviewRecord["verdict"] | undefined {
+  const matches = [...unquoted.matchAll(VERDICT_LINE_RE)];
+  if (matches.length === 0) return undefined;
+
+  const verdicts = new Set<PullRequestReviewRecord["verdict"]>();
+  for (const match of matches) {
+    const rawVal = match[1];
+    const lead = rawVal
+      .split(/\s*(?:\(|—|–|;|\.|!|\s-\s)/)[0]
+      .replace(/[`*]/g, "")
+      .trim()
+      .toLowerCase();
+
+    let parsed: PullRequestReviewRecord["verdict"] | undefined;
+    if (lead === "approve" || lead === "approved" || lead === "pass") {
+      if (/\b(?:request[\s_-]+changes|changes[\s_-]+requested)\b/i.test(rawVal)) {
+        return undefined;
+      }
+      parsed = "pass";
+    } else if (
+      lead === "request changes" ||
+      lead === "request_changes" ||
+      lead === "request-changes" ||
+      lead === "changes requested" ||
+      lead === "changes_requested" ||
+      lead === "changes-requested" ||
+      lead === "blocking" ||
+      lead === "fail"
+    ) {
+      if (/\bapproved?\b/i.test(rawVal)) {
+        return undefined;
+      }
+      parsed = "blocking";
+    } else {
+      return undefined;
+    }
+
+    verdicts.add(parsed);
+  }
+
+  if (verdicts.size !== 1) return undefined;
+  return [...verdicts][0];
+}
+
+function extractReviewerLane(unquoted: string): string | undefined {
+  const match = unquoted.match(REVIEWER_LANE_LINE_RE);
+  const val = match?.[1]?.replace(/[`*]/g, "").trim();
+  return val ? val : undefined;
+}
+
+function parseAteamReviewRecord(unquoted: string): PullRequestReviewRecord | undefined {
+  const reviewer = extractAteamReviewerIdentity(unquoted);
+  if (!reviewer.matched) return undefined;
+
+  const sha = extractDesignatedRecordSha(unquoted);
+  if (!sha) return undefined;
+
+  const verdict = extractAteamVerdict(unquoted);
+  if (!verdict) return undefined;
+
+  const lane = extractReviewerLane(unquoted);
+  return {
+    sha,
+    verdict,
+    ...(lane && { reviewer_lane: lane }),
+    ...(reviewer.reviewed_by && { reviewed_by: reviewer.reviewed_by }),
+  };
+}
+
+function hasRecordSignals(unquoted: string): boolean {
+  return (
+    REVIEW_RECORD_HEADING_RE.test(unquoted) ||
+    [...unquoted.matchAll(REVIEWED_BY_LINE_RE)].length > 0 ||
+    [...unquoted.matchAll(CROSS_AGENT_HEADING_RE)].length > 0 ||
+    [...unquoted.matchAll(VERDICT_LINE_RE)].length > 0
+  );
+}
+
+function parsePlainReviewRequest(unquoted: string): PullRequestReviewRequest | undefined {
+  if (!REVIEW_REQUEST_HEADING_RE.test(unquoted) || hasRecordSignals(unquoted)) {
+    return undefined;
+  }
+
+  const shas: string[] = [];
+  for (const match of unquoted.matchAll(REQUEST_SHA_LINE_RE)) {
+    shas.push(match[1]);
+  }
+  const sha = resolveSingleCommitSha(shas);
+  if (!sha) return undefined;
+
+  const lane = extractReviewerLane(unquoted);
+  return {
+    sha,
+    ...(lane && { reviewer_lane: lane }),
+  };
+}
+
+function parseLegacyReviewRequest(body: string): PullRequestReviewRequest | undefined {
+  const sha = matchMetadataField(body, "(?:commit|head(?:_sha)?|sha)");
+  const lane = matchMetadataField(body, "(?:reviewer[-\\s_]*lane|lane)");
+  if (sha && /^[0-9a-f]{7,40}$/i.test(sha)) {
+    return {
+      sha,
+      ...(lane && { reviewer_lane: lane }),
+    };
+  }
+  return undefined;
+}
+
+function parseLegacyReviewRecord(body: string): PullRequestReviewRecord | undefined {
+  const sha = matchMetadataField(body, "(?:commit|head(?:_sha)?|sha)");
+  const verdictRaw = matchMetadataField(body, "verdict")?.toLowerCase();
+  const lane = matchMetadataField(body, "(?:reviewer[-\\s_]*lane|lane)");
+  const reviewedBy = matchMetadataField(body, "reviewed[-\\s_]*by");
+  const verdict: PullRequestReviewRecord["verdict"] | undefined =
+    verdictRaw === "pass" || verdictRaw === "approved"
+      ? "pass"
+      : verdictRaw === "blocking" || verdictRaw === "changes_requested" || verdictRaw === "fail"
+        ? "blocking"
+        : undefined;
+  if (sha && /^[0-9a-f]{7,40}$/i.test(sha) && verdict) {
+    return {
+      sha,
+      verdict,
+      ...(lane && { reviewer_lane: lane }),
+      ...(reviewedBy && { reviewed_by: reviewedBy }),
+    };
+  }
+  return undefined;
+}
+
 export function parseReviewComments(comments: unknown[]): {
   review_request?: PullRequestReviewRequest;
   review_record?: PullRequestReviewRecord;
@@ -581,36 +862,43 @@ export function parseReviewComments(comments: unknown[]): {
   for (const entry of comments) {
     if (!isObject(entry) || typeof entry.body !== "string") continue;
     const body = entry.body;
+    const unquoted = stripFencedCodeBlocks(body);
+    const unquotedWithoutInlineCode = unquoted.replace(/`[^`\r\n]*`/g, "");
 
-    if (body.includes("<!-- semteams-review-request -->")) {
-      const sha = matchMetadataField(body, "(?:commit|head(?:_sha)?|sha)");
-      const lane = matchMetadataField(body, "(?:reviewer[-\\s_]*lane|lane)");
-      if (sha && /^[0-9a-f]{7,40}$/i.test(sha)) {
-        review_request = {
-          sha,
-          ...(lane && { reviewer_lane: lane }),
-        };
+    const hasLegacyRequestMarker = unquotedWithoutInlineCode.includes(
+      "<!-- semteams-review-request -->",
+    );
+    const hasLegacyRecordMarker = unquotedWithoutInlineCode.includes(
+      "<!-- semteams-review-record -->",
+    );
+
+    let matchedLegacy = false;
+    if (hasLegacyRequestMarker) {
+      const legacyRequest = parseLegacyReviewRequest(body);
+      if (legacyRequest) {
+        review_request = legacyRequest;
+        matchedLegacy = true;
       }
     }
+    if (hasLegacyRecordMarker) {
+      const legacyRecord = parseLegacyReviewRecord(body);
+      if (legacyRecord) {
+        review_record = legacyRecord;
+        matchedLegacy = true;
+      }
+    }
+    if (matchedLegacy) continue;
 
-    if (body.includes("<!-- semteams-review-record -->")) {
-      const sha = matchMetadataField(body, "(?:commit|head(?:_sha)?|sha)");
-      const verdictRaw = matchMetadataField(body, "verdict")?.toLowerCase();
-      const lane = matchMetadataField(body, "(?:reviewer[-\\s_]*lane|lane)");
-      const reviewedBy = matchMetadataField(body, "reviewed[-\\s_]*by");
-      const verdict: PullRequestReviewRecord["verdict"] | undefined =
-        verdictRaw === "pass" || verdictRaw === "approved"
-          ? "pass"
-          : verdictRaw === "blocking" || verdictRaw === "changes_requested" || verdictRaw === "fail"
-            ? "blocking"
-            : undefined;
-      if (sha && /^[0-9a-f]{7,40}$/i.test(sha) && verdict) {
-        review_record = {
-          sha,
-          verdict,
-          ...(lane && { reviewer_lane: lane }),
-          ...(reviewedBy && { reviewed_by: reviewedBy }),
-        };
+    const ateamRecord = parseAteamReviewRecord(unquoted);
+    if (ateamRecord) {
+      review_record = ateamRecord;
+      continue;
+    }
+
+    if (!hasLegacyRecordMarker) {
+      const plainRequest = parsePlainReviewRequest(unquoted);
+      if (plainRequest) {
+        review_request = plainRequest;
       }
     }
   }
