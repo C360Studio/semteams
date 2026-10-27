@@ -12,7 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The parts of .agents/README.md's read-only parity smoke that `ateam doctor --check`
+// The parts of the agent setup (.agents/README.md, "Parity checks") that `ateam doctor --check`
 // (task ateam:doctor) does not hold: the six specialist role adapters and the adopter skill
 // adapters. Doctor owns CLAUDE.md, the AGENTS.md size cap, AGENTS.md/rules-index parity, and
 // ateam's canonical skill adapters (ateam v0.3.2 internal/bootstrap/bootstrap.go
