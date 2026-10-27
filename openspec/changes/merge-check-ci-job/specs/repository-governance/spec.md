@@ -20,6 +20,12 @@ pull request's base commit, and `Required` SHALL depend on it.
 - THEN `Merge check` fails and `Required` fails
 - AND after an approving record is posted, rerunning the failed job lets `Required` pass
 
+#### Scenario: Marking a draft ready starts the gated run
+
+- GIVEN a draft pull request, whose `Merge check` does not fail on a review finding
+- WHEN it is marked ready for review
+- THEN `Repository CI` runs on the `ready_for_review` event and `Merge check` applies the review check
+
 #### Scenario: A push to main checks only the up-to-date rule
 
 - GIVEN a push to `main`

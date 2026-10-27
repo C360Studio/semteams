@@ -3,8 +3,11 @@ name: Repository CI
 on:
   push:
     branches: [main]
+  # Listing types replaces GitHub's default three, so ready_for_review is listed with them: marking a draft ready
+  # starts the run whose Merge check applies the review check, which does not fail a draft.
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   go:
