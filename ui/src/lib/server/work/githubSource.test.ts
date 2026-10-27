@@ -655,6 +655,34 @@ describe("githubSource parsing helpers", () => {
       expect(parseReviewComments([record([line])]), line).toEqual({ review_unparsed: true });
     }
 
+    // The exact-APPROVE check reads the original body, not the inline-code-filtered text used for identity and SHA
+    // recognition: a condition inside inline code (even one mentioning `verdict`) is still part of the value.
+    for (const line of [
+      "Verdict: APPROVE `pending verdict tests`",
+      "Verdict: APPROVE `once H1 lands`",
+      "Verdict: APPROVE `if reviewed-by is fixed`",
+      "Verdict: APPROVE `Reviewed at a1b2c3d4` pending re-run",
+    ]) {
+      expect(parseReviewComments([record([line])]), line).toEqual({ review_unparsed: true });
+    }
+    // Inline-code meta discussion elsewhere in the record does not change an exact approval.
+    expect(
+      parseReviewComments([record(["Verdict: APPROVE", "", "Checked the `Verdict` clause split."])]),
+    ).toEqual(pass);
+
+    // Line trimming follows Go strings.TrimSpace (unicode.IsSpace): a second Verdict line indented with NBSP or
+    // another Unicode space still counts, so the record has two Verdict lines and does not approve.
+    for (const indent of ["\u00a0", "\u2003", "\u3000", "\u0085", "\u202f", "\t", "\v"]) {
+      expect(
+        parseReviewComments([record(["Verdict: APPROVE", `${indent}Verdict: REQUEST CHANGES`])]),
+        JSON.stringify(indent),
+      ).toEqual({ review_unparsed: true });
+      // A single Unicode-space-indented exact approval is trimmed and approves, as in ATeam.
+      expect(parseReviewComments([record([`${indent}Verdict: APPROVE`])]), JSON.stringify(indent)).toEqual(pass);
+    }
+    // U+FEFF is not Go whitespace (unlike JS String.prototype.trim), so ATeam sees no Verdict line.
+    expect(parseReviewComments([record(["\ufeffVerdict: APPROVE"])])).toEqual({ review_unparsed: true });
+
     // Exactly one Verdict line: a duplicated APPROVE line does not approve (gateVerdict "has 2 Verdict: lines").
     expect(parseReviewComments([record(["Verdict: APPROVE", "Verdict: APPROVE"])])).toEqual({
       review_unparsed: true,
@@ -1819,6 +1847,22 @@ describe("createGithubSource", () => {
           anyRecord("svelte-reviewer", "APPROVE", "a1b2c3d4"),
         ]),
       ).toBe("current");
+    });
+
+    it("reads inline-formatted conditions and Unicode-indented Verdict lines on the live path as ATeam does", async () => {
+      const withVerdict = (...lines: string[]) => ({
+        body: ["reviewed-by: codex (gpt-6-astra, high)", "Reviewed at a1b2c3d4", ...lines].join("\n"),
+      });
+      // Codex H1 on e56105a9: these read `current` before the fix.
+      expect(await statusOf([withVerdict("Verdict: APPROVE `pending verdict tests`")])).toBe("unknown");
+      expect(
+        await statusOf([withVerdict("Verdict: APPROVE", "\u00a0Verdict: REQUEST CHANGES")]),
+      ).toBe("unknown");
+      // Negative controls: backticked APPROVE is not APPROVE to gateVerdict; plain conditions stay unknown.
+      expect(await statusOf([withVerdict("Verdict: `APPROVE`")])).toBe("unknown");
+      expect(await statusOf([withVerdict("Verdict: APPROVE pending verdict tests")])).toBe("unknown");
+      // Positive control.
+      expect(await statusOf([withVerdict("Verdict: APPROVE")])).toBe("current");
     });
 
     it("treats an unreadable record carrying a reviewer identity but no lane as all-lanes (case D)", async () => {

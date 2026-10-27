@@ -644,8 +644,10 @@ const REVIEWED_BY_LINE_RE =
   /^[ \t]*(?:[-*][ \t]*)?(?:\*{1,2}reviewed[- \t_]*by\*{0,2}|reviewed[- \t_]*by)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
 const CROSS_AGENT_HEADING_RE =
   /^[ \t]*#{1,6}[ \t]+independent[ \t]+cross-agent[ \t]+review\b([^\r\n]*)$/gim;
+// Leading indent accepts the same Unicode spaces Go's strings.TrimSpace strips (see
+// goTrimSpace), so a `\u00a0Verdict:` line counts here exactly as it does in ATeam's gate.
 const VERDICT_LINE_RE =
-  /^[ \t]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}verdict\*{0,2}|verdict)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
+  /^[\t\v\f \u0085\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}verdict\*{0,2}|verdict)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
 const VERDICT_CLAUSE_SPLIT_RE =
   /[ \t]*(?:\(|—|–|,|:|\.|!|[ \t]-[ \t]|[ \t]+(?:with|see|on|at|citing|for|pending|after|until|once|because)\b)/i;
 const REVIEWER_LANE_LINE_RE =
@@ -758,21 +760,81 @@ function extractDesignatedRecordSha(unquoted: string): string | undefined {
   return resolveSingleCommitSha(candidates);
 }
 
-// ATeam's merge gate approves only on exactly one unfenced `Verdict:` line whose whole
-// value is `APPROVE` (ateam internal/review/gate.go gateVerdict, 36b999b:823-840). A
-// `pass` here must mean that gate would approve, so any decorated or conditional APPROVE
-// (`APPROVE with nits`, `**Verdict**: APPROVE`, `APPROVE pending H1`, `APPROVE, but ...`)
-// is not a pass; it is left unparsed so the review overlay fails closed to unknown.
-// Blocking verdicts keep the lenient lead-clause read: reporting changes_requested for
-// `REQUEST CHANGES, see H1` can never claim a false approval.
-const ATEAM_APPROVE_LINE_RE = /^[ \t]*verdict:[ \t]*approve[ \t]*$/i;
+// Whitespace Go's strings.TrimSpace removes (unicode.IsSpace: ASCII \t\n\v\f\r and space,
+// U+0085, U+00A0, and the Unicode Zs/Zl/Zp spaces). JS String.prototype.trim differs (it
+// also trims U+FEFF and not U+0085), so ATeam's trimming is reproduced explicitly.
+const GO_SPACE_CLASS =
+  "\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
+const GO_TRIM_RE = new RegExp(`^[${GO_SPACE_CLASS}]+|[${GO_SPACE_CLASS}]+$`, "g");
 
-function extractAteamVerdict(unquoted: string): PullRequestReviewRecord["verdict"] | undefined {
+function goTrimSpace(text: string): string {
+  return text.replace(GO_TRIM_RE, "");
+}
+
+// Port of ATeam's unfencedLines (ateam internal/review/aiprecord.go 36b999b:98-123): split on
+// "\n", drop a trailing "\r", and skip lines inside ``` / ~~~ fences. A fence opens on any
+// run of >= 3 fence characters indented <= 3 spaces (info strings are not inspected) and
+// closes on a run of the same character at least as long with nothing after it.
+function ateamUnfencedLines(text: string): string[] {
+  const out: string[] = [];
+  let fence = "";
+  let fenceLength = 0;
+  for (const raw of text.split("\n")) {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    const trimmed = line.replace(/^ +/, "");
+    if (
+      line.length - trimmed.length <= 3 &&
+      trimmed.length >= 3 &&
+      (trimmed[0] === "`" || trimmed[0] === "~")
+    ) {
+      let n = 0;
+      while (n < trimmed.length && trimmed[n] === trimmed[0]) n++;
+      if (n >= 3 && fence === "") {
+        fence = trimmed[0];
+        fenceLength = n;
+        continue;
+      }
+      if (n >= 3 && trimmed[0] === fence && n >= fenceLength && goTrimSpace(trimmed.slice(n)) === "") {
+        fence = "";
+        fenceLength = 0;
+        continue;
+      }
+    }
+    if (fence === "") out.push(line);
+  }
+  return out;
+}
+
+// ATeam's merge gate approves only on exactly one unfenced `Verdict:` line whose whole
+// trimmed value is `APPROVE` (ateam internal/review/gate.go gateVerdict, 36b999b:823-840).
+// It reads the original comment body, so inline code (`` `pending verdict tests` ``),
+// emphasis, and Unicode-space indents count exactly as ATeam sees them; this check must
+// never run on text with inline code removed.
+function ateamGateApproves(body: string): boolean {
+  const verdicts: string[] = [];
+  for (const line of ateamUnfencedLines(body)) {
+    const trimmed = goTrimSpace(line);
+    if (trimmed.length >= "Verdict:".length && trimmed.slice(0, 8).toLowerCase() === "verdict:") {
+      verdicts.push(goTrimSpace(trimmed.slice(8)));
+    }
+  }
+  return verdicts.length === 1 && verdicts[0].toLowerCase() === "approve";
+}
+
+// A `pass` must mean ATeam's gate would approve the original body AND this parser's own
+// lenient scan sees exactly one Verdict line; any decorated or conditional APPROVE is left
+// unparsed so the review overlay fails closed to unknown. Blocking verdicts keep the lenient
+// lead-clause read: reporting changes_requested for `REQUEST CHANGES, see H1` can never
+// claim a false approval.
+function extractAteamVerdict(
+  unquoted: string,
+  originalBody: string,
+): PullRequestReviewRecord["verdict"] | undefined {
   const matches = [...unquoted.matchAll(VERDICT_LINE_RE)];
   if (matches.length !== 1) return undefined;
+  if (ateamGateApproves(originalBody)) return "pass";
 
-  const [line, value] = matches[0];
-  if (ATEAM_APPROVE_LINE_RE.test(line)) return "pass";
+  const value = matches[0][1];
 
   const lead = value
     .replace(/[`*]/g, "")
@@ -801,14 +863,17 @@ function extractReviewerLane(unquoted: string): string | undefined {
   return val ? val : undefined;
 }
 
-function parseAteamReviewRecord(unquoted: string): PullRequestReviewRecord | undefined {
+function parseAteamReviewRecord(
+  unquoted: string,
+  originalBody: string,
+): PullRequestReviewRecord | undefined {
   const reviewer = extractAteamReviewerIdentity(unquoted);
   if (!reviewer.matched) return undefined;
 
   const sha = extractDesignatedRecordSha(unquoted);
   if (!sha) return undefined;
 
-  const verdict = extractAteamVerdict(unquoted);
+  const verdict = extractAteamVerdict(unquoted, originalBody);
   if (!verdict) return undefined;
 
   const lane = extractReviewerLane(unquoted);
@@ -1049,7 +1114,7 @@ export function parseReviewComments(
     if (matchedLegacy) return;
 
     const ateamBody = stripKeywordInlineCode(unquoted);
-    const ateamRecord = parseAteamReviewRecord(ateamBody);
+    const ateamRecord = parseAteamReviewRecord(ateamBody, body);
     if (ateamRecord) {
       pushRecord(index, ateamRecord);
       return;

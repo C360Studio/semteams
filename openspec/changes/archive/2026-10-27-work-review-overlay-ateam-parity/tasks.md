@@ -1,6 +1,6 @@
 ## 1. Review verdict and unparsed-record parity with ATeam (#365)
 
-- [x] 1.1 Map a `Review record` to `pass` only on exactly one unfenced `Verdict: APPROVE` line (ATeam `gateVerdict()`), leaving conditional or decorated approvals unparsed, in `ui/src/lib/server/work/githubSource.ts` (see `notes/1.1.md`).
+- [x] 1.1 Map a `Review record` to `pass` only on exactly one unfenced `Verdict: APPROVE` line read from the original comment body with ATeam's `unfencedLines()` fence rule and Go `strings.TrimSpace` trimming (ATeam `gateVerdict()`), leaving conditional, inline-code-formatted, or decorated approvals unparsed, in `ui/src/lib/server/work/githubSource.ts` (see `notes/1.1.md`).
 - [x] 1.2 Clear an earlier unparseable comment when a later valid `Review record` covering its lane follows it (ATeam `record()`), keeping an unparseable comment after the latest valid record fail-closed.
 
 ## 2. Reviewer-lane aggregation and paginated comment reads (#366)

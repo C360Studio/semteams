@@ -17,8 +17,11 @@ introducing a separate agent message bus or mutating GitHub state:
   commits landed after the latest `Review record` without a newer request at `HEAD`), or `changes_requested` (when the
   effective `Review record` at `HEAD` reports blocking findings or `REQUEST CHANGES`), along with `reviewed-by` and
   reviewer-lane attribution. Matching ATeam's merge gate (`C360Studio/ateam` `internal/review/gate.go` `gateVerdict()`,
-  `36b999b`), an ATeam record SHALL map to `pass` only when it carries exactly one `Verdict:` line outside code fences
-  and that line, trimmed, is `Verdict: APPROVE` (case-insensitive); a value led by `REQUEST CHANGES`,
+  `36b999b`), an ATeam record SHALL map to `pass` only when the original comment body carries exactly one `Verdict:`
+  line outside code fences (ATeam `unfencedLines()` fence rule) and that line, trimmed of Go `strings.TrimSpace`
+  whitespace (including U+00A0 and other Unicode spaces), is `Verdict: APPROVE` (case-insensitive), with inline code
+  and emphasis counted as part of the value, and the parser's own scan also finds exactly one `Verdict:` line; a
+  value led by `REQUEST CHANGES`,
   `CHANGES REQUESTED`, `BLOCKING`, or `FAIL` SHALL map to `blocking`; any other value — including conditional or
   decorated approvals such as `APPROVE pending H1`, `APPROVE, but REQUEST CHANGES on H1`, or `APPROVE with nits` — and
   more than one `Verdict:` line SHALL leave the comment unparsed. Historical `<!-- semteams-review-record -->` marker
@@ -100,7 +103,9 @@ None of `claim`, `review`, or `gate` SHALL alter the work item's board column (`
 #### Scenario: Conditional APPROVE verdict does not pass
 
 - **GIVEN** an ATeam review record at `HEAD` whose only `Verdict:` line is `Verdict: APPROVE pending H1 fix`,
-  `Verdict: APPROVE, but REQUEST CHANGES on H1`, or another value that is not exactly `APPROVE`
+  `Verdict: APPROVE, but REQUEST CHANGES on H1`, ``Verdict: APPROVE `pending verdict tests` ``, ``Verdict: `APPROVE` ``,
+  or another value that is not exactly `APPROVE`, or whose body has a second `Verdict:` line indented with U+00A0 or
+  another Unicode space
 - **WHEN** the GitHub work source derives the `review` overlay
 - **THEN** the record SHALL NOT map to `pass` and the `review` overlay SHALL render as `unknown`, not `current`
 

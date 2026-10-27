@@ -21,10 +21,12 @@ very good reason not to. The reference is `C360Studio/ateam` `internal/review/ga
 
 ## What changes
 
-- An ATeam `Review record` maps to `pass` only when it carries exactly one `Verdict:` line outside code fences and that line,
-  trimmed, is `Verdict: APPROVE` (case-insensitive), matching `gateVerdict()`. Conditional, decorated, or
-  multi-line approvals (`APPROVE pending H1`, `APPROVE with nits`, `**Verdict**: APPROVE`, `` Verdict: `APPROVE` ``,
-  `APPROVED`) do not pass; they leave the comment unparsed so the overlay fails closed to `unknown`. Leading
+- An ATeam `Review record` maps to `pass` only when its original comment body (not the inline-code-filtered text
+  used for identity and SHA recognition) carries exactly one `Verdict:` line outside code fences and that line,
+  trimmed of Go `strings.TrimSpace` whitespace, is `Verdict: APPROVE` (case-insensitive), matching `gateVerdict()`.
+  Conditional, decorated, or multi-line approvals (`APPROVE pending H1`, ``APPROVE `pending verdict tests` ``,
+  `APPROVE with nits`, `**Verdict**: APPROVE`, `` Verdict: `APPROVE` ``, `APPROVED`, a second `Verdict:` line indented
+  with U+00A0) do not pass; they leave the comment unparsed so the overlay fails closed to `unknown`. Leading
   `REQUEST CHANGES` / `CHANGES REQUESTED` / `BLOCKING` / `FAIL` values still map to `blocking`. Historical
   `<!-- semteams-review-record -->` marker records keep their `verdict:` mapping (`pass` / `approved` to `pass`).
 - `review_unparsed` is no longer sticky: a later valid `Review record` clears an earlier unparseable comment, matching
