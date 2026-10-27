@@ -24,6 +24,9 @@ import type { ItemRef, WorkSource } from "./source";
 export const READ_TIMEOUT_MS = 5000;
 export const GITHUB_PAGE_LIMIT = 100;
 export const MAX_OPEN_PR_COMMENT_FETCHES = 10;
+// Comment pages read per open PR before the review overlay fails closed: a newer record
+// could sit past the last page read, so a full final page leaves review uninspected.
+export const MAX_PR_COMMENT_PAGES = 10;
 
 export interface GithubSourceOptions {
   token?: string;
@@ -641,8 +644,10 @@ const REVIEWED_BY_LINE_RE =
   /^[ \t]*(?:[-*][ \t]*)?(?:\*{1,2}reviewed[- \t_]*by\*{0,2}|reviewed[- \t_]*by)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
 const CROSS_AGENT_HEADING_RE =
   /^[ \t]*#{1,6}[ \t]+independent[ \t]+cross-agent[ \t]+review\b([^\r\n]*)$/gim;
+// Leading indent accepts the same Unicode spaces Go's strings.TrimSpace strips (see
+// goTrimSpace), so a `\u00a0Verdict:` line counts here exactly as it does in ATeam's gate.
 const VERDICT_LINE_RE =
-  /^[ \t]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}verdict\*{0,2}|verdict)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
+  /^[\t\v\f \u0085\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]*(?:(?:#{1,6}|[-*])[ \t]+)?(?:\*{1,2}verdict\*{0,2}|verdict)[ \t]*:(?:\*{1,2})?[ \t]*([^\r\n]*)$/gim;
 const VERDICT_CLAUSE_SPLIT_RE =
   /[ \t]*(?:\(|—|–|,|:|\.|!|[ \t]-[ \t]|[ \t]+(?:with|see|on|at|citing|for|pending|after|until|once|because)\b)/i;
 const REVIEWER_LANE_LINE_RE =
@@ -755,38 +760,101 @@ function extractDesignatedRecordSha(unquoted: string): string | undefined {
   return resolveSingleCommitSha(candidates);
 }
 
-function extractAteamVerdict(unquoted: string): PullRequestReviewRecord["verdict"] | undefined {
-  const matches = [...unquoted.matchAll(VERDICT_LINE_RE)];
-  if (matches.length === 0) return undefined;
+// Whitespace Go's strings.TrimSpace removes (unicode.IsSpace: ASCII \t\n\v\f\r and space,
+// U+0085, U+00A0, and the Unicode Zs/Zl/Zp spaces). JS String.prototype.trim differs (it
+// also trims U+FEFF and not U+0085), so ATeam's trimming is reproduced explicitly.
+const GO_SPACE_CLASS =
+  "\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000";
+const GO_TRIM_RE = new RegExp(`^[${GO_SPACE_CLASS}]+|[${GO_SPACE_CLASS}]+$`, "g");
 
-  const verdicts = new Set<PullRequestReviewRecord["verdict"]>();
-  for (const match of matches) {
-    const rawVal = match[1].replace(/[`*]/g, "").trim();
-    const lead = rawVal.split(VERDICT_CLAUSE_SPLIT_RE)[0].trim().toLowerCase();
+function goTrimSpace(text: string): string {
+  return text.replace(GO_TRIM_RE, "");
+}
 
-    let parsed: PullRequestReviewRecord["verdict"] | undefined;
-    if (lead === "approve" || lead === "approved" || lead === "pass") {
-      parsed = "pass";
-    } else if (
-      lead === "request changes" ||
-      lead === "request_changes" ||
-      lead === "request-changes" ||
-      lead === "changes requested" ||
-      lead === "changes_requested" ||
-      lead === "changes-requested" ||
-      lead === "blocking" ||
-      lead === "fail"
+// Port of ATeam's unfencedLines (ateam internal/review/aiprecord.go 36b999b:98-123): split on
+// "\n", drop a trailing "\r", and skip lines inside ``` / ~~~ fences. A fence opens on any
+// run of >= 3 fence characters indented <= 3 spaces (info strings are not inspected) and
+// closes on a run of the same character at least as long with nothing after it.
+function ateamUnfencedLines(text: string): string[] {
+  const out: string[] = [];
+  let fence = "";
+  let fenceLength = 0;
+  for (const raw of text.split("\n")) {
+    const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+    const trimmed = line.replace(/^ +/, "");
+    if (
+      line.length - trimmed.length <= 3 &&
+      trimmed.length >= 3 &&
+      (trimmed[0] === "`" || trimmed[0] === "~")
     ) {
-      parsed = "blocking";
-    } else {
-      return undefined;
+      let n = 0;
+      while (n < trimmed.length && trimmed[n] === trimmed[0]) n++;
+      if (n >= 3 && fence === "") {
+        fence = trimmed[0];
+        fenceLength = n;
+        continue;
+      }
+      if (n >= 3 && trimmed[0] === fence && n >= fenceLength && goTrimSpace(trimmed.slice(n)) === "") {
+        fence = "";
+        fenceLength = 0;
+        continue;
+      }
     }
-
-    verdicts.add(parsed);
+    if (fence === "") out.push(line);
   }
+  return out;
+}
 
-  if (verdicts.size !== 1) return undefined;
-  return [...verdicts][0];
+// ATeam's merge gate approves only on exactly one unfenced `Verdict:` line whose whole
+// trimmed value is `APPROVE` (ateam internal/review/gate.go gateVerdict, 36b999b:823-840).
+// It reads the original comment body, so inline code (`` `pending verdict tests` ``),
+// emphasis, and Unicode-space indents count exactly as ATeam sees them; this check must
+// never run on text with inline code removed.
+function ateamGateApproves(body: string): boolean {
+  const verdicts: string[] = [];
+  for (const line of ateamUnfencedLines(body)) {
+    const trimmed = goTrimSpace(line);
+    if (trimmed.length >= "Verdict:".length && trimmed.slice(0, 8).toLowerCase() === "verdict:") {
+      verdicts.push(goTrimSpace(trimmed.slice(8)));
+    }
+  }
+  return verdicts.length === 1 && verdicts[0].toLowerCase() === "approve";
+}
+
+// A `pass` must mean ATeam's gate would approve the original body AND this parser's own
+// lenient scan sees exactly one Verdict line; any decorated or conditional APPROVE is left
+// unparsed so the review overlay fails closed to unknown. Blocking verdicts keep the lenient
+// lead-clause read: reporting changes_requested for `REQUEST CHANGES, see H1` can never
+// claim a false approval.
+function extractAteamVerdict(
+  unquoted: string,
+  originalBody: string,
+): PullRequestReviewRecord["verdict"] | undefined {
+  const matches = [...unquoted.matchAll(VERDICT_LINE_RE)];
+  if (matches.length !== 1) return undefined;
+  if (ateamGateApproves(originalBody)) return "pass";
+
+  const value = matches[0][1];
+
+  const lead = value
+    .replace(/[`*]/g, "")
+    .trim()
+    .split(VERDICT_CLAUSE_SPLIT_RE)[0]
+    .trim()
+    .toLowerCase();
+  if (
+    lead === "request changes" ||
+    lead === "request_changes" ||
+    lead === "request-changes" ||
+    lead === "changes requested" ||
+    lead === "changes_requested" ||
+    lead === "changes-requested" ||
+    lead === "blocking" ||
+    lead === "fail"
+  ) {
+    return "blocking";
+  }
+  return undefined;
 }
 
 function extractReviewerLane(unquoted: string): string | undefined {
@@ -795,14 +863,17 @@ function extractReviewerLane(unquoted: string): string | undefined {
   return val ? val : undefined;
 }
 
-function parseAteamReviewRecord(unquoted: string): PullRequestReviewRecord | undefined {
+function parseAteamReviewRecord(
+  unquoted: string,
+  originalBody: string,
+): PullRequestReviewRecord | undefined {
   const reviewer = extractAteamReviewerIdentity(unquoted);
   if (!reviewer.matched) return undefined;
 
   const sha = extractDesignatedRecordSha(unquoted);
   if (!sha) return undefined;
 
-  const verdict = extractAteamVerdict(unquoted);
+  const verdict = extractAteamVerdict(unquoted, originalBody);
   if (!verdict) return undefined;
 
   const lane = extractReviewerLane(unquoted);
@@ -821,6 +892,13 @@ function hasRecordSignals(unquoted: string): boolean {
     [...unquoted.matchAll(REVIEWED_BY_LINE_RE)].length > 0 ||
     [...unquoted.matchAll(CROSS_AGENT_HEADING_RE)].length > 0 ||
     [...unquoted.matchAll(VERDICT_LINE_RE)].length > 0
+  );
+}
+
+function hasReviewerIdentity(unquoted: string): boolean {
+  return (
+    [...unquoted.matchAll(REVIEWED_BY_LINE_RE)].length > 0 ||
+    [...unquoted.matchAll(CROSS_AGENT_HEADING_RE)].length > 0
   );
 }
 
@@ -884,17 +962,122 @@ function parseLegacyReviewRecord(body: string): PullRequestReviewRecord | undefi
   return undefined;
 }
 
-export function parseReviewComments(comments: unknown[]): {
+// Reviewer lane keys a record or unparseable comment covers. `undefined` means the comment
+// names no lane, which for a valid record makes it an all-lanes record. Recognized
+// `<name>-reviewer` tokens are the keys (`go-reviewer, svelte-reviewer (cross-agent)` ->
+// both); any other lane text is its own opaque key so it never clears a named lane.
+function reviewerLaneKeys(lane: string | undefined): Set<string> | undefined {
+  const normalized = lane?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const keys = new Set<string>();
+  for (const match of normalized.matchAll(/(?<![a-z0-9-])([a-z0-9]+-reviewer)(?![a-z0-9-])/g)) {
+    keys.add(match[1]);
+  }
+  if (keys.size === 0) keys.add(normalized);
+  return keys;
+}
+
+interface ParsedRecordEntry {
+  index: number;
+  record: PullRequestReviewRecord;
+  lanes: Set<string> | undefined;
+}
+
+interface UnparsedEntry {
+  index: number;
+  // Lanes the comment names. `undefined` with `allLanes: true` is a comment that carries a
+  // reviewer identity but no lane line: had it parsed it would be an all-lanes record, so
+  // only a later all-lanes record clears it. `undefined` with `allLanes: false` (no identity,
+  // e.g. an implementer reply quoting a verdict) is cleared by any later surviving record.
+  lanes: Set<string> | undefined;
+  allLanes: boolean;
+}
+
+interface LaneState {
+  allLanes?: ParsedRecordEntry;
+  byLane: Map<string, ParsedRecordEntry>;
+}
+
+// Replays every valid record in comment order, at any SHA, as ATeam's gate keeps the
+// latest valid record whatever commit it names (ateam internal/review/gate.go record(),
+// 36b999b:500-527). An all-lanes record (no lane line) resets every lane; a lane record
+// replaces only the lanes it names.
+function replayLanes(records: ParsedRecordEntry[]): LaneState {
+  const state: LaneState = { byLane: new Map() };
+  for (const entry of records) {
+    if (!entry.lanes) {
+      state.allLanes = entry;
+      state.byLane.clear();
+      continue;
+    }
+    for (const lane of entry.lanes) state.byLane.set(lane, entry);
+  }
+  return state;
+}
+
+function survivingEntries(state: LaneState): ParsedRecordEntry[] {
+  const unique = new Set<ParsedRecordEntry>(state.byLane.values());
+  if (state.allLanes) unique.add(state.allLanes);
+  return [...unique].sort((a, b) => a.index - b.index);
+}
+
+// An earlier unparseable comment is cleared only by surviving lane state newer than it, so
+// a clearing record later superseded in its lane (at any SHA) no longer clears it. Lanes are
+// SemTeams-specific: a go-reviewer APPROVE cannot clear an unreadable svelte-reviewer record.
+function unparsedCleared(entry: UnparsedEntry, state: LaneState): boolean {
+  if (entry.lanes) {
+    for (const lane of entry.lanes) {
+      const holder = state.byLane.get(lane) ?? state.allLanes;
+      if (!holder || holder.index <= entry.index) return false;
+    }
+    return true;
+  }
+  if (entry.allLanes) {
+    return Boolean(state.allLanes && state.allLanes.index > entry.index);
+  }
+  return survivingEntries(state).some((rec) => rec.index > entry.index);
+}
+
+// Effective review record across reviewer lanes, derived from the surviving per-lane state:
+// the newest surviving blocking record if any lane is blocking; else the newest surviving
+// record not at HEAD (the baton reports stale); else the latest record. Without HEAD, the
+// latest record's SHA is the anchor.
+function effectiveReviewRecord(
+  records: ParsedRecordEntry[],
+  state: LaneState,
+  headSha: string | undefined,
+): PullRequestReviewRecord | undefined {
+  const latest = records.at(-1);
+  if (!latest) return undefined;
+  const anchor = headSha ?? latest.record.sha;
+  // Symmetric prefix match: without HEAD the anchor may be an abbreviated record SHA.
+  const atAnchor = (entry: ParsedRecordEntry) =>
+    shaMatchesHead(entry.record.sha, anchor) || shaMatchesHead(anchor, entry.record.sha);
+
+  const surviving = survivingEntries(state);
+  const blocking = surviving.filter((entry) => entry.record.verdict === "blocking").at(-1);
+  if (blocking) return blocking.record;
+  const notAtHead = surviving.filter((entry) => !atAnchor(entry)).at(-1);
+  return (notAtHead ?? latest).record;
+}
+
+export function parseReviewComments(
+  comments: unknown[],
+  headSha?: string,
+): {
   review_request?: PullRequestReviewRequest;
   review_record?: PullRequestReviewRecord;
   review_unparsed?: boolean;
 } {
   let review_request: PullRequestReviewRequest | undefined;
-  let review_record: PullRequestReviewRecord | undefined;
-  let review_unparsed = false;
+  const records: ParsedRecordEntry[] = [];
+  const unparsed: UnparsedEntry[] = [];
+  const pushRecord = (index: number, record: PullRequestReviewRecord) => {
+    records.push({ index, record, lanes: reviewerLaneKeys(record.reviewer_lane) });
+  };
 
-  for (const entry of comments) {
-    if (!isObject(entry) || typeof entry.body !== "string") continue;
+  comments.forEach((entry, index) => {
+    if (!isObject(entry) || typeof entry.body !== "string") return;
     const body = entry.body;
     const unquoted = stripBlockquotes(stripFencedCodeBlocks(body));
     const unquotedWithoutInlineCode = unquoted.replace(/`[^`\r\n]*`/g, "");
@@ -917,30 +1100,43 @@ export function parseReviewComments(comments: unknown[]): {
     if (hasLegacyRecordMarker) {
       const legacyRecord = parseLegacyReviewRecord(unquoted);
       if (legacyRecord) {
-        review_record = legacyRecord;
+        pushRecord(index, legacyRecord);
       } else {
-        review_unparsed = true;
+        const lane = matchMetadataField(unquoted, "(?:reviewer[- \\t_]*lane|lane)");
+        unparsed.push({
+          index,
+          lanes: reviewerLaneKeys(lane),
+          allLanes: Boolean(matchMetadataField(unquoted, "reviewed[- \\t_]*by")),
+        });
       }
       matchedLegacy = true;
     }
-    if (matchedLegacy) continue;
+    if (matchedLegacy) return;
 
     const ateamBody = stripKeywordInlineCode(unquoted);
-    const ateamRecord = parseAteamReviewRecord(ateamBody);
+    const ateamRecord = parseAteamReviewRecord(ateamBody, body);
     if (ateamRecord) {
-      review_record = ateamRecord;
-      continue;
+      pushRecord(index, ateamRecord);
+      return;
     }
     if (hasRecordSignals(ateamBody)) {
-      review_unparsed = true;
-      continue;
+      unparsed.push({
+        index,
+        lanes: reviewerLaneKeys(extractReviewerLane(ateamBody)),
+        allLanes: hasReviewerIdentity(ateamBody),
+      });
+      return;
     }
 
     const plainRequest = parsePlainReviewRequest(ateamBody);
     if (plainRequest) {
       review_request = plainRequest;
     }
-  }
+  });
+
+  const laneState = replayLanes(records);
+  const review_record = effectiveReviewRecord(records, laneState, headSha);
+  const review_unparsed = unparsed.some((entry) => !unparsedCleared(entry, laneState));
 
   return {
     ...(review_request && { review_request }),
@@ -1023,31 +1219,41 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
 
     await Promise.all(
       toFetch.map(async (pr) => {
-        const path = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${pr.number}/comments?per_page=${GITHUB_PAGE_LIMIT}`;
+        const basePath = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${pr.number}/comments?per_page=${GITHUB_PAGE_LIMIT}`;
         const label = `GET /repos/${repository.owner}/${repository.name}/issues/${pr.number}/comments`;
-        const read = await getGithubJson(apiBase, path, label, token);
-        if (!read.ok || !Array.isArray(read.value)) {
-          pr.ref.review_inspected = false;
-          reasons.push(read.ok ? `${label} returned a non-array body` : read.error);
-          return;
+        // Page-number pagination over ascending comments: a comment inserted between page
+        // reads lands on a later page and is still read, but a comment deleted between reads
+        // shifts the next page and can skip one comment. Pages are read sequentially, so a
+        // PR costs at most MAX_PR_COMMENT_PAGES x READ_TIMEOUT_MS in the worst case.
+        const comments: unknown[] = [];
+        let complete = false;
+        for (let page = 1; page <= MAX_PR_COMMENT_PAGES; page++) {
+          const read = await getGithubJson(apiBase, `${basePath}&page=${page}`, label, token);
+          if (!read.ok || !Array.isArray(read.value)) {
+            pr.ref.review_inspected = false;
+            reasons.push(read.ok ? `${label} returned a non-array body` : read.error);
+            return;
+          }
+          comments.push(...read.value);
+          if (read.value.length < GITHUB_PAGE_LIMIT) {
+            complete = true;
+            break;
+          }
         }
-        const parsed = parseReviewComments(read.value);
+        const parsed = parseReviewComments(comments, pr.ref.head_sha);
         if (parsed.review_request) pr.ref.review_request = parsed.review_request;
         if (parsed.review_record) pr.ref.review_record = parsed.review_record;
-        if (read.value.length >= GITHUB_PAGE_LIMIT) {
-          reasons.push(`${label} truncated at ${GITHUB_PAGE_LIMIT} comments`);
-        }
-        if (parsed.review_unparsed) {
+        if (!complete) {
+          // Comments past the last page read could hold a newer record at HEAD (for
+          // example REQUEST CHANGES after an APPROVE), so no record read here is proven
+          // latest.
+          reasons.push(
+            `${label} truncated at ${MAX_PR_COMMENT_PAGES * GITHUB_PAGE_LIMIT} comments`,
+          );
+          pr.ref.review_inspected = false;
+        } else if (parsed.review_unparsed) {
           reasons.push(`${label} contains an unparseable review record`);
           pr.ref.review_inspected = false;
-        } else if (read.value.length >= GITHUB_PAGE_LIMIT) {
-          // A definitive review_record found in the page still holds if its SHA
-          // matches HEAD; otherwise absence or freshness is unproven.
-          pr.ref.review_inspected = Boolean(
-            parsed.review_record &&
-              pr.ref.head_sha &&
-              shaMatchesHead(parsed.review_record.sha, pr.ref.head_sha),
-          );
         } else {
           pr.ref.review_inspected = true;
         }
