@@ -342,6 +342,13 @@ describe("githubSource parsing helpers", () => {
         body: [
           "reviewed-by: codex (gpt-6-astra, high)",
           "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE; REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
           "Verdict: APPROVE",
           "Verdict: REQUEST CHANGES",
         ].join("\n"),
@@ -349,6 +356,42 @@ describe("githubSource parsing helpers", () => {
     ];
 
     expect(parseReviewComments(invalidComments)).toEqual({});
+
+    // Unambiguous leading verdict whose trailing clause mentions the opposite word still parses.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: REQUEST CHANGES — cannot approve until race is fixed",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "blocking",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: APPROVE (prior changes requested resolved)",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
 
     // A malformed follow-up comment must not overwrite an earlier valid blocking record.
     expect(
@@ -371,7 +414,7 @@ describe("githubSource parsing helpers", () => {
     });
   });
 
-  it("parses plain ## Review request comments and never treats records as requests", () => {
+  it("parses plain ## Review request and #-less Review request comments and never treats records as requests", () => {
     expect(
       parseReviewComments([
         {
@@ -387,6 +430,24 @@ describe("githubSource parsing helpers", () => {
     ).toEqual({
       review_request: {
         sha: "a1b2c3d",
+        reviewer_lane: "go-reviewer, svelte-reviewer",
+      },
+    });
+
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "**Review request**",
+            "",
+            "Commit SHA: b2c3d4e5",
+            "Review lanes: go-reviewer, svelte-reviewer",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_request: {
+        sha: "b2c3d4e5",
         reviewer_lane: "go-reviewer, svelte-reviewer",
       },
     });
@@ -423,7 +484,7 @@ describe("githubSource parsing helpers", () => {
         body: [
           "### Review request",
           "- **Commit to read:** `2222222` (clean tree)",
-          "- **Reviewer lane:** `go-reviewer`, `svelte-reviewer`",
+          "- **Reviewer lanes:** `go-reviewer`, `svelte-reviewer`",
         ].join("\n"),
       },
       {
@@ -450,6 +511,31 @@ describe("githubSource parsing helpers", () => {
         ].join("\n"),
       },
     ];
+
+    expect(parseReviewComments(comments.slice(0, 2))).toEqual({
+      review_request: {
+        sha: "1111111",
+        reviewer_lane: "go-reviewer",
+      },
+      review_record: {
+        sha: "1111111",
+        verdict: "blocking",
+        reviewer_lane: "go-reviewer",
+        reviewed_by: "claude",
+      },
+    });
+
+    expect(parseReviewComments(comments.slice(0, 4))).toEqual({
+      review_request: {
+        sha: "2222222",
+        reviewer_lane: "go-reviewer, svelte-reviewer",
+      },
+      review_record: {
+        sha: "2222222",
+        verdict: "blocking",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
 
     expect(parseReviewComments(comments)).toEqual({
       review_request: {

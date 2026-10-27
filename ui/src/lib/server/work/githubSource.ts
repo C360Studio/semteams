@@ -628,8 +628,10 @@ const CROSS_AGENT_HEADING_RE =
 const VERDICT_LINE_RE =
   /^\s*(?:(?:#{1,6}|[-*])\s+)?(?:\*{1,2}verdict\*{0,2}|`verdict`|verdict)\s*:(?:\*{1,2})?\s*(.+?)\s*$/gim;
 const REVIEWER_LANE_LINE_RE =
-  /^\s*(?:[-*]\s*)?(?:\*{1,2}(?:reviewer[-\s_]*lane|review[-\s_]*lane|lane)\*{0,2}|`(?:reviewer[-\s_]*lane|review[-\s_]*lane|lane)`|(?:reviewer[-\s_]*lane|review[-\s_]*lane|lane))\s*:(?:\*{1,2})?\s*([^\r\n]+)/im;
-const REVIEW_REQUEST_HEADING_RE = /^\s*#{1,4}\s+review\s+request\b/im;
+  /^\s*(?:[-*]\s*)?(?:\*{1,2}(?:reviewer[-\s_]*lanes?|review[-\s_]*lanes?|lanes?)\*{0,2}|`(?:reviewer[-\s_]*lanes?|review[-\s_]*lanes?|lanes?)`|(?:reviewer[-\s_]*lanes?|review[-\s_]*lanes?|lanes?))\s*:(?:\*{1,2})?\s*([^\r\n]+)/im;
+const REVIEW_REQUEST_HEADING_RE = /^\s*#{1,6}\s+review\s+request\b/im;
+const REVIEW_REQUEST_PLAIN_FIRST_LINE_RE =
+  /^\s*(?:\*{1,2})?review\s+request(?:\*{1,2})?(?:\s*[:—–-].*)?\s*$/i;
 const REVIEW_RECORD_HEADING_RE = /^\s*#{1,6}\s+review\s+record\b/im;
 const REQUEST_SHA_LINE_RE =
   /^\s*(?:[-*]\s*)?(?:\*{1,2}(?:commit(?:\s+sha)?(?:\s+to\s+read)?|head(?:[\s_]+(?:sha|commit))?|sha)\*{0,2}|`(?:commit(?:\s+sha)?(?:\s+to\s+read)?|head(?:[\s_]+(?:sha|commit))?|sha)`|(?:commit(?:\s+sha)?(?:\s+to\s+read)?|head(?:[\s_]+(?:sha|commit))?|sha))\s*:(?:\*{1,2})?\s*[*`]*\b([0-9a-f]{7,40})\b(?!\.\.)/gim;
@@ -729,16 +731,13 @@ function extractAteamVerdict(unquoted: string): PullRequestReviewRecord["verdict
   for (const match of matches) {
     const rawVal = match[1];
     const lead = rawVal
-      .split(/\s*(?:\(|—|–|;|\.|!|\s-\s)/)[0]
+      .split(/\s*(?:\(|—|–|\.|!|\s-\s)/)[0]
       .replace(/[`*]/g, "")
       .trim()
       .toLowerCase();
 
     let parsed: PullRequestReviewRecord["verdict"] | undefined;
     if (lead === "approve" || lead === "approved" || lead === "pass") {
-      if (/\b(?:request[\s_-]+changes|changes[\s_-]+requested)\b/i.test(rawVal)) {
-        return undefined;
-      }
       parsed = "pass";
     } else if (
       lead === "request changes" ||
@@ -750,9 +749,6 @@ function extractAteamVerdict(unquoted: string): PullRequestReviewRecord["verdict
       lead === "blocking" ||
       lead === "fail"
     ) {
-      if (/\bapproved?\b/i.test(rawVal)) {
-        return undefined;
-      }
       parsed = "blocking";
     } else {
       return undefined;
@@ -799,8 +795,15 @@ function hasRecordSignals(unquoted: string): boolean {
   );
 }
 
+function hasReviewRequestHeader(unquoted: string): boolean {
+  if (REVIEW_REQUEST_HEADING_RE.test(unquoted)) return true;
+  const firstNonEmpty = unquoted.split(/\r?\n/).find((line) => line.trim().length > 0);
+  if (!firstNonEmpty) return false;
+  return REVIEW_REQUEST_PLAIN_FIRST_LINE_RE.test(firstNonEmpty);
+}
+
 function parsePlainReviewRequest(unquoted: string): PullRequestReviewRequest | undefined {
-  if (!REVIEW_REQUEST_HEADING_RE.test(unquoted) || hasRecordSignals(unquoted)) {
+  if (!hasReviewRequestHeader(unquoted) || hasRecordSignals(unquoted)) {
     return undefined;
   }
 

@@ -634,7 +634,7 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 	}
 	for _, wantTask := range []string{
 		"doctor:", "scripts/doctor.sh",
-		"ateam:doctor:", "ateam doctor --check",
+		"ateam:doctor:", "env -u ATEAM_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_SESSION_ID -u GEMINI_SESSION_ID ateam doctor --check",
 		"fmt:", "fmt:check:", "tidy:check:",
 		"cleanup-roots:check:", "scripts/cleanup-roots-check.sh",
 		"merge:check:", "scripts/merge-check.sh",
