@@ -6,14 +6,17 @@ SemVocab, and SemSparql; where a rule differs, this tree is authoritative.
 
 ## Roles
 
-Each role's canonical contract is `.agents/contracts/<role>.md`; its Claude adapter is `.claude/agents/<role>.md` and its
-Codex adapter `.codex/agents/<role>.toml`. Gemini (Antigravity) registers roles at runtime (see below). The read-only
-roles are `architect`, `go-reviewer`, and `svelte-reviewer`; `go-developer`, `svelte-developer`, and `technical-writer`
-write.
+SemTeams carries six cross-stack specialist roles alongside ATeam's base
+[`.agents/contracts/developer.md`](contracts/developer.md) and [`.agents/contracts/reviewer.md`](contracts/reviewer.md)
+contracts and [`.agents/review-policy.json`](review-policy.json). Each role's canonical contract is
+`.agents/contracts/<role>.md`; its Claude adapter is `.claude/agents/<role>.md` and its Codex adapter
+`.codex/agents/<role>.toml`. Gemini (Antigravity) registers roles at runtime (see below).
 
-SemTeams carries six cross-stack specialist roles (`architect`, `go-developer`, `go-reviewer`, `svelte-developer`,
-`svelte-reviewer`, `technical-writer`) alongside ATeam's base [`.agents/contracts/developer.md`](contracts/developer.md)
-and [`.agents/contracts/reviewer.md`](contracts/reviewer.md) contracts and [`.agents/review-policy.json`](review-policy.json);
+- Backend and pack work: `go-developer`, reviewed by `go-reviewer`.
+- `ui/` work: `svelte-developer`, reviewed by `svelte-reviewer`; a cross-stack change goes through both lanes.
+- Designs and inventories: `architect`; durable docs and OpenSpec task truth: `technical-writer`.
+- Read-only roles: `architect`, `go-reviewer`, `svelte-reviewer`. The other three write.
+
 SemStreams' explorer and judge contracts are not carried. Add a role only with a recorded owner decision.
 
 ## Model routing
@@ -134,7 +137,9 @@ uses `.claude/skills/<name>/SKILL.md`. A private memory reference cannot be requ
 
 ## Parity checks
 
-`task ateam:doctor` checks the harness (adapters, hooks, MCP, ateam's skills, review policy, `CLAUDE.md`, the
-`AGENTS.md` size cap and its row parity with `rules-index.md`). `TestAgentSetupParity` and its sensitivity test
-(`test/contract/shared_work_protocol_contract_test.go`) check what doctor does not: the six specialist role adapters'
-contract links, tools, sandbox modes, and model/effort pins against the table above, and the adopter skill adapters.
+`task ateam:doctor` checks the harness: ateam's skill adapters, hook and MCP configs, the review policy, `CLAUDE.md`,
+the `AGENTS.md` size cap, and its row parity with `rules-index.md`. `TestAgentSetupParity` and its sensitivity test
+(`test/contract/shared_work_protocol_contract_test.go`) check what doctor does not: the required agent files, the six
+specialist role adapters (contract link, tools, sandbox mode, line cap, and model/effort pins against constants that
+mirror the table above), and every non-ATeam skill adapter. Correspondence between that table and the test's
+constants, skill frontmatter, and relative links inside `SKILL.md` bodies are review only.
