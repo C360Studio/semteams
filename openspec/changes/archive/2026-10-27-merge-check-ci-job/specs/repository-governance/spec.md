@@ -14,7 +14,7 @@ pull request's base commit, and `Required` SHALL depend on it.
 - AND its token permissions are read-only for contents, issues, and pull requests
 - AND the workflow file itself is read from the pull request, so a change to it is caught by review only
 
-#### Scenario: A code pull request without an approving record fails Required
+#### Scenario: A code pull request without a review record fails Required
 
 - GIVEN a non-draft code pull request has no `reviewed-by:` line in its description, or no review record naming one of
   its commits with no later content commit
