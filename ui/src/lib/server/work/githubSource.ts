@@ -24,6 +24,9 @@ import type { ItemRef, WorkSource } from "./source";
 export const READ_TIMEOUT_MS = 5000;
 export const GITHUB_PAGE_LIMIT = 100;
 export const MAX_OPEN_PR_COMMENT_FETCHES = 10;
+// Comment pages read per open PR before the review overlay fails closed: a newer record
+// could sit past the last page read, so a full final page leaves review uninspected.
+export const MAX_PR_COMMENT_PAGES = 10;
 
 export interface GithubSourceOptions {
   token?: string;
@@ -755,38 +758,41 @@ function extractDesignatedRecordSha(unquoted: string): string | undefined {
   return resolveSingleCommitSha(candidates);
 }
 
+// ATeam's merge gate approves only on exactly one unfenced `Verdict:` line whose whole
+// value is `APPROVE` (ateam internal/review/gate.go gateVerdict, 36b999b:823-840). A
+// `pass` here must mean that gate would approve, so any decorated or conditional APPROVE
+// (`APPROVE with nits`, `**Verdict**: APPROVE`, `APPROVE pending H1`, `APPROVE, but ...`)
+// is not a pass; it is left unparsed so the review overlay fails closed to unknown.
+// Blocking verdicts keep the lenient lead-clause read: reporting changes_requested for
+// `REQUEST CHANGES, see H1` can never claim a false approval.
+const ATEAM_APPROVE_LINE_RE = /^[ \t]*verdict:[ \t]*approve[ \t]*$/i;
+
 function extractAteamVerdict(unquoted: string): PullRequestReviewRecord["verdict"] | undefined {
   const matches = [...unquoted.matchAll(VERDICT_LINE_RE)];
-  if (matches.length === 0) return undefined;
+  if (matches.length !== 1) return undefined;
 
-  const verdicts = new Set<PullRequestReviewRecord["verdict"]>();
-  for (const match of matches) {
-    const rawVal = match[1].replace(/[`*]/g, "").trim();
-    const lead = rawVal.split(VERDICT_CLAUSE_SPLIT_RE)[0].trim().toLowerCase();
+  const [line, value] = matches[0];
+  if (ATEAM_APPROVE_LINE_RE.test(line)) return "pass";
 
-    let parsed: PullRequestReviewRecord["verdict"] | undefined;
-    if (lead === "approve" || lead === "approved" || lead === "pass") {
-      parsed = "pass";
-    } else if (
-      lead === "request changes" ||
-      lead === "request_changes" ||
-      lead === "request-changes" ||
-      lead === "changes requested" ||
-      lead === "changes_requested" ||
-      lead === "changes-requested" ||
-      lead === "blocking" ||
-      lead === "fail"
-    ) {
-      parsed = "blocking";
-    } else {
-      return undefined;
-    }
-
-    verdicts.add(parsed);
+  const lead = value
+    .replace(/[`*]/g, "")
+    .trim()
+    .split(VERDICT_CLAUSE_SPLIT_RE)[0]
+    .trim()
+    .toLowerCase();
+  if (
+    lead === "request changes" ||
+    lead === "request_changes" ||
+    lead === "request-changes" ||
+    lead === "changes requested" ||
+    lead === "changes_requested" ||
+    lead === "changes-requested" ||
+    lead === "blocking" ||
+    lead === "fail"
+  ) {
+    return "blocking";
   }
-
-  if (verdicts.size !== 1) return undefined;
-  return [...verdicts][0];
+  return undefined;
 }
 
 function extractReviewerLane(unquoted: string): string | undefined {
@@ -884,17 +890,104 @@ function parseLegacyReviewRecord(body: string): PullRequestReviewRecord | undefi
   return undefined;
 }
 
-export function parseReviewComments(comments: unknown[]): {
+// Reviewer lane keys a record or unparseable comment covers. `undefined` means the comment
+// names no lane, which for a valid record makes it an all-lanes record. Recognized
+// `<name>-reviewer` tokens are the keys (`go-reviewer, svelte-reviewer (cross-agent)` ->
+// both); any other lane text is its own opaque key so it never clears a named lane.
+function reviewerLaneKeys(lane: string | undefined): Set<string> | undefined {
+  const normalized = lane?.trim().toLowerCase();
+  if (!normalized) return undefined;
+  const keys = new Set<string>();
+  for (const match of normalized.matchAll(/(?<![a-z0-9-])([a-z0-9]+-reviewer)(?![a-z0-9-])/g)) {
+    keys.add(match[1]);
+  }
+  if (keys.size === 0) keys.add(normalized);
+  return keys;
+}
+
+interface ParsedRecordEntry {
+  index: number;
+  record: PullRequestReviewRecord;
+  lanes: Set<string> | undefined;
+}
+
+interface UnparsedEntry {
+  index: number;
+  lanes: Set<string> | undefined;
+}
+
+// A later valid record clears an earlier unparseable comment the way ATeam's gate skips
+// non-records and keeps the latest valid one (ateam internal/review/gate.go record(),
+// 36b999b:500-527). Lanes are SemTeams-specific: an unparseable comment naming a lane is
+// cleared only by a later record covering every lane it names (or an all-lanes record), so
+// a go-reviewer APPROVE cannot clear an unreadable svelte-reviewer record.
+function unparsedCleared(entry: UnparsedEntry, records: ParsedRecordEntry[]): boolean {
+  return records.some((rec) => {
+    if (rec.index <= entry.index) return false;
+    if (!entry.lanes || !rec.lanes) return true;
+    for (const lane of entry.lanes) {
+      if (!rec.lanes.has(lane)) return false;
+    }
+    return true;
+  });
+}
+
+// Effective review record across reviewer lanes. Records at the anchor SHA (HEAD when
+// known, else the latest record's SHA) are replayed in comment order: an all-lanes record
+// resets every lane, a lane record replaces only the lanes it names. If any surviving
+// lane is blocking, the latest surviving blocking record is effective; otherwise the latest
+// record at the anchor is. With no record at the anchor, the latest record is effective
+// (the baton then reports stale).
+function effectiveReviewRecord(
+  records: ParsedRecordEntry[],
+  headSha: string | undefined,
+): PullRequestReviewRecord | undefined {
+  const latest = records.at(-1);
+  if (!latest) return undefined;
+  const anchor = headSha ?? latest.record.sha;
+  // Symmetric prefix match: without HEAD the anchor may be an abbreviated record SHA.
+  const atAnchor = records.filter(
+    (entry) =>
+      shaMatchesHead(entry.record.sha, anchor) || shaMatchesHead(anchor, entry.record.sha),
+  );
+  if (atAnchor.length === 0) return latest.record;
+
+  let allLanes: ParsedRecordEntry | undefined;
+  const byLane = new Map<string, ParsedRecordEntry>();
+  for (const entry of atAnchor) {
+    if (!entry.lanes) {
+      allLanes = entry;
+      byLane.clear();
+      continue;
+    }
+    for (const lane of entry.lanes) byLane.set(lane, entry);
+  }
+
+  const surviving = [...(allLanes ? [allLanes] : []), ...byLane.values()];
+  const blocking = surviving
+    .filter((entry) => entry.record.verdict === "blocking")
+    .sort((a, b) => a.index - b.index)
+    .at(-1);
+  return (blocking ?? atAnchor[atAnchor.length - 1]).record;
+}
+
+export function parseReviewComments(
+  comments: unknown[],
+  headSha?: string,
+): {
   review_request?: PullRequestReviewRequest;
   review_record?: PullRequestReviewRecord;
   review_unparsed?: boolean;
 } {
   let review_request: PullRequestReviewRequest | undefined;
-  let review_record: PullRequestReviewRecord | undefined;
-  let review_unparsed = false;
+  const records: ParsedRecordEntry[] = [];
+  const unparsed: UnparsedEntry[] = [];
+  const pushRecord = (index: number, record: PullRequestReviewRecord) => {
+    records.push({ index, record, lanes: reviewerLaneKeys(record.reviewer_lane) });
+  };
 
-  for (const entry of comments) {
-    if (!isObject(entry) || typeof entry.body !== "string") continue;
+  comments.forEach((entry, index) => {
+    if (!isObject(entry) || typeof entry.body !== "string") return;
     const body = entry.body;
     const unquoted = stripBlockquotes(stripFencedCodeBlocks(body));
     const unquotedWithoutInlineCode = unquoted.replace(/`[^`\r\n]*`/g, "");
@@ -917,30 +1010,34 @@ export function parseReviewComments(comments: unknown[]): {
     if (hasLegacyRecordMarker) {
       const legacyRecord = parseLegacyReviewRecord(unquoted);
       if (legacyRecord) {
-        review_record = legacyRecord;
+        pushRecord(index, legacyRecord);
       } else {
-        review_unparsed = true;
+        const lane = matchMetadataField(unquoted, "(?:reviewer[- \\t_]*lane|lane)");
+        unparsed.push({ index, lanes: reviewerLaneKeys(lane) });
       }
       matchedLegacy = true;
     }
-    if (matchedLegacy) continue;
+    if (matchedLegacy) return;
 
     const ateamBody = stripKeywordInlineCode(unquoted);
     const ateamRecord = parseAteamReviewRecord(ateamBody);
     if (ateamRecord) {
-      review_record = ateamRecord;
-      continue;
+      pushRecord(index, ateamRecord);
+      return;
     }
     if (hasRecordSignals(ateamBody)) {
-      review_unparsed = true;
-      continue;
+      unparsed.push({ index, lanes: reviewerLaneKeys(extractReviewerLane(ateamBody)) });
+      return;
     }
 
     const plainRequest = parsePlainReviewRequest(ateamBody);
     if (plainRequest) {
       review_request = plainRequest;
     }
-  }
+  });
+
+  const review_record = effectiveReviewRecord(records, headSha);
+  const review_unparsed = unparsed.some((entry) => !unparsedCleared(entry, records));
 
   return {
     ...(review_request && { review_request }),
@@ -1023,31 +1120,37 @@ export function createGithubSource(options: GithubSourceOptions = {}): WorkSourc
 
     await Promise.all(
       toFetch.map(async (pr) => {
-        const path = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${pr.number}/comments?per_page=${GITHUB_PAGE_LIMIT}`;
+        const basePath = `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/issues/${pr.number}/comments?per_page=${GITHUB_PAGE_LIMIT}`;
         const label = `GET /repos/${repository.owner}/${repository.name}/issues/${pr.number}/comments`;
-        const read = await getGithubJson(apiBase, path, label, token);
-        if (!read.ok || !Array.isArray(read.value)) {
-          pr.ref.review_inspected = false;
-          reasons.push(read.ok ? `${label} returned a non-array body` : read.error);
-          return;
+        const comments: unknown[] = [];
+        let complete = false;
+        for (let page = 1; page <= MAX_PR_COMMENT_PAGES; page++) {
+          const read = await getGithubJson(apiBase, `${basePath}&page=${page}`, label, token);
+          if (!read.ok || !Array.isArray(read.value)) {
+            pr.ref.review_inspected = false;
+            reasons.push(read.ok ? `${label} returned a non-array body` : read.error);
+            return;
+          }
+          comments.push(...read.value);
+          if (read.value.length < GITHUB_PAGE_LIMIT) {
+            complete = true;
+            break;
+          }
         }
-        const parsed = parseReviewComments(read.value);
+        const parsed = parseReviewComments(comments, pr.ref.head_sha);
         if (parsed.review_request) pr.ref.review_request = parsed.review_request;
         if (parsed.review_record) pr.ref.review_record = parsed.review_record;
-        if (read.value.length >= GITHUB_PAGE_LIMIT) {
-          reasons.push(`${label} truncated at ${GITHUB_PAGE_LIMIT} comments`);
-        }
-        if (parsed.review_unparsed) {
+        if (!complete) {
+          // Comments past the last page read could hold a newer record at HEAD (for
+          // example REQUEST CHANGES after an APPROVE), so no record read here is proven
+          // latest.
+          reasons.push(
+            `${label} truncated at ${MAX_PR_COMMENT_PAGES * GITHUB_PAGE_LIMIT} comments`,
+          );
+          pr.ref.review_inspected = false;
+        } else if (parsed.review_unparsed) {
           reasons.push(`${label} contains an unparseable review record`);
           pr.ref.review_inspected = false;
-        } else if (read.value.length >= GITHUB_PAGE_LIMIT) {
-          // A definitive review_record found in the page still holds if its SHA
-          // matches HEAD; otherwise absence or freshness is unproven.
-          pr.ref.review_inspected = Boolean(
-            parsed.review_record &&
-              pr.ref.head_sha &&
-              shaMatchesHead(parsed.review_record.sha, pr.ref.head_sha),
-          );
         } else {
           pr.ref.review_inspected = true;
         }

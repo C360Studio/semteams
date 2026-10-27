@@ -8,6 +8,7 @@ import {
   extractClaimedIssueNumbers,
   extractIssueDependencies,
   GITHUB_PAGE_LIMIT,
+  MAX_PR_COMMENT_PAGES,
   parseReviewComments,
 } from "./githubSource";
 import { validatePortfolio } from "./portfolio";
@@ -155,7 +156,7 @@ describe("githubSource parsing helpers", () => {
             "### Independent Cross-Agent Review (claude)",
             "",
             "Reviewed at 0d948aac",
-            "**Verdict**: APPROVE (0 BLOCKING, 1 NIT)",
+            "Verdict: APPROVE",
           ].join("\n"),
         },
       ]),
@@ -460,34 +461,12 @@ describe("githubSource parsing helpers", () => {
         reviewed_by: "codex (gpt-6-astra, high)",
       },
     });
-    expect(
-      parseReviewComments([
-        {
-          body: [
-            "reviewed-by: codex (gpt-6-astra, high)",
-            "Reviewed at a1b2c3d4",
-            "Verdict: APPROVE with nits",
-          ].join("\n"),
-        },
-      ]),
-    ).toEqual({
-      review_record: {
-        sha: "a1b2c3d4",
-        verdict: "pass",
-        reviewed_by: "codex (gpt-6-astra, high)",
-      },
-    });
     for (const [verdictLine, expectedVerdict] of [
       ["Verdict: REQUEST CHANGES see H1", "blocking"],
-      ["Verdict: APPROVE on a1b2c3d4", "pass"],
-      ["Verdict: APPROVE at a1b2c3d4", "pass"],
-      ["Verdict: APPROVE citing a1b2c3d4 and task validate", "pass"],
       ["Verdict: REQUEST CHANGES at a1b2c3d4", "blocking"],
       ["Verdict: REQUEST CHANGES for H1 and M1", "blocking"],
       ["Verdict: REQUEST CHANGES pending H1 fix", "blocking"],
-      ["Verdict: APPROVE after re-verification", "pass"],
       ["Verdict: REQUEST CHANGES until H1 lands", "blocking"],
-      ["Verdict: APPROVE once archived", "pass"],
       ["Verdict: REQUEST CHANGES because H1 fails open", "blocking"],
     ] as const) {
       expect(
@@ -522,23 +501,6 @@ describe("githubSource parsing helpers", () => {
       review_record: {
         sha: "a1b2c3d4",
         verdict: "blocking",
-        reviewed_by: "codex (gpt-6-astra, high)",
-      },
-    });
-    expect(
-      parseReviewComments([
-        {
-          body: [
-            "reviewed-by: codex (gpt-6-astra, high)",
-            "Reviewed at a1b2c3d4",
-            "Verdict: APPROVE (prior changes requested resolved)",
-          ].join("\n"),
-        },
-      ]),
-    ).toEqual({
-      review_record: {
-        sha: "a1b2c3d4",
-        verdict: "pass",
         reviewed_by: "codex (gpt-6-astra, high)",
       },
     });
@@ -613,8 +575,8 @@ describe("githubSource parsing helpers", () => {
       });
     }
 
-    // H1 mirror probe: an earlier APPROVE at HEAD followed by an unparseable record (and even a later valid lane record)
-    // keeps review_unparsed: true so callers fail closed instead of reporting current/Ready to land.
+    // H1 mirror probe: an earlier APPROVE at HEAD followed by an unparseable record keeps review_unparsed: true so
+    // callers fail closed instead of reporting current/Ready to land.
     const approvedAtHead = {
       body: [
         "reviewed-by: codex (gpt-6-astra, high)",
@@ -657,17 +619,161 @@ describe("githubSource parsing helpers", () => {
         },
         review_unparsed: true,
       });
-      // Sticky: a subsequent valid comment on the same PR must NOT clear review_unparsed.
-      expect(parseReviewComments([unparseable, approvedAtHead])).toEqual({
-        review_record: {
-          sha: "a1b2c3d4",
-          verdict: "pass",
-          reviewer_lane: "go-reviewer",
-          reviewed_by: "codex (gpt-6-astra, high)",
-        },
-        review_unparsed: true,
-      });
     }
+  });
+
+  it("matches ATeam gateVerdict: only an exact `Verdict: APPROVE` line passes; conditional or decorated APPROVE fails closed", () => {
+    const record = (verdictLines: string[]) => ({
+      body: ["reviewed-by: codex (gpt-6-astra, high)", "Reviewed at a1b2c3d4", ...verdictLines].join("\n"),
+    });
+    const pass = {
+      review_record: { sha: "a1b2c3d4", verdict: "pass", reviewed_by: "codex (gpt-6-astra, high)" },
+    };
+
+    // Oracle: ateam internal/review/gate.go gateVerdict (36b999b:823-840) trims the line, requires a `Verdict:`
+    // prefix (case-insensitive), and approves only when the whole remaining value equals APPROVE.
+    for (const line of ["Verdict: APPROVE", "verdict: approve", "  Verdict:   Approve  "]) {
+      expect(parseReviewComments([record([line])])).toEqual(pass);
+    }
+
+    for (const line of [
+      "Verdict: APPROVE pending H1 fix",
+      "Verdict: APPROVE once H1 lands",
+      "Verdict: APPROVE until the flake recurs",
+      "Verdict: APPROVE after H1 is fixed",
+      "Verdict: APPROVE if H1 is fixed",
+      "Verdict: APPROVE, but REQUEST CHANGES on H1",
+      "Verdict: APPROVE with nits",
+      "Verdict: APPROVE (0 BLOCKING, 1 NIT)",
+      "Verdict: APPROVE on a1b2c3d4",
+      "Verdict: APPROVED",
+      "Verdict: PASS",
+      "Verdict: `APPROVE`",
+      "**Verdict**: APPROVE",
+      "- Verdict: APPROVE",
+    ]) {
+      expect(parseReviewComments([record([line])]), line).toEqual({ review_unparsed: true });
+    }
+
+    // Exactly one Verdict line: a duplicated APPROVE line does not approve (gateVerdict "has 2 Verdict: lines").
+    expect(parseReviewComments([record(["Verdict: APPROVE", "Verdict: APPROVE"])])).toEqual({
+      review_unparsed: true,
+    });
+
+    // Verdict text inside a code fence is ignored, so the single unfenced line decides.
+    expect(
+      parseReviewComments([
+        record(["```text", "Verdict: APPROVE pending H1", "```", "Verdict: APPROVE"]),
+      ]),
+    ).toEqual(pass);
+    expect(
+      parseReviewComments([
+        record(["```text", "Verdict: APPROVE", "```", "Verdict: APPROVE pending H1"]),
+      ]),
+    ).toEqual({ review_unparsed: true });
+  });
+
+  it("lets a later valid review record clear an earlier unparseable comment, but not one posted after it", () => {
+    const implementerReply = {
+      // Implementer reply bullets quoting a verdict and SHA outside `>` blockquotes carry record signals but no
+      // reviewer identity, so they cannot parse as a record.
+      body: ["Addressed the review:", "- Reviewed at 99887766", "- Verdict: REQUEST CHANGES was for H1"].join("\n"),
+    };
+    const approveAll = {
+      body: ["reviewed-by: codex (gpt-6-astra, high)", "Reviewed at a1b2c3d4", "Verdict: APPROVE"].join("\n"),
+    };
+    const approveRecord = {
+      review_record: { sha: "a1b2c3d4", verdict: "pass", reviewed_by: "codex (gpt-6-astra, high)" },
+    };
+
+    expect(parseReviewComments([implementerReply])).toEqual({ review_unparsed: true });
+    // ATeam record() skips non-records and keeps the latest valid record (gate.go 36b999b:500-527): no stickiness.
+    expect(parseReviewComments([implementerReply, approveAll], "a1b2c3d4e5f6")).toEqual(approveRecord);
+    // A malformed record-shaped comment AFTER the latest valid record still fails closed.
+    expect(parseReviewComments([approveAll, implementerReply], "a1b2c3d4e5f6")).toEqual({
+      ...approveRecord,
+      review_unparsed: true,
+    });
+    // Historical legacy-marker records that fail to parse are cleared the same way.
+    const legacyMalformed = { body: "<!-- semteams-review-record -->\ncommit: 99887766\nverdict: hold" };
+    expect(parseReviewComments([legacyMalformed, approveAll])).toEqual(approveRecord);
+    expect(parseReviewComments([approveAll, legacyMalformed])).toEqual({ ...approveRecord, review_unparsed: true });
+
+    // A lane-scoped unparseable comment is cleared only by a later record covering its lane (or an all-lanes record):
+    // a go-reviewer APPROVE must not clear an unreadable svelte-reviewer record.
+    const svelteUnreadable = {
+      body: [
+        "reviewed-by: claude (opus, high)",
+        "Reviewer lane: svelte-reviewer",
+        "Reviewed at a1b2c3d4",
+        "Verdict: HOLD",
+      ].join("\n"),
+    };
+    const goApprove = {
+      body: [
+        "reviewed-by: codex (gpt-6-astra, high)",
+        "Reviewer lane: go-reviewer",
+        "Reviewed at a1b2c3d4",
+        "Verdict: APPROVE",
+      ].join("\n"),
+    };
+    const svelteApprove = {
+      body: [
+        "reviewed-by: codex (gpt-6-astra, high)",
+        "Reviewer lane: svelte-reviewer",
+        "Reviewed at a1b2c3d4",
+        "Verdict: APPROVE",
+      ].join("\n"),
+    };
+    expect(parseReviewComments([svelteUnreadable, goApprove]).review_unparsed).toBe(true);
+    expect(parseReviewComments([svelteUnreadable, goApprove, svelteApprove]).review_unparsed).toBeUndefined();
+    expect(parseReviewComments([svelteUnreadable, approveAll]).review_unparsed).toBeUndefined();
+  });
+
+  it("aggregates review records at HEAD across reviewer lanes so a blocking lane is not hidden by another lane's APPROVE", () => {
+    const head = "a1b2c3d4e5f6789012345678901234567890abcd";
+    const laneRecord = (lane: string | undefined, verdict: "APPROVE" | "REQUEST CHANGES", sha = "a1b2c3d4") => ({
+      body: [
+        "reviewed-by: codex (gpt-6-astra, high)",
+        ...(lane ? [`Reviewer lane: ${lane}`] : []),
+        `Reviewed at ${sha}`,
+        `Verdict: ${verdict}`,
+      ].join("\n"),
+    });
+    const verdictOf = (comments: unknown[]) => parseReviewComments(comments, head).review_record?.verdict;
+
+    const svelteBlocks = laneRecord("svelte-reviewer", "REQUEST CHANGES");
+    const goApproves = laneRecord("go-reviewer", "APPROVE");
+    const svelteApproves = laneRecord("svelte-reviewer", "APPROVE");
+
+    // #366: svelte REQUEST CHANGES then go APPROVE at HEAD stays blocking, and the blocking record is reported.
+    expect(parseReviewComments([svelteBlocks, goApproves], head)).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "blocking",
+        reviewer_lane: "svelte-reviewer",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+    // A newer record for the same lane supersedes its blocking verdict.
+    expect(verdictOf([svelteBlocks, goApproves, svelteApproves])).toBe("pass");
+    // An all-lanes record (no lane, or a record naming both lanes) supersedes every lane.
+    expect(verdictOf([svelteBlocks, goApproves, laneRecord(undefined, "APPROVE")])).toBe("pass");
+    expect(verdictOf([svelteBlocks, laneRecord("go-reviewer, svelte-reviewer", "APPROVE")])).toBe("pass");
+    // An all-lanes blocking record is not cleared by a single lane's APPROVE.
+    expect(verdictOf([laneRecord(undefined, "REQUEST CHANGES"), goApproves])).toBe("blocking");
+    // Lane text is matched by `<name>-reviewer` token, so trailing prose does not create a distinct lane.
+    expect(
+      verdictOf([svelteBlocks, laneRecord("svelte-reviewer (cross-agent: codex or gemini)", "APPROVE")]),
+    ).toBe("pass");
+    // An unrecognized lane name is its own lane and never clears a named lane.
+    expect(verdictOf([svelteBlocks, laneRecord("ui", "APPROVE")])).toBe("blocking");
+    // Records at an older SHA do not take part in the HEAD aggregate.
+    expect(verdictOf([laneRecord("svelte-reviewer", "REQUEST CHANGES", "99887766"), goApproves])).toBe("pass");
+    // With no record at HEAD the latest record is reported (the baton derives stale from it).
+    expect(parseReviewComments([goApproves], "ffffffffffffffff").review_record?.sha).toBe("a1b2c3d4");
+    // Without a HEAD SHA, records at the latest record's SHA are aggregated.
+    expect(parseReviewComments([svelteBlocks, goApproves]).review_record?.verdict).toBe("blocking");
   });
 
   it("parses comments with 65,536 consecutive blank lines in under 100ms without quadratic backtracking", () => {
@@ -698,7 +804,7 @@ describe("githubSource parsing helpers", () => {
           body: [
             "reviewed-by: claude (`claude-opus-5-5, high`)",
             "Reviewed at `12f8042a71239c8eb1e09d88f05a556902575fd4`",
-            "Verdict: `APPROVE`",
+            "Verdict: APPROVE",
             "",
             "Verified parser fixes against earlier `Reviewed at 43d0967e`:",
             "- `Verdict`: `at` and `citing` clauses parse cleanly",
@@ -1563,6 +1669,93 @@ describe("createGithubSource", () => {
     expect(single.item?.review).toEqual({
       state: "unknown",
       reason: "PR review comments not inspected",
+    });
+  });
+
+  describe("paginated PR comment reads", () => {
+    const head = "a1b2c3d4e5f6789012345678901234567890abcd";
+    const record = (lane: string, verdict: string) => ({
+      body: [
+        "reviewed-by: codex (gpt-6-astra, high)",
+        `Reviewer lane: ${lane}`,
+        "Reviewed at a1b2c3d4",
+        `Verdict: ${verdict}`,
+      ].join("\n"),
+    });
+    const filler = (n: number) =>
+      Array.from({ length: n }, (_, idx) => ({ body: `Discussion comment ${idx}` }));
+
+    function stubPr(pageFor: (page: number) => unknown[]) {
+      return stubBackend((url) => {
+        if (url.pathname === "/repos/C360Studio/semteams/issues") {
+          return jsonResponse([
+            { number: 362, title: "Adopt", body: "", state: "open", labels: [], assignees: [] },
+          ]);
+        }
+        if (url.pathname === "/repos/C360Studio/semteams/pulls") {
+          return jsonResponse([
+            {
+              number: 363,
+              title: "chore: adopt (#362)",
+              body: "Closes #362",
+              state: "open",
+              draft: false,
+              head: { ref: "gemini/gh362", sha: head },
+            },
+          ]);
+        }
+        if (url.pathname === "/repos/C360Studio/semteams/issues/363/comments") {
+          return jsonResponse(pageFor(Number(url.searchParams.get("page") ?? "1")));
+        }
+        return jsonResponse({ message: "not found" }, 404);
+      });
+    }
+
+    it("reads past a full first page so a later REQUEST CHANGES at HEAD is not hidden by an earlier APPROVE", async () => {
+      const fetchMock = stubPr((page) =>
+        page === 1
+          ? [record("svelte-reviewer", "APPROVE"), ...filler(GITHUB_PAGE_LIMIT - 1)]
+          : page === 2
+            ? [record("svelte-reviewer", "REQUEST CHANGES")]
+            : [],
+      );
+      const listed = await createGithubSource({ apiUrl: "http://github.test" }).listItems(REPO);
+      expect(listed.lookup).toBe("complete");
+      const item = listed.items.find((i) => i.number === 362)!;
+      expect(item.review).toMatchObject({
+        state: "known",
+        value: { status: "changes_requested", reviewer_lane: "svelte-reviewer" },
+      });
+      const pages = fetchMock.mock.calls
+        .map(([input]) => new URL(String(input)))
+        .filter((u) => u.pathname.endsWith("/issues/363/comments"))
+        .map((u) => u.searchParams.get("page"));
+      expect(pages).toEqual(["1", "2"]);
+    });
+
+    it("fails closed to unknown when every comment page up to MAX_PR_COMMENT_PAGES is full", async () => {
+      stubPr((page) =>
+        page === 1
+          ? [record("svelte-reviewer", "APPROVE"), ...filler(GITHUB_PAGE_LIMIT - 1)]
+          : filler(GITHUB_PAGE_LIMIT),
+      );
+      const listed = await createGithubSource({ apiUrl: "http://github.test" }).listItems(REPO);
+      expect(listed.lookup).toBe("partial");
+      expect(listed.reason).toContain(
+        `GET /repos/C360Studio/semteams/issues/363/comments truncated at ${MAX_PR_COMMENT_PAGES * GITHUB_PAGE_LIMIT} comments`,
+      );
+      const item = listed.items.find((i) => i.number === 362)!;
+      expect(item.review).toEqual({ state: "unknown", reason: "PR review comments not inspected" });
+    });
+
+    it("keeps the per-lane blocking verdict through the HEAD aggregate on the live read path", async () => {
+      stubPr(() => [record("svelte-reviewer", "REQUEST CHANGES"), record("go-reviewer", "APPROVE")]);
+      const listed = await createGithubSource({ apiUrl: "http://github.test" }).listItems(REPO);
+      const item = listed.items.find((i) => i.number === 362)!;
+      expect(item.review).toMatchObject({
+        state: "known",
+        value: { status: "changes_requested", reviewer_lane: "svelte-reviewer" },
+      });
     });
   });
 
