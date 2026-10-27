@@ -24,21 +24,22 @@ const (
 )
 
 type agentRoleSpec struct {
-	name        string
-	readOnly    bool
-	claudeModel string
-	codexModel  string
-	codexEffort string
+	name         string
+	readOnly     bool
+	claudeModel  string
+	claudeEffort string
+	codexModel   string
+	codexEffort  string
 }
 
 var (
 	agentRoleSpecs = []agentRoleSpec{
-		{name: "architect", readOnly: true, claudeModel: "opus", codexModel: "gpt-6-astra", codexEffort: "medium"},
-		{name: "go-developer", readOnly: false, claudeModel: "opus", codexModel: "gpt-6-sol", codexEffort: "medium"},
-		{name: "go-reviewer", readOnly: true, claudeModel: "opus", codexModel: "gpt-6-astra", codexEffort: "high"},
-		{name: "svelte-developer", readOnly: false, claudeModel: "opus", codexModel: "gpt-6-sol", codexEffort: "medium"},
-		{name: "svelte-reviewer", readOnly: true, claudeModel: "opus", codexModel: "gpt-6-astra", codexEffort: "high"},
-		{name: "technical-writer", readOnly: false, claudeModel: "sonnet", codexModel: "gpt-6-sol", codexEffort: "medium"},
+		{name: "architect", readOnly: true, claudeModel: "opus", claudeEffort: "medium", codexModel: "gpt-6-astra", codexEffort: "medium"},
+		{name: "go-developer", readOnly: false, claudeModel: "opus", claudeEffort: "medium", codexModel: "gpt-6-sol", codexEffort: "medium"},
+		{name: "go-reviewer", readOnly: true, claudeModel: "opus", claudeEffort: "high", codexModel: "gpt-6-astra", codexEffort: "high"},
+		{name: "svelte-developer", readOnly: false, claudeModel: "opus", claudeEffort: "medium", codexModel: "gpt-6-sol", codexEffort: "medium"},
+		{name: "svelte-reviewer", readOnly: true, claudeModel: "opus", claudeEffort: "high", codexModel: "gpt-6-astra", codexEffort: "high"},
+		{name: "technical-writer", readOnly: false, claudeModel: "sonnet", claudeEffort: "medium", codexModel: "gpt-6-sol", codexEffort: "medium"},
 	}
 	readOnlyClaudeTools = []string{"Read", "Bash", "Grep", "Glob", "Skill"}
 	writeClaudeTools    = []string{"Read", "Edit", "Write", "Bash", "Grep", "Glob", "Skill"}
@@ -149,6 +150,9 @@ func TestAgentSetupParitySensitivity(t *testing.T) {
 		{"claude model mismatch", edit(".claude/agents/technical-writer.md", func(s string) string {
 			return strings.Replace(s, "model: sonnet", "model: opus", 1)
 		}), []string{".claude/agents/technical-writer.md", "model", "sonnet"}},
+		{"claude effort mismatch", edit(".claude/agents/go-reviewer.md", func(s string) string {
+			return strings.Replace(s, "effort: high", "effort: medium", 1)
+		}), []string{".claude/agents/go-reviewer.md", "effort", "high"}},
 		{"codex effort mismatch", edit(".codex/agents/go-developer.toml", func(s string) string {
 			return strings.Replace(s, `model_reasoning_effort = "medium"`, `model_reasoning_effort = "high"`, 1)
 		}), []string{".codex/agents/go-developer.toml", "model_reasoning_effort", "medium"}},
@@ -299,9 +303,10 @@ func checkClaudeRoleAdapter(root string, role agentRoleSpec) []string {
 		return append(out, fmt.Sprintf("%s: unterminated YAML frontmatter", rel))
 	}
 	var fm struct {
-		Name  string `yaml:"name"`
-		Tools string `yaml:"tools"`
-		Model string `yaml:"model"`
+		Name   string `yaml:"name"`
+		Tools  string `yaml:"tools"`
+		Model  string `yaml:"model"`
+		Effort string `yaml:"effort"`
 	}
 	if err := yaml.Unmarshal([]byte(fmText), &fm); err != nil {
 		return append(out, fmt.Sprintf("%s: invalid frontmatter: %v", rel, err))
@@ -311,6 +316,9 @@ func checkClaudeRoleAdapter(root string, role agentRoleSpec) []string {
 	}
 	if fm.Model != role.claudeModel {
 		out = append(out, fmt.Sprintf("%s: frontmatter model = %q, want %q", rel, fm.Model, role.claudeModel))
+	}
+	if fm.Effort != role.claudeEffort {
+		out = append(out, fmt.Sprintf("%s: frontmatter effort = %q, want %q", rel, fm.Effort, role.claudeEffort))
 	}
 	var gotTools []string
 	for _, tok := range strings.Split(fm.Tools, ",") {

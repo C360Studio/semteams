@@ -28,7 +28,7 @@ tasks:
       - scripts/openspec-queue.sh --strict
 
   queue-test:
-    desc: Verify the queue reporter catches the caveat shapes it claims to
+    desc: Verify scripts/openspec-queue.sh (--check and --strict) catches the caveat shapes it claims to
     cmds:
       - scripts/openspec-queue_fixture_test.sh
 

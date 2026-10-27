@@ -15,5 +15,5 @@
 
 ## 4. Verification, upstream bug reporting, and specialist review
 
-- [x] 4.1 Verify live `ateam doctor --check`, `ateam mcp` (`ateam_state`, `ateam_task`), hook execution, and `ateam review compare` / `gate` at `v0.3.2` (`45b6db8`), and file verified upstream brownfield/runtime bugs on `C360Studio/ateam` (`#204`, `#205`, `#206`, `#207`, plus evidence comments on `#193` and `#201`).
+- [x] 4.1 Verify live `ateam doctor --check`, `ateam mcp` (`ateam_state`, `ateam_task`), hook execution, and `ateam review compare` / `gate` at `v0.3.2` (`45b6db8`), and file verified upstream brownfield/runtime bugs on `C360Studio/ateam` (`#204`, `#205`, `#206`, `#207`, `#209`, plus evidence comments on `#193` and `#201`).
 - [x] 4.2 Run `go-reviewer` and `svelte-reviewer` audits and pass `task validate` on a clean worktree.

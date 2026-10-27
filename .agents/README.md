@@ -49,12 +49,12 @@ reviewers run on a weaker model tier than the developers.
 
 | Role | Claude | Codex | Gemini (Antigravity) | Target effort |
 | --- | --- | --- | --- | --- |
-| `architect` | `opus` | `gpt-6-astra`, `medium` | `inherit` or `pro` (`enable_write_tools = false`) | `medium` default; escalate to `high` for cross-cutting concurrency/boundary designs |
-| `go-developer` | `opus` | `gpt-6-sol`, `medium` | `inherit` or `pro` (`enable_write_tools = true`) | `medium` default for bounded work; escalate to `high` for complex/failed-review rounds |
-| `go-reviewer` | `opus` | `gpt-6-astra`, `high` | `inherit` or `pro` (`enable_write_tools = false`) | `high` (single-pass audit of record against review-only rules) |
-| `svelte-developer` | `opus` | `gpt-6-sol`, `medium` | `inherit` or `pro` (`enable_write_tools = true`) | `medium` default for bounded UI work; escalate to `high` for complex stores/failed-review rounds |
-| `svelte-reviewer` | `opus` | `gpt-6-astra`, `high` | `inherit` or `pro` (`enable_write_tools = false`) | `high` (single-pass audit of record for UI, accessibility, and contract truth) |
-| `technical-writer` | `sonnet` | `gpt-6-sol`, `medium` | `inherit` (or `flash` when requested; `enable_write_tools = true`) | `low` or `medium` (mechanical doc and OpenSpec task-truth sync) |
+| `architect` | `opus`, `medium` | `gpt-6-astra`, `medium` | `inherit` or `pro` (`enable_write_tools = false`) | `medium` default; escalate to `high` for cross-cutting concurrency/boundary designs |
+| `go-developer` | `opus`, `medium` | `gpt-6-sol`, `medium` | `inherit` or `pro` (`enable_write_tools = true`) | `medium` default for bounded work; escalate to `high` for complex/failed-review rounds |
+| `go-reviewer` | `opus`, `high` | `gpt-6-astra`, `high` | `inherit` or `pro` (`enable_write_tools = false`) | `high` (single-pass audit of record against review-only rules) |
+| `svelte-developer` | `opus`, `medium` | `gpt-6-sol`, `medium` | `inherit` or `pro` (`enable_write_tools = true`) | `medium` default for bounded UI work; escalate to `high` for complex stores/failed-review rounds |
+| `svelte-reviewer` | `opus`, `high` | `gpt-6-astra`, `high` | `inherit` or `pro` (`enable_write_tools = false`) | `high` (single-pass audit of record for UI, accessibility, and contract truth) |
+| `technical-writer` | `sonnet`, `medium` | `gpt-6-sol`, `medium` | `inherit` (or `flash` when requested; `enable_write_tools = true`) | `low` or `medium` (mechanical doc and OpenSpec task-truth sync) |
 
 - **Model tier:** `architect`, `go-developer`, `go-reviewer`, `svelte-developer`, and `svelte-reviewer` run on the
   frontier model (`opus` on Claude, `gpt-6-astra` / `gpt-6-sol` on Codex, `inherit` / `pro` on Gemini).
@@ -64,8 +64,9 @@ reviewers run on a weaker model tier than the developers.
   effort by default and escalate to `high` only when a change crosses module/runtime boundaries, designs a concurrency
   or durable-execution contract, or fails a review round. Keep `go-reviewer` and `svelte-reviewer` at `high` effort
   because they run once per ready diff as the independent audit against the repository's review-only rules. Run
-  `technical-writer` at `low` or `medium` effort. The tracked `.claude/agents/` and `.codex/agents/` adapter files pin
-  these defaults and are checked by `TestAgentSetupParity` (`test/contract/shared_work_protocol_contract_test.go`).
+  `technical-writer` at `low` or `medium` effort. The tracked `.claude/agents/*.md` (`model` and `effort`) and
+  `.codex/agents/*.toml` (`model` and `model_reasoning_effort`) adapter files pin these defaults and are checked by
+  `TestAgentSetupParity` (`test/contract/shared_work_protocol_contract_test.go`).
 
 ### Gemini (Antigravity) capability and effort parity
 
@@ -196,7 +197,8 @@ Steps 1–8 are enforced automatically by `task ateam:doctor` (`ateam doctor --c
 7. For every skill in `.agents/skills/<name>/SKILL.md`, confirm the canonical file and Claude adapter exist, the
    adapter points to that canonical file and says to read it fully, stays within 25 lines, and contains no copied
    checklist.
-8. Confirm the Claude and Codex model and effort settings match the table above.
+8. Confirm the Claude (`.claude/agents/*.md` `model` and `effort`) and Codex (`.codex/agents/*.toml` `model` and
+   `model_reasoning_effort`) settings match the table above.
 9. Validate changed skill frontmatter and relative links, then walk the applicable scenarios below without private
    memory.
 

@@ -176,7 +176,7 @@ func findAteamBinary(t *testing.T) string {
 			return cand
 		}
 	}
-	t.Fatal("ateam binary not found on PATH or $HOME/.local/bin/ateam")
+	t.Fatal("ateam binary not found on PATH or $HOME/.local/bin/ateam; install with: GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.2")
 	return ""
 }
 
@@ -617,6 +617,12 @@ func TestMergeCheckReview(t *testing.T) {
 			r.requirePass(t, "strength: pass", "reviewing agent: "+tc.reviewer+" (record at "+mergeHead+")")
 			r.requireNotInOutput(t, noRun)
 		}
+	})
+	t.Run("resolved anthropic model ID claude-opus-5-5 passes against gemini-4-argon", func(t *testing.T) {
+		body := "Summary.\n\nimplemented-by: gemini (gemini-4-argon, high)\nreviewed-by: claude (claude-opus-5-5, high)\n"
+		r := runMergeCheck(t, codeWithRecord("User", body, "claude"), "12")
+		r.requirePass(t, "strength: pass", "reviewing agent: claude (record at "+mergeHead+")")
+		r.requireNotInOutput(t, noRun)
 	})
 	t.Run("weaker reviewer or missing effort fails policy check", func(t *testing.T) {
 		for _, tc := range []struct{ name, body, reviewer, says string }{

@@ -43,7 +43,9 @@ controls. This direction does not claim that extraction, pack activation or the 
 - The coordinator's live taxonomy is `research | autoresearch | respond_direct | ask_user`; parked-team requests receive
   an honest direct response.
 - `Repository CI` runs Go, UI, and Governance/OpenSpec jobs for every pull request to `main`; the jobs feed one stable
-  `Required` aggregate. Required mock E2E and a main-branch ruleset remain future work.
+  `Required` aggregate. The live `main` branch ruleset (`main-required-checks`) requires `Required` with strict
+  up-to-date (`strict_required_status_checks_policy=true`) and squash-only PR merges, while required mock E2E in CI
+  remains future work.
 
 - Runtime saved-flow authoring, managers and template seeds are retired. The UI exposes admitted composition and
   graph exploration. The rule manager joins configuration through a registered key family and readiness barrier.

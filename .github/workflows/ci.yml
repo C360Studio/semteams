@@ -94,7 +94,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.4'
+          go-version-file: go.mod
           cache: true
 
       - name: Set up Node.js
@@ -103,6 +103,8 @@ jobs:
           node-version: 22.20.0
 
       - name: Install pinned governance tools
+        env:
+          GOTOOLCHAIN: auto
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
           go install github.com/c360studio/ateam/cmd/ateam@v0.3.2

@@ -46,6 +46,7 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 - AND it runs `task openspec:validate` and `task openspec:queue-test`
 - AND it runs `task publish:verify-test`, which proves the publication evidence gate fails closed
 - AND ATeam is v0.3.2, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
+- AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
 
 ### Requirement: Publication is image-only, tag-triggered, and gated on CI evidence

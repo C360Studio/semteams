@@ -84,7 +84,7 @@ tasks:
       - scripts/cleanup-roots-check.sh
 
   merge:check:
-    desc: Fail while a class:flake issue is open that PR <n> does not close, main's rules lack the up-to-date setting, or PR <n> is a code PR, not a draft, without implemented-by and reviewed-by lines naming the agents; -- <n>. Reads GitHub, so not in validate/verify
+    desc: Fail if main lacks an active strict Required ruleset, PR <n> is a non-draft code PR failing .agents/review-policy.json or missing a commit-bound review record, or an open class:flake issue is not closed by PR <n>; -- <n>. Reads GitHub, so not in validate/verify
     cmds:
       - scripts/merge-check.sh {{.CLI_ARGS}}
 

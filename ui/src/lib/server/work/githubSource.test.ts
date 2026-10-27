@@ -147,7 +147,7 @@ describe("githubSource parsing helpers", () => {
     });
   });
 
-  it("supports ### Independent Cross-Agent Review fallback and rejects multi-agent records", () => {
+  it("supports vendor-identifying ### Independent Cross-Agent Review and rejects vendor-less or multi-agent records", () => {
     expect(
       parseReviewComments([
         {
@@ -167,13 +167,13 @@ describe("githubSource parsing helpers", () => {
       },
     });
 
+    // Leading unambiguous agent (model, effort) allows a trailing clause mentioning another vendor.
     expect(
       parseReviewComments([
         {
           body: [
-            "### Independent Cross-Agent Review",
-            "",
-            "Reviewed base 1111111 -> head 0d948aac",
+            "reviewed-by: claude (claude-opus-5-5, high) for gemini's PR",
+            "Reviewed at 0d948aac",
             "Verdict: APPROVE",
           ].join("\n"),
         },
@@ -182,40 +182,58 @@ describe("githubSource parsing helpers", () => {
       review_record: {
         sha: "0d948aac",
         verdict: "pass",
+        reviewed_by: "claude (claude-opus-5-5, high) for gemini's PR",
       },
     });
 
-    // Multiple distinct agents in reviewed-by or heading must fail closed.
+    // Vendor-less ### Independent Cross-Agent Review must fail closed with review_unparsed.
     expect(
       parseReviewComments([
         {
           body: [
-            "reviewed-by: claude | codex | gemini",
-            "Reviewed at 0d948aac",
-            "Verdict: APPROVE",
-          ].join("\n"),
-        },
-        {
-          body: [
-            "reviewed-by: claude (opus, high)",
-            "reviewed-by: codex (gpt-6-astra, high)",
-            "Reviewed at 0d948aac",
-            "Verdict: APPROVE",
-          ].join("\n"),
-        },
-        {
-          body: [
-            "### Independent Cross-Agent Review (claude, codex)",
+            "### Independent Cross-Agent Review",
+            "",
             "Reviewed at 0d948aac",
             "Verdict: APPROVE",
           ].join("\n"),
         },
       ]),
-    ).toEqual({});
+    ).toEqual({
+      review_unparsed: true,
+    });
+
+    // Multiple distinct agents in reviewed-by or heading must fail closed with review_unparsed.
+    for (const body of [
+      [
+        "reviewed-by: claude | codex | gemini",
+        "Reviewed at 0d948aac",
+        "Verdict: APPROVE",
+      ].join("\n"),
+      [
+        "reviewed-by: claude / codex",
+        "Reviewed at 0d948aac",
+        "Verdict: APPROVE",
+      ].join("\n"),
+      [
+        "reviewed-by: claude (opus, high)",
+        "reviewed-by: codex (gpt-6-astra, high)",
+        "Reviewed at 0d948aac",
+        "Verdict: APPROVE",
+      ].join("\n"),
+      [
+        "### Independent Cross-Agent Review (claude, codex)",
+        "Reviewed at 0d948aac",
+        "Verdict: APPROVE",
+      ].join("\n"),
+    ]) {
+      expect(parseReviewComments([{ body }])).toEqual({
+        review_unparsed: true,
+      });
+    }
   });
 
-  it("ignores fenced code blocks when scanning for ATeam records, SHAs, and verdicts", () => {
-    // Template example inside backtick or tilde fences alone never creates a record.
+  it("ignores 0..3-space fenced code blocks and blockquotes while treating 4-space indented fences as content", () => {
+    // Template example inside 0..3-space backtick or tilde fences alone never creates a record or unparsed flag.
     expect(
       parseReviewComments([
         {
@@ -224,13 +242,13 @@ describe("githubSource parsing helpers", () => {
             "```text",
             "reviewed-by: codex (gpt-6-astra, high)",
             "Reviewed at 1234567",
-            "Verdict: APPROVE",
+            "Verdict: APPROVE | REQUEST CHANGES",
             "```",
-            "~~~markdown",
+            "   ~~~markdown",
             "### Independent Cross-Agent Review (claude)",
             "Reviewed at 7654321",
-            "Verdict: REQUEST CHANGES",
-            "~~~",
+            "Verdict: HOLD",
+            "   ~~~",
           ].join("\n"),
         },
       ]),
@@ -249,7 +267,6 @@ describe("githubSource parsing helpers", () => {
             "```text",
             "reviewed-by: claude (opus, high)",
             "Reviewed at 1234567",
-            "Head: 9988776",
             "Verdict: REQUEST CHANGES",
             "```",
           ].join("\n"),
@@ -262,29 +279,115 @@ describe("githubSource parsing helpers", () => {
         reviewed_by: "codex (gpt-6-astra, high)",
       },
     });
-  });
 
-  it("rejects ambiguous multi-SHA ATeam comments while resolving prefix-matching SHAs", () => {
+    // CommonMark 4-space indented fence line is NOT an opening fence delimiter:
+    // 1) It does not swallow a real review record below it.
     expect(
       parseReviewComments([
         {
           body: [
+            "    ```text",
             "reviewed-by: codex (gpt-6-astra, high)",
-            "Reviewed at a1b2c3d",
-            "Head: 9988776",
+            "Reviewed at a1b2c3d4",
             "Verdict: APPROVE",
           ].join("\n"),
         },
       ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+
+    // 2) It does not hide an invalid Verdict line below it, nor prematurely close an open 0..3-space fence.
+    expect(
+      parseReviewComments([
+        {
+          body: ["    ```text", "Verdict: HOLD", "    ```"].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_unparsed: true,
+    });
+    expect(
+      parseReviewComments([
+        {
+          body: ["  ```text", "    ```", "Verdict: HOLD", "  ```"].join("\n"),
+        },
+      ]),
     ).toEqual({});
 
+    // Human reply quoting a review record or verdict with `>` neither forges a record nor sets review_unparsed,
+    // even when posted after a valid APPROVE record.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "> reviewed-by: codex (gpt-6-astra, high)",
+            "> Reviewed at a1b2c3d4",
+            "> Verdict: APPROVE",
+            "  > Verdict: HOLD",
+            "",
+            "Thanks — will merge once CI finishes.",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({});
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+        {
+          body: [
+            "> reviewed-by: codex (gpt-6-astra, high)",
+            "> Reviewed at a1b2c3d4",
+            "> Verdict: APPROVE",
+            "",
+            "Acknowledged, proceeding to archive.",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "pass",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+  });
+
+  it("requires canonical Reviewed at <sha> and rejects non-Reviewed-at or multi-SHA comments", () => {
+    // Multiple distinct Reviewed at SHAs fail closed with review_unparsed.
     expect(
       parseReviewComments([
         {
           body: [
             "reviewed-by: codex (gpt-6-astra, high)",
             "Reviewed at a1b2c3d",
-            "Head: a1b2c3d4e5f6",
+            "Reviewed at 9988776",
+            "Verdict: APPROVE",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_unparsed: true,
+    });
+
+    // Prefix-matching Reviewed at SHAs resolve to the longest SHA.
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d",
+            "Re-reviewed at a1b2c3d4e5f6",
             "Verdict: APPROVE",
           ].join("\n"),
         },
@@ -297,18 +400,73 @@ describe("githubSource parsing helpers", () => {
       },
     });
 
-    // Alternate gateDesignated forms (Reviewed commit, Reviewed head, Review of, Reviewed-commit, Head commit).
+    // Non-canonical SHA forms without `Reviewed at <sha>` fail closed with review_unparsed.
+    for (const shaLine of [
+      "Review of a1b2c3d4",
+      "Reviewed commit: a1b2c3d4",
+      "Reviewed head: a1b2c3d4",
+      "Reviewed base 11111111 -> head a1b2c3d4",
+      "Head: a1b2c3d4",
+    ]) {
+      expect(
+        parseReviewComments([
+          {
+            body: [
+              "reviewed-by: claude (opus, high)",
+              shaLine,
+              "Verdict: APPROVED",
+            ].join("\n"),
+          },
+        ]),
+      ).toEqual({
+        review_unparsed: true,
+      });
+    }
+  });
+
+  it("parses routine Verdict clauses while failing closed with review_unparsed on missing, unrecognized, or ambiguous verdicts", () => {
+    // Routine reviewer verdict lines with comma, colon, or trailing clause words parse cleanly.
     expect(
       parseReviewComments([
         {
           body: [
-            "reviewed-by: claude (opus, high)",
-            "Review of a1b2c3d4",
-            "Reviewed commit: a1b2c3d4",
-            "Reviewed head: a1b2c3d4",
-            "Reviewed-commit: a1b2c3d4",
-            "Head commit: a1b2c3d4",
-            "Verdict: APPROVED",
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: REQUEST CHANGES, see H1",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "blocking",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: REQUEST CHANGES: two HIGH",
+          ].join("\n"),
+        },
+      ]),
+    ).toEqual({
+      review_record: {
+        sha: "a1b2c3d4",
+        verdict: "blocking",
+        reviewed_by: "codex (gpt-6-astra, high)",
+      },
+    });
+    expect(
+      parseReviewComments([
+        {
+          body: [
+            "reviewed-by: codex (gpt-6-astra, high)",
+            "Reviewed at a1b2c3d4",
+            "Verdict: APPROVE with nits",
           ].join("\n"),
         },
       ]),
@@ -316,48 +474,37 @@ describe("githubSource parsing helpers", () => {
       review_record: {
         sha: "a1b2c3d4",
         verdict: "pass",
-        reviewed_by: "claude (opus, high)",
+        reviewed_by: "codex (gpt-6-astra, high)",
       },
     });
-  });
-
-  it("fails closed when Verdict: is missing or conflicting in an ATeam comment", () => {
-    const invalidComments = [
-      {
-        body: [
-          "reviewed-by: codex (gpt-6-astra, high)",
-          "Reviewed at a1b2c3d4",
-          "",
-          "All checks look good, APPROVE.",
-        ].join("\n"),
-      },
-      {
-        body: [
-          "reviewed-by: codex (gpt-6-astra, high)",
-          "Reviewed at a1b2c3d4",
-          "Verdict: APPROVE | REQUEST CHANGES",
-        ].join("\n"),
-      },
-      {
-        body: [
-          "reviewed-by: codex (gpt-6-astra, high)",
-          "Reviewed at a1b2c3d4",
-          "Verdict: APPROVE; REQUEST CHANGES",
-        ].join("\n"),
-      },
-      {
-        body: [
-          "reviewed-by: codex (gpt-6-astra, high)",
-          "Reviewed at a1b2c3d4",
-          "Verdict: APPROVE",
-          "Verdict: REQUEST CHANGES",
-        ].join("\n"),
-      },
-    ];
-
-    expect(parseReviewComments(invalidComments)).toEqual({});
-
-    // Unambiguous leading verdict whose trailing clause mentions the opposite word still parses.
+    for (const [verdictLine, expectedVerdict] of [
+      ["Verdict: REQUEST CHANGES see H1", "blocking"],
+      ["Verdict: APPROVE on a1b2c3d4", "pass"],
+      ["Verdict: REQUEST CHANGES for H1 and M1", "blocking"],
+      ["Verdict: REQUEST CHANGES pending H1 fix", "blocking"],
+      ["Verdict: APPROVE after re-verification", "pass"],
+      ["Verdict: REQUEST CHANGES until H1 lands", "blocking"],
+      ["Verdict: APPROVE once archived", "pass"],
+      ["Verdict: REQUEST CHANGES because H1 fails open", "blocking"],
+    ] as const) {
+      expect(
+        parseReviewComments([
+          {
+            body: [
+              "reviewed-by: codex (gpt-6-astra, high)",
+              "Reviewed at a1b2c3d4",
+              verdictLine,
+            ].join("\n"),
+          },
+        ]),
+      ).toEqual({
+        review_record: {
+          sha: "a1b2c3d4",
+          verdict: expectedVerdict,
+          reviewed_by: "codex (gpt-6-astra, high)",
+        },
+      });
+    }
     expect(
       parseReviewComments([
         {
@@ -393,25 +540,141 @@ describe("githubSource parsing helpers", () => {
       },
     });
 
-    // A malformed follow-up comment must not overwrite an earlier valid blocking record.
-    expect(
-      parseReviewComments([
-        {
-          body: [
-            "reviewed-by: codex (gpt-6-astra, high)",
-            "Reviewed at 11111111",
-            "Verdict: REQUEST CHANGES",
-          ].join("\n"),
-        },
-        ...invalidComments,
-      ]),
-    ).toEqual({
-      review_record: {
-        sha: "11111111",
-        verdict: "blocking",
-        reviewed_by: "codex (gpt-6-astra, high)",
+    const invalidComments = [
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "",
+          "All checks look good, APPROVE.",
+        ].join("\n"),
       },
-    });
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE | REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE / REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE; REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE or REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: HOLD",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: LGTM",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: codex (gpt-6-astra, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE",
+          "Verdict: REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: "<!-- semteams-review-record -->\ncommit: a1b2c3d4\nverdict: hold",
+      },
+    ];
+
+    for (const invalid of invalidComments) {
+      expect(parseReviewComments([invalid])).toEqual({
+        review_unparsed: true,
+      });
+    }
+
+    // H1 mirror probe: an earlier APPROVE at HEAD followed by an unparseable record (and even a later valid lane record)
+    // keeps review_unparsed: true so callers fail closed instead of reporting current/Ready to land.
+    const approvedAtHead = {
+      body: [
+        "reviewed-by: codex (gpt-6-astra, high)",
+        "Reviewer lane: go-reviewer",
+        "Reviewed at a1b2c3d4",
+        "Verdict: APPROVE",
+      ].join("\n"),
+    };
+    for (const unparseable of [
+      {
+        body: [
+          "reviewed-by: claude (opus, high)",
+          "Reviewer lane: svelte-reviewer",
+          "Reviewed at a1b2c3d4",
+          "Verdict: HOLD",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: claude (opus, high)",
+          "Reviewed at a1b2c3d4",
+          "Reviewed at 99887766",
+          "Verdict: REQUEST CHANGES",
+        ].join("\n"),
+      },
+      {
+        body: [
+          "reviewed-by: claude (opus, high)",
+          "Reviewed at a1b2c3d4",
+          "Verdict: APPROVE | REQUEST CHANGES",
+        ].join("\n"),
+      },
+    ]) {
+      expect(parseReviewComments([approvedAtHead, unparseable])).toEqual({
+        review_record: {
+          sha: "a1b2c3d4",
+          verdict: "pass",
+          reviewer_lane: "go-reviewer",
+          reviewed_by: "codex (gpt-6-astra, high)",
+        },
+        review_unparsed: true,
+      });
+      // Sticky: a subsequent valid comment on the same PR must NOT clear review_unparsed.
+      expect(parseReviewComments([unparseable, approvedAtHead])).toEqual({
+        review_record: {
+          sha: "a1b2c3d4",
+          verdict: "pass",
+          reviewer_lane: "go-reviewer",
+          reviewed_by: "codex (gpt-6-astra, high)",
+        },
+        review_unparsed: true,
+      });
+    }
+  });
+
+  it("parses comments with 65,536 consecutive blank lines in under 100ms without quadratic backtracking", () => {
+    const body = `x\n${"\n".repeat(65_536)}y`;
+    const start = performance.now();
+    const parsed = parseReviewComments([{ body }]);
+    const elapsedMs = performance.now() - start;
+
+    expect(parsed).toEqual({});
+    expect(elapsedMs).toBeLessThan(100);
   });
 
   it("parses plain ## Review request and #-less Review request comments and never treats records as requests", () => {
@@ -1159,6 +1422,105 @@ describe("createGithubSource", () => {
           reviewed_by: "codex (gpt-6-astra, high)",
         },
       },
+    });
+  });
+
+  it("degrades review overlay to unknown and lookup to partial when an unparseable review record follows an earlier APPROVE at HEAD", async () => {
+    stubBackend((url) => {
+      if (url.pathname === "/repos/C360Studio/semteams/issues") {
+        return jsonResponse([
+          {
+            number: 362,
+            title: "Adopt ateam v0.3.2",
+            body: "Clean upstream adoption.",
+            state: "open",
+            labels: [{ name: "area:governance" }],
+            assignees: [],
+          },
+        ]);
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/issues/362") {
+        return jsonResponse({
+          number: 362,
+          title: "Adopt ateam v0.3.2",
+          body: "Clean upstream adoption.",
+          state: "open",
+          labels: [{ name: "area:governance" }],
+          assignees: [],
+        });
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/pulls") {
+        return jsonResponse([
+          {
+            number: 363,
+            title: "chore(harness): adopt ateam v0.3.2 (#362)",
+            body: [
+              "Closes #362",
+              "",
+              "implemented-by: gemini (gemini-4-argon, high)",
+            ].join("\n"),
+            state: "open",
+            draft: false,
+            head: {
+              ref: "gemini/gh362-adopt-ateam-v032",
+              sha: "a1b2c3d4e5f6789012345678901234567890abcd",
+            },
+          },
+        ]);
+      }
+      if (url.pathname === "/repos/C360Studio/semteams/issues/363/comments") {
+        return jsonResponse([
+          {
+            body: [
+              "reviewed-by: codex (gpt-6-astra, high)",
+              "Reviewer lane: go-reviewer",
+              "Reviewed at a1b2c3d4",
+              "Verdict: APPROVE",
+            ].join("\n"),
+          },
+          {
+            body: [
+              "reviewed-by: claude (opus, high)",
+              "Reviewer lane: svelte-reviewer",
+              "Reviewed at a1b2c3d4",
+              "Verdict: HOLD",
+            ].join("\n"),
+          },
+        ]);
+      }
+      return jsonResponse({ message: "not found" }, 404);
+    });
+
+    const source = createGithubSource({ apiUrl: "http://github.test" });
+    const listed = await source.listItems(REPO);
+    expect(listed.lookup).toBe("partial");
+    expect(listed.reason).toContain(
+      "GET /repos/C360Studio/semteams/issues/363/comments contains an unparseable review record",
+    );
+
+    const item362 = listed.items.find((i) => i.number === 362)!;
+    expect(item362.delivery).toMatchObject({
+      state: "known",
+      value: [
+        {
+          ref: "C360Studio/semteams#363",
+          review_inspected: false,
+        },
+      ],
+    });
+    expect(item362.review).toEqual({
+      state: "unknown",
+      reason: "PR review comments not inspected",
+    });
+
+    const single = await source.getItem({ repository: REPO, number: 362 });
+    expect(single.lookup).toBe("partial");
+    expect(single.reason).toContain(
+      "GET /repos/C360Studio/semteams/issues/363/comments contains an unparseable review record",
+    );
+    expect(single.item?.review).toEqual({
+      state: "unknown",
+      reason: "PR review comments not inspected",
     });
   });
 
