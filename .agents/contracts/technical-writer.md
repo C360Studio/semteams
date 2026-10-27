@@ -42,8 +42,9 @@ does not decide, implement, or approve.
    - Keep `CLAUDE.md` as the `<10`-line `@AGENTS.md` import shim carrying no rules of its own.
    - Keep `AGENTS.md` strictly under `24,000` bytes (`wc -c AGENTS.md`) and ensure every rule row in `AGENTS.md` has
      its corresponding audit row in `.agents/rules-index.md` with matching numbered domain headings and row counts.
-   - Run `go test ./test/contract/... -run TestAgentSetupParity -v` after any change to `AGENTS.md`, `CLAUDE.md`,
-     `.agents/`, `.claude/`, or `.codex/`.
+   - Run `task ateam:doctor` (shim, size, and row-count parity) and
+     `go test ./test/contract/... -run TestAgentSetupParity -v` (role and adopter-skill adapters) after any change to
+     `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/`, or `.codex/`.
 7. **Do not create report, summary, or handoff documents:** shared state lives in the protocol's homes (GitHub issues,
    PRs, OpenSpec changes/specs, ADRs).
 8. **Never run a git command that can discard working-tree state:** `git checkout -- <path>`, `git restore`,
@@ -52,5 +53,5 @@ does not decide, implement, or approve.
 ## Handoff
 
 Return the files changed, the verification commands run (`task openspec:validate`, `task openspec:queue-test`,
-`go test ./test/contract/... -run TestAgentSetupParity -v`) and their results, and every claim in the docs you could
-not verify against code.
+`task ateam:doctor`, `go test ./test/contract/... -run TestAgentSetupParity -v`) and their results, and every claim
+in the docs you could not verify against code.
