@@ -49,7 +49,7 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 - THEN it runs `ateam doctor --check` with session-ID environment variables unset so multi-agent setup, hooks, MCP config, skills, and review-policy parity are verified without mutating the worktree
 - AND it runs `task openspec:validate` and `task openspec:queue-test`
 - AND it runs `task publish:verify-test`, which proves the publication evidence gate fails closed
-- AND ATeam is v0.3.2, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
+- AND ATeam is v0.3.3, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
 - AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
 
@@ -157,7 +157,7 @@ pull request's base commit, and `Required` SHALL depend on it.
 - GIVEN a pull request targets `main`
 - WHEN the `Merge check` job runs
 - THEN it checks out the base commit, not the pull request head, without persisted credentials
-- AND it installs ATeam v0.3.2 and runs `scripts/merge-check.sh` with the pull request number
+- AND it installs ATeam v0.3.3 and runs `scripts/merge-check.sh` with the pull request number
 - AND its token permissions are read-only for contents, issues, and pull requests
 - AND the workflow file itself is read from the pull request, so a change to it is caught by review only
 
@@ -167,8 +167,14 @@ pull request's base commit, and `Required` SHALL depend on it.
   its commits with no later content commit
 - WHEN `Merge check` runs
 - THEN `Merge check` fails and `Required` fails
-- AND after the record is posted, rerunning the failed job lets `Required` pass
-- AND the gate does not read `Verdict:` at ATeam v0.3.2 (`C360Studio/ateam#201`), so the verdict stays review only
+- AND after an approving record is posted, rerunning the failed job lets `Required` pass
+
+#### Scenario: A code pull request whose latest review record does not approve fails Required
+
+- GIVEN a non-draft code pull request whose latest review record names one of its commits
+- WHEN that record has no `Verdict:` line outside code fences, more than one, or one that is not `Verdict: APPROVE`
+- THEN `Merge check` fails and `Required` fails (ATeam v0.3.3, `C360Studio/ateam#201`)
+- AND whether the findings justify an approving verdict stays review only
 
 #### Scenario: Marking a draft ready starts the gated run
 
