@@ -32,11 +32,11 @@ conservative OpenSpec task truth. Role contracts, `.agents/review-policy.json`, 
 | Upstream dependencies | An issue on the owning repository (`semstreams`, `semengine`, `ateam`, `semmem`, `semsource`), linked from the SemTeams issue or task it blocks, with that task carrying the `Hold:` | Sister repositories are read-only from here; never fork unreviewed upstream mechanics locally. |
 | Why | An ADR (`docs/adr/`), or the owner's ruling comment on the issue | ADRs record durable architectural decisions, not work status or implementation checklists. |
 
-OpenSpec changes are contract deltas, not backlogs. Sequencing, discovery, holds, and future work belong in GitHub
-issues.
+OpenSpec changes are contract deltas or approval-gated proposals, not backlogs: a change either carries spec deltas or
+is proposal-only (Work lifecycle, Clarify). Sequencing, discovery, holds, and future work belong in GitHub issues.
 
-ATeam's test-to-spec default (`ateam test-spec` / `task test:spec`: a `// spec:` reference on every Go and Vitest
-test) is deferred to `horizon:post-mvp` (owner ruling on #374) until
+ATeam's test-to-spec default (`ateam test-spec` / `task test:spec`: a `// spec:` or `//aip:verifies` reference on
+every Go and Vitest test) is deferred to `horizon:post-mvp` (owner ruling on #374; tracked in #386) until
 [C360Studio/ateam#237](https://github.com/C360Studio/ateam/issues/237) can scope it to new tests; SemTeams has no
 `task test:spec` target and no CI gate for it.
 
@@ -68,7 +68,10 @@ rewired parked pack, or an unproved composition-root invariant.
     a one-page OpenSpec `proposal.md` (≤ 60 lines; detail goes in `tasks.md` or `design.md`; `task spec:check` warns
     past it) with an empty `Approved-by:` line, and a first task carrying `Hold: OPEN-Q proposal awaits owner approval`
     until the owner fills `Approved-by: <name> (<YYYY-MM-DD>)` and removes the hold in the same edit; the line may link
-    the issue comment where the owner ruled. The agent stops at the hold and hands off.
+    the issue comment where the owner ruled. The agent stops at the hold and hands off. Non-trivial work that changes
+    no Requirement carries a proposal-only change (`proposal.md` and `tasks.md`, no `specs/`) whose `.openspec.yaml`
+    sets `skip_specs: true`, as ATeam's own proposal-only changes do; `openspec validate --strict` rejects a change
+    with no delta otherwise.
   - **Track:** a non-trivial change also declares its track: `design` when it adds a spec Requirement, touches more
     than one capability under `openspec/specs/`, adds exported surface reachable from an adopting repository, or
     touches a boot path, durability/ack behavior, or a gate file, otherwise `quick` with no `design.md`. On `design`,

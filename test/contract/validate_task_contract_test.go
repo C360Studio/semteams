@@ -638,7 +638,7 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 		"fmt:", "fmt:check:", "tidy:check:",
 		"cleanup-roots:check:", "scripts/cleanup-roots-check.sh",
 		"merge:check:", "scripts/merge-check.sh",
-		"mutate:check:", "ateam mutate {{.CLI_ARGS}}",
+		"mutate:check:", `- "ateam mutate {{.CLI_ARGS}}"`,
 		"spec:check:", "spec:queue:",
 		"verify:", "scripts/verify.sh",
 	} {
