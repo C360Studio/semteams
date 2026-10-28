@@ -19,6 +19,8 @@ Call the `ateam_state` MCP tool (`{"action": "handoff", ...}`) or run `ateam sta
 - `done_when`: Acceptance criteria and remaining verification gates
 - `checks_to_run`: Cheap reconciliation commands and remaining unrun validation
 
+Pass `post` explicitly over MCP: `post:false` saves a local-only checkpoint, and `post:true` posts it as a PR comment when posting is authorized. An omitted `post` posts. The CLI posts unless given `--no-post`.
+
 ## 2. Return the 5-Field Pickup Prompt
 
 Output the canonical 5-field block and instruct the next session to run `/pickup` (`ateam state pickup`):

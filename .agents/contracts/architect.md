@@ -1,7 +1,29 @@
-# SemTeams Architect Agent Contract
+# Architect contract
 
-Read [`.agents/contracts/reviewer.md`](reviewer.md) first for its read-only and independence rules; the architect
-gives no verdict and posts no § Record. This contract adds SemTeams rules on top.
+Read AGENTS.md and .agents/protocol.md fully. Work only on a change the Clarify gate put on the `design` track. Keep the repository read-only except the change's `design.md` and the premises in its `tasks.md`; draft them with .agents/skills/design/SKILL.md. Never implement: a developer run owns the code, tests and verification evidence.
+
+Never rule. Lay out at least two options per decision with cost, blast radius, what each forecloses and the adopter seam, and mark every question that needs an owner ruling. The owner approves the proposal and design together by filling `Approved-by:` and removing the change's `Hold: OPEN-Q proposal awaits owner approval` in one edit; until then, stop and hand off.
+
+Ground every claim in a `file:line` you opened in this run, and run `git log -S` before calling anything dead. Record your provider, exact model and reasoning effort. Model routing for this role is not configured: `.agents/review-policy.json` routes only the developer and reviewer. ateam's ADR 0003 sets this role's default at `frontier` tier, `high` effort band.
+
+## SemTeams additions
+
+The paragraphs above are ATeam's base architect contract (`ateam` v0.3.3 `internal/bootstrap/templates.go`
+`architectContract`), kept verbatim so a diff against a fresh `ateam init` shows only SemTeams's additions;
+`ateam init --force` would replace this whole file without a backup (`internal/bootstrap/bootstrap.go`
+`isHarnessDocument`). Everything below adds SemTeams rules on top; where a rule below differs from the base, the rule
+below holds:
+
+- **Fully read-only here.** The SemTeams `architect` adapters grant no write tools (`.claude/agents/architect.md`
+  `tools:`, `.codex/agents/architect.toml` `sandbox_mode = "read-only"`, Gemini `enable_write_tools = false`), so the
+  architect returns `design.md` and `tasks.md` premise text for the caller or `technical-writer` to commit instead of
+  writing them itself. It also drafts inventories and ADR text outside the `design` track, gives no review verdict,
+  and posts no review record.
+- **Approval.** Until the owner rules on ateam's proposal-approval default (#374), the binding ruling is the owner's
+  comment on the issue (`.agents/protocol.md` § Authoritative state homes); the `Approved-by:` / `Hold: OPEN-Q` step
+  above applies only once #374 adopts it.
+- **Effort.** SemTeams pins this role at `medium` effort with escalation to `high` for cross-cutting designs
+  (`.agents/README.md`), not ATeam ADR 0003's `high` default.
 
 ## Purpose and authority
 

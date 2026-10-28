@@ -3,8 +3,8 @@
 Canonical. `CLAUDE.md` imports `AGENTS.md`, which points to this file and carries the four gates (clarify, claim,
 merge, close) inline; edit the protocol here only. Read it before taking, landing, or closing work; the
 [pickup](skills/pickup/SKILL.md), [handoff](skills/handoff/SKILL.md), [preflight](skills/preflight/SKILL.md),
-[review-pr](skills/review-pr/SKILL.md), and [ponytail](skills/ponytail/SKILL.md) skills read it. Adapted from
-SemEngine's and ATeam's `.agents/protocol.md` alongside SemVocab and SemSparql.
+[review-pr](skills/review-pr/SKILL.md), [ponytail](skills/ponytail/SKILL.md), and [design](skills/design/SKILL.md)
+skills read it. Adapted from SemEngine's and ATeam's `.agents/protocol.md` alongside SemVocab and SemSparql.
 
 State that all agents must see lives in the repository's tools, never in an agent's private memory or a separate
 program-status document. Each question has one authoritative home, and each home is discoverable with `gh`, `ateam`,
@@ -91,9 +91,9 @@ rewired parked pack, or an unproved composition-root invariant.
   → narrow reviewer check of the archive/spec sync (any agent's reviewer) → undraft → `task validate`,
   `task merge:check -- <pr>`, and `Repository CI` (`Required`) green on a head up to date with `main` and with **no
   known flake open** → squash merge. On a non-draft code/UI PR, `Merge check` (and so `Required`) is red until the
-  review record and the `reviewed-by:` line exist; once the run has finished, the reviewer reruns the failed job
-  (`gh run rerun <run> --failed`, ateam main's `review-pr` § 5) rather than updating the branch. That red is expected,
-  not a flake. A correction after archive re-enters reconciliation and final review. State
+  approving review record and the `reviewed-by:` line exist; the reviewer then clears it as
+  [review-pr](skills/review-pr/SKILL.md) § 5 says (rerun the failed job, never update the branch). That red is
+  expected, not a flake. A correction after archive re-enters reconciliation and final review. State
   `implemented-by: <agent> (<model>, <effort>)` in the PR body naming the implementing model family (`claude`, `codex`,
   or `gemini`), resolved model, and reasoning effort (`implemented-by: gemini (gemini-4-argon, high)`), and
   `reviewed-by: <agent> (<model>, <effort>)` once the reviewing agent's newest record approves. Never write unresolved
@@ -127,8 +127,9 @@ rewired parked pack, or an unproved composition-root invariant.
     <SemTeams reviewer-lane findings (BLOCKING, HIGH, MEDIUM, NIT), checks run, unavailable evidence>
     ```
     The comment must designate a single commit of the pull request via `Reviewed at <sha>` (7–40 hex chars; do not add a
-    competing `Head: <other-sha>` line). Without its own `task validate` / lane run, the implementer's result is
-    recorded as reported, never as passed. The record does not rest on CI: the CI run before merge is the check.
+    competing `Head: <other-sha>` line) and carry exactly one `Verdict:` line outside code fences; `ateam review gate`
+    passes only `Verdict: APPROVE`. Without its own `task validate` / lane run, the implementer's result is recorded as
+    reported, never as passed. The record does not rest on CI: the CI run before merge is the check.
   - A record covers the commit SHA it names. A later commit that changes code/UI goes back to the reviewing agent; a
     later documents-only commit (such as `openspec/changes/archive/...`) and a clean merge of `origin/main` touching no
     file the pull request changes carry the record over (`ateam review gate`).

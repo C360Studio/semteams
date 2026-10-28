@@ -120,7 +120,7 @@ cross-agent review). `CLAUDE.md` imports `AGENTS.md`, which points to `.agents/p
 Canonical skills live in `skills/`. Read the relevant `SKILL.md` fully; the adapters in `.claude/skills/` and
 `.gemini/commands/*.toml` add discovery metadata and argument handling, not another rule set. Repository protocol and
 role contracts remain authoritative. ATeam supplies the workflow skills (`pickup`, `handoff`, `preflight`, `ponytail`,
-`review-pr`); `preflight` carries SemTeams's gate selection.
+`review-pr`, and the opt-in `design` skill for the `architect`); `preflight` carries SemTeams's gate selection.
 
 SemTeams architecture and runtime-capability skills (`adopter_skills` in `ateam doctor`):
 
