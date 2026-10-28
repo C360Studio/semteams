@@ -15,7 +15,7 @@ import (
 // The parts of the agent setup (.agents/README.md, "Parity checks") that `ateam doctor --check`
 // (task ateam:doctor) does not hold: the six specialist role adapters and the adopter skill
 // adapters. Doctor owns CLAUDE.md, the AGENTS.md size cap, AGENTS.md/rules-index parity, and
-// ateam's canonical skill adapters (ateam v0.3.2 internal/bootstrap/bootstrap.go
+// ateam's canonical skill adapters (ateam v0.3.3 internal/bootstrap/bootstrap.go
 // checkRulesAndSizeParity, inspectSkills); doctor checks adopter skill adapters only for links
 // that resolve. Expected roles, tool lists, sandbox modes, model/effort pins, and caps are
 // constants here rather than read from .agents/README.md.
@@ -47,9 +47,9 @@ var (
 	readOnlyClaudeTools = []string{"Read", "Bash", "Grep", "Glob", "Skill"}
 	writeClaudeTools    = []string{"Read", "Edit", "Write", "Bash", "Grep", "Glob", "Skill"}
 	adopterSkills       = []string{"kv-or-stream", "new-payload", "orchestration-check", "query-pattern"}
-	// ateamCanonicalSkills are checked by ateam doctor (canonicalSkills in ateam v0.3.2
+	// ateamCanonicalSkills are checked by ateam doctor (canonicalSkills in ateam v0.3.3
 	// internal/bootstrap/bootstrap.go), so they are skipped here.
-	ateamCanonicalSkills = []string{"handoff", "pickup", "ponytail", "preflight", "review-pr"}
+	ateamCanonicalSkills = []string{"design", "handoff", "pickup", "ponytail", "preflight", "review-pr"}
 )
 
 func TestAgentSetupParity(t *testing.T) {
