@@ -81,6 +81,7 @@ task spec:queue           # In-flight OpenSpec changes and Hold: lines (alias: o
 task openspec:queue-test  # Fixture test for OpenSpec queue reporter
 task publish:verify-test  # Fixture test for release publication gate
 task merge:check -- <pr>  # Run ateam review gate (Required ruleset, review policy/record, class:flake)
+task mutate:check -- ...  # ateam mutate: Go -overlay mutation check (-pkg -test -file -mutant -expect)
 task ui:lint              # ESLint
 task ui:check             # svelte-check (TypeScript)
 task ui:test              # Vitest unit/component tests
@@ -146,7 +147,7 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | Gate | Rule | Where |
 | --- | --- | --- |
 | `verify+review` | `task validate` (and `task verify`) runs the read-only local parity gate (Go, UI, Governance) without mutating tracked, staged, unstaged, or untracked worktree files | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestValidateScriptCommandCompositionAndWorktreePreservation` |
-| `verify+review` | Tests use an independent oracle and are shown able to fail; structural guards carry paired sensitivity tests | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestAgentSetupParitySensitivity` |
+| `verify+review` | Non-trivial logic ships with a test using an independent oracle, proven able to fail via non-destructive mutation check (`task mutate:check` for Go; `cp` + SHA-256 for Vitest and anything `-overlay` cannot reach), reporting `detection`, `survivor`, `invalid`, or `inconclusive`; structural guards carry paired sensitivity tests | `protocol`; `preflight` skill; `TestAgentSetupParitySensitivity` |
 | `verify` | Tests bind ephemeral TCP ports (`net.Listen("tcp", "127.0.0.1:0")`) and bound `.Stop`/`.Close`/`.Terminate` cleanup with `context.WithTimeout`, never `context.Background()`/`context.TODO()` | `task lint`; `scripts/lint-test-ports.sh`, `scripts/cleanup-roots-check.sh`; `TestCleanupRootsCheckSensitivity` |
 | `review` | Integration tests run sequentially (`-p 1`) under `task test:integration`; serialize heavy Docker/testcontainers runs across concurrent sessions on a shared host | `go-dev`, `go-rev`; `preflight` skill |
 | `review` | Playwright E2E journeys (`task ui:test:e2e`) run in background and are monitored every 20–30s via test output, backend Docker logs, and `/message-logger/entries`, aborting early on loops with quoted log evidence | `svelte-dev`, `svelte-rev` |
@@ -167,6 +168,8 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | `review` | A finding needing an unchosen condition (library timing/ordering, OS state, mid-op fault, test-only call sequence) is `BLOCKING`/`HIGH` only with a named routine real-world trigger; else `MEDIUM` at most (#185) | `go-rev`, `svelte-rev`, `go-dev`, `svelte-dev`; `protocol` |
 | `verify+review` | A new repo-wide or agent-conduct rule names what enforces it and adds its row to both `AGENTS.md` and `.agents/rules-index.md` | `go-rev`, `svelte-rev`; `task ateam:doctor` |
 | `review` | Before claiming work, mutating state, or spawning role subagents on an underspecified prompt, check named issues/PRs/files first, then confirm Deliverable, Scope/non-goals, Definition of Done/verification, and Stop boundary | `protocol`; `.agents/README.md` |
+| `review` | Non-trivial work's OpenSpec `proposal.md` stays one page (≤ 60 lines; `spec:check` warns past it) and carries `Approved-by:`, empty until the owner fills `<name> (<YYYY-MM-DD>)`; the first task holds `Hold: OPEN-Q proposal awaits owner approval` until the owner removes it in the same edit, and an agent whose Stop boundary is proposal approval stops there and hands off | `protocol` § Clarify |
+| `review` | A non-trivial change declares the `quick` or `design` track at Clarify; `design` is required when it adds a spec Requirement, touches more than one capability under `openspec/specs/`, adds exported surface reachable from an adopting repository, or touches a boot path, durability/ack behavior, or a gate file, and then carries a `design.md` (≤ 120 lines) drafted by the read-only `design` skill and approved with the proposal under the one `OPEN-Q` hold | `protocol` § Clarify; `arch`; `design` skill |
 | `review` | Role-agent briefs carry the owner's intent and the artifact itself, not a paraphrase; resume for continuity, start fresh for mechanics; designs cap at 3 review rounds before escalating to the owner | `.agents/README.md`; `arch` |
 | `verify+review` | `architect`, `go-developer`, `go-reviewer`, `svelte-developer`, and `svelte-reviewer` run on the frontier model tier (`opus` / `gpt-6-astra` or `gpt-6-sol` / Gemini `inherit` or `pro`); `technical-writer` runs on `sonnet` / `gpt-6-sol` / Gemini `inherit` (or `flash` when requested); effort defaults match `.agents/README.md` | `.agents/README.md`; `.agents/review-policy.json`; `TestAgentSetupParity` |
 | `verify+review` | `CLAUDE.md` only imports `@AGENTS.md`, `AGENTS.md` stays strictly `< 24,000` bytes and matches `.agents/rules-index.md` in numbered domains and row counts, and all role/skill/hook/MCP adapters pass parity checks | `.agents/README.md`; `task ateam:doctor`; `TestAgentSetupParity`, `TestAgentSetupParitySensitivity` |
@@ -186,7 +189,8 @@ The canonical protocol is [`.agents/protocol.md`](.agents/protocol.md); role con
   issue, OpenSpec design, docs-only PR, or code/UI PR), **Scope/non-goals**, **Definition of Done/verification**, and
   **Stop boundary**. When a prompt leaves any of the four ambiguous, stop first, propose a concise 3–4 bullet
   recommended Definition of Done, and ask at most 1–3 targeted questions; once confirmed, run autonomously to that
-  stop boundary without pausing on routine steps.
+  stop boundary without pausing on routine steps. Non-trivial work declares a `quick` or `design` track and by
+  default stops at proposal approval (`Hold: OPEN-Q`).
 - **Claim:** a draft PR opened before the work, in its own worktree on an agent-prefixed branch (`claude/<topic>`,
   `codex/<topic>`, `gemini/<topic>`; CLI uses `../semteams-wt/<branch>`, Enjoy desktop uses `move_to_worktree` under
   `.worktrees/<branch>`) with `Closes #n` (or `Addresses #n` for an epic). No draft PR, no claim. Primary checkout is

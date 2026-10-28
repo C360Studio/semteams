@@ -35,6 +35,11 @@ conservative OpenSpec task truth. Role contracts, `.agents/review-policy.json`, 
 OpenSpec changes are contract deltas, not backlogs. Sequencing, discovery, holds, and future work belong in GitHub
 issues.
 
+ATeam's test-to-spec default (`ateam test-spec` / `task test:spec`: a `// spec:` reference on every Go and Vitest
+test) is deferred to `horizon:post-mvp` (owner ruling on #374) until
+[C360Studio/ateam#237](https://github.com/C360Studio/ateam/issues/237) can scope it to new tests; SemTeams has no
+`task test:spec` target and no CI gate for it.
+
 ## Bounded port and extraction scope
 
 When extracting agent-runtime packages from the frozen SemStreams pin (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`) or
@@ -59,6 +64,18 @@ rewired parked pack, or an unproved composition-root invariant.
   When a prompt leaves any of the four ambiguous, stop first, propose a concise 3–4 bullet recommended Definition of
   Done the owner can approve or adjust in one reply, and ask at most 1–3 targeted questions; once set, run autonomously
   to that stop boundary without pausing on routine steps.
+  - **Proposal approval** (owner ruling on #374): for non-trivial work the default Stop boundary is proposal approval:
+    a one-page OpenSpec `proposal.md` (≤ 60 lines; detail goes in `tasks.md` or `design.md`; `task spec:check` warns
+    past it) with an empty `Approved-by:` line, and a first task carrying `Hold: OPEN-Q proposal awaits owner approval`
+    until the owner fills `Approved-by: <name> (<YYYY-MM-DD>)` and removes the hold in the same edit; the line may link
+    the issue comment where the owner ruled. The agent stops at the hold and hands off.
+  - **Track:** a non-trivial change also declares its track: `design` when it adds a spec Requirement, touches more
+    than one capability under `openspec/specs/`, adds exported surface reachable from an adopting repository, or
+    touches a boot path, durability/ack behavior, or a gate file, otherwise `quick` with no `design.md`. On `design`,
+    the [design](skills/design/SKILL.md) skill drafts `design.md` in OpenSpec's `spec-driven` sections (≤ 120 lines;
+    `task spec:check` warns past it), and the one approval hold covers `proposal.md` and `design.md`. SemTeams runs no
+    `Gate files` check (#372); a gate file here is one that decides whether a pull request may merge:
+    `.agents/review-policy.json`, `scripts/merge-check.sh`, and `.github/workflows/`.
 - **Take work:** an unclaimed issue → a dedicated worktree on an agent-prefixed branch (`claude/<topic>`,
   `codex/<topic>`, `gemini/<topic>`; the prefix names who claimed it) → push → draft PR with `Closes #n` (or
   `Addresses #n` for an epic) → then implementation. One claimed PR owns one worktree. When multiple agents share a
@@ -72,6 +89,12 @@ rewired parked pack, or an unproved composition-root invariant.
   inside the path `move_to_worktree` returns. Pushed claim branches update by merging `origin/main`, never by rebase or
   force-push: a review record names the commit SHA it read. Heavy local gates (`task test:integration`,
   `task ui:test:e2e`, `task validate`) run one agent at a time on a shared host.
+- **Prove tests can fail:** state the correct behavior and one plausible wrong behavior, and compute expected outcomes
+  from an independent oracle, never by repeating production logic. Show non-trivial logic able to fail without a git
+  command that discards state: `task mutate:check -- -pkg <pkg> -test <Test> -file <file.go> -mutant <copy> -expect
+  <file_test.go:N>` (`ateam mutate`: `go test -overlay` against a mutant kept outside the repository; prefix
+  `GOFLAGS=-tags=integration` for an integration-tagged test), or `cp` + `shasum -a 256` before and after for Vitest
+  and anything `-overlay` cannot reach. Report `detection`, `survivor`, `invalid`, or `inconclusive`.
 - **File:** a defect in code in this repository that the active change does not fix is always filed as a GitHub issue,
   whether the code was carried, extracted, or written here. Check for an existing issue first (`gh issue list --search`).
   When the defect's code exists only on a pull request's branch, the issue is labelled `status:blocked` with that pull

@@ -30,6 +30,7 @@ Work in the claim's dedicated worktree (`../semteams-wt/<branch>` for CLI sessio
 | `task openspec:queue` | Shows each in-flight OpenSpec change with its `Hold:` lines and blocking conditions (alias: `task spec:queue`) |
 | `task openspec:queue-test` | Runs fixture tests for `scripts/openspec-queue.sh` |
 | `task publish:verify-test` | Runs fixture tests for `scripts/publish-verify.sh` |
+| `task mutate:check -- <flags>` | Runs `ateam mutate` (`-pkg -test -file -mutant -expect`): a non-destructive Go `-overlay` mutation check against a mutant kept outside the repository, reporting `detection`, `survivor`, `invalid`, or `inconclusive` (`GOFLAGS=-tags=integration` reaches integration-tagged tests) |
 | `task merge:check -- <pr>` | Runs `scripts/merge-check.sh` (`ateam review gate`) against GitHub `Required` ruleset, review policy/record, and `class:flake` issues |
 | `task validate` / `task verify` | Read-only local parity gate mirroring `Repository CI` (`Required` aggregate across Go, UI, and Governance lanes via `scripts/validate.sh`) without mutating tracked or untracked worktree files |
 
@@ -37,8 +38,8 @@ Select gates by diff scope during iteration, and run `task validate` (alias `tas
 
 - **Documentation, `.agents/`, `.claude/`, `.codex/`, or `.gemini/` files:** `task ateam:doctor`, `go test ./test/contract/... -run 'TestAgentSetupParity|TestValidateTask' -v`, `task openspec:validate`, and `task openspec:queue-test`.
 - **An OpenSpec change (`openspec/`):** `task openspec:validate`, `task openspec:queue-test`, then inspect `task openspec:queue`.
-- **Go backend, product shell (`cmd/semteams/`), catalog (`internal/runtimecatalog`), or rule packs (`configs/`):** focused `go test` first during iteration, then `task lint`, `task test:race`, `go build ./...`, and `task schema:generate && task schema:check-changes` when component/payload registrations change. Prove non-trivial test sensitivity with `ateam mutate` or a temporary `cp` + SHA-256 restore check.
-- **SvelteKit UI (`ui/`):** `task ui:lint`, `task ui:check`, `task ui:test`, `npm --prefix ui run generate-types:check`, and `task ui:build`; add focused `task ui:test:e2e` journeys when interactive browser flows or `/work` / `/pulse` workbench behavior change.
+- **Go backend, product shell (`cmd/semteams/`), catalog (`internal/runtimecatalog`), or rule packs (`configs/`):** focused `go test` first during iteration, then `task lint`, `task test:race`, `go build ./...`, and `task schema:generate && task schema:check-changes` when component/payload registrations change. Prove non-trivial logic able to fail with `task mutate:check` (`ateam mutate`), or `cp` + SHA-256 where `go test -overlay` cannot reach.
+- **SvelteKit UI (`ui/`):** `task ui:lint`, `task ui:check`, `task ui:test`, `npm --prefix ui run generate-types:check`, and `task ui:build`; prove non-trivial logic able to fail with a `cp` + SHA-256 restore check (`ateam mutate` is Go-only); add focused `task ui:test:e2e` journeys when interactive browser flows or `/work` / `/pulse` workbench behavior change.
 - **Before any implementation push:** `task validate` (`task verify`). Do not hand-run a narrower command in place of a gate CI runs.
 
 ## 2. Protect Shared Test Infrastructure
