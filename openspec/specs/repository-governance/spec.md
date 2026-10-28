@@ -171,7 +171,8 @@ pull request's base commit, and `Required` SHALL depend on it.
 
 #### Scenario: A code pull request whose latest review record does not approve fails Required
 
-- GIVEN a non-draft code pull request whose latest review record names one of its commits
+- GIVEN a non-draft code pull request whose latest review record from the agent named on the PR body's `reviewed-by:`
+  line names one of its commits
 - WHEN that record has no `Verdict:` line outside code fences, more than one, or one that is not `Verdict: APPROVE`
 - THEN `Merge check` fails and `Required` fails (ATeam v0.3.3, `C360Studio/ateam#201`)
 - AND whether the findings justify an approving verdict stays review only

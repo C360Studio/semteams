@@ -21,9 +21,17 @@ below holds:
   and posts no review record.
 - **Approval.** Until the owner rules on ateam's proposal-approval default (#374), the binding ruling is the owner's
   comment on the issue (`.agents/protocol.md` § Authoritative state homes); the `Approved-by:` / `Hold: OPEN-Q` step
-  above applies only once #374 adopts it.
+  above applies only once #374 adopts it, as does the `design` skill's step of leaving that hold in place
+  (`.agents/skills/design/SKILL.md` § 3).
+- **No track gate yet.** `.agents/protocol.md` declares no `quick` / `design` track and has no numbered Clarify
+  section until #374 rules, so the base's "a change the Clarify gate put on the `design` track" precondition and the
+  `design` skill's "protocol § 2 Clarify" pointer do not gate this role; the architect works on any design or
+  inventory the caller names.
+- **No routes.** `.agents/review-policy.json` declares only `model_tiers`, `effort_bands` and `cross_provider`, with no
+  `routes` key, so it routes no role, not even the developer and reviewer the base names.
 - **Effort.** SemTeams pins this role at `medium` effort with escalation to `high` for cross-cutting designs
-  (`.agents/README.md`), not ATeam ADR 0003's `high` default.
+  (`.agents/README.md`), not ATeam ADR 0003's `high` default; that ADR scopes its defaults to the ATeam repository
+  ("the defaults here are this repository's", `docs/adr/0003-roles-and-routes.md:68` at `v0.3.3`).
 
 ## Purpose and authority
 
