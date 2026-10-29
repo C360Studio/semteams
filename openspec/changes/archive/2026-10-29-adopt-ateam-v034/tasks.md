@@ -47,5 +47,5 @@
   Acceptance: `AGENTS.md` is under 24,000 bytes and `TestAgentSetupParity` passes. Evidence: commit d6a1d2d5;
   `wc -c AGENTS.md` is 23,800; `go test ./test/contract/... -count=1` passes; `task ateam:doctor` reports no violations;
   `task validate` passed on a clean tree at d6a1d2d5 with ateam v0.3.4 first on PATH.
-- [ ] 5.2 Apply the `repository-governance` delta in this change. Acceptance: `task spec:check` and
-  `task validate` pass on a clean tree, run with ateam v0.3.4 first on PATH.
+- [x] 5.2 Apply the `repository-governance` delta in this change. Acceptance: `task spec:check` and
+  `task validate` pass on a clean tree, run with ateam v0.3.4 first on PATH. Evidence: `openspec archive adopt-ateam-v034` synced the delta (+1 ~2 -1) in the archive commit; `task validate` passed on that clean tree.
