@@ -1,8 +1,9 @@
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md` by filling `Approved-by: <name> (<YYYY-MM-DD>)` and removing
-  this hold in the same edit, ruling on design Open Questions 1-2 (#369, #375).
-  Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approves `proposal.md` and `design.md` by filling `Approved-by: <name> (<YYYY-MM-DD>)` and removing
+  this hold in the same edit, ruling on design Open Questions 1-2 (#369, #375). Evidence: the owner approved in Enjoy
+  on 2026-10-29, ruling D3 A (keep the explicit strict step) and authorizing the ruleset change; Claude wrote the
+  header at their request and added `Merge check` to the `main-required-checks` ruleset (id 25924145) the same day.
 
 ## 2. Pin and harness
 

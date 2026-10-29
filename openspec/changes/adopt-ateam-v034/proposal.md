@@ -1,6 +1,6 @@
 # Adopt ATeam v0.3.4: separate Merge check workflow, draft deferral, and retire openspec-queue.sh
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-10-29)
 
 Track: design (edits `.github/workflows/`, a gate file, and modifies `repository-governance` Requirements).
 
