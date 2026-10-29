@@ -4,8 +4,8 @@
 
 The repository SHALL run one workflow named `Repository CI` for every push to `main` and every non-draft pull request
 targeting `main`, and SHALL report the stable `Required` aggregate check-run expected by `ateam review gate` and
-`Publish`. On a draft pull request every job SHALL be skipped and renamed, so a draft head carries no check-run named
-`Required`.
+`Publish`. On a draft pull request every job SHALL be skipped and its name SHALL NOT evaluate to `Required`, so a draft
+head carries no check-run named `Required`.
 
 #### Scenario: Any pull request reports the required context
 
@@ -25,8 +25,9 @@ targeting `main`, and SHALL report the stable `Required` aggregate check-run exp
 
 - GIVEN a draft pull request targets `main`
 - WHEN `Repository CI` runs on it
-- THEN every job is skipped and named `<name> (draft, skipped)`, so no skipped check-run named `Required` counts as
-  passing (ATeam v0.3.4, `C360Studio/ateam#250`)
+- THEN every job is skipped, and no skipped check-run is named `Required`, so none counts as passing; GitHub does not
+  evaluate a skipped job's `name:` expression, so the check-run shows the raw expression (ATeam v0.3.4,
+  `C360Studio/ateam#250`)
 - AND marking the pull request ready runs every job on the `ready_for_review` event
 
 ### Requirement: Repository CI runs the obvious repository checks
@@ -115,5 +116,5 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 
 - GIVEN a draft pull request
 - WHEN `merge-check.yml` runs
-- THEN its job is skipped and named `Merge check (draft, skipped)`
+- THEN its job is skipped, and its check-run is not named `Merge check` (it shows the raw `name:` expression)
 - AND marking the pull request ready runs `Merge check` with the review check applied

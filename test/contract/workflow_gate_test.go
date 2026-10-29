@@ -196,10 +196,14 @@ func ciWorkflowGateViolations(data []byte) []string {
 	for _, s := range req.Steps {
 		run.WriteString(s.Run)
 	}
+	// Fail closed: each lane must equal success, so failure, cancelled, skipped and a missing result all fail.
 	for id := range lanes {
-		if !strings.Contains(run.String(), "needs."+id+".result") {
-			bad("required step does not read needs.%s.result", id)
+		if !strings.Contains(run.String(), `"${{ needs.`+id+`.result }}" != "success"`) {
+			bad("required step does not fail unless needs.%s.result is success", id)
 		}
+	}
+	if !strings.Contains(run.String(), "exit 1") || strings.Contains(run.String(), "exit 0") {
+		bad("required step must exit 1 on a failed lane and never exit 0")
 	}
 	if strings.Contains(run.String(), "needs.merge-check") {
 		bad("required step still reads needs.merge-check")
@@ -285,5 +289,7 @@ func TestCIWorkflowGate(t *testing.T) {
 		{"draft guard dropped on go", "name: " + draftName("Go") + "\n    if: " + ciDraftGuard + "\n", "name: " + draftName("Go") + "\n", []string{"go if"}},
 		{"rename dropped on governance", "name: " + draftName("Governance"), "name: Governance", []string{"governance name"}},
 		{"edited added to ci triggers", "ready_for_review]", "ready_for_review, edited]", []string{"pull_request types"}},
+		{"go lane compared to failure only", `"${{ needs.go.result }}" != "success"`, `"${{ needs.go.result }}" == "failure"`, []string{"needs.go.result is success"}},
+		{"required step exits 0", "            exit 1\n", "            exit 0\n", []string{"exit 1"}},
 	})
 }

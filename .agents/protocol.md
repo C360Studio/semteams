@@ -116,8 +116,8 @@ rewired parked pack, or an unproved composition-root invariant.
   (`openspec archive <id>`, moving the change into `openspec/changes/archive/` + spec sync) as the final content commit
   → narrow reviewer check of the archive/spec sync (any agent's reviewer) → undraft → `task validate`,
   `task merge:check -- <pr>`, `Required`, and `Merge check` green on a head up to date with `main` and with **no
-  known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (each renamed
-  `<name> (draft, skipped)`), so undrafting starts the first run that checks it. On a non-draft code/UI PR,
+  known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (no skipped
+  check-run carries the name `Required` or `Merge check`), so undrafting starts the first run that checks it. On a non-draft code/UI PR,
   `Merge check` (its own workflow, `merge-check.yml`) is red until the approving review record and the `reviewed-by:`
   line exist; the reviewer's description edit that adds `reviewed-by:` reruns it on the `edited` event, as
   [review-pr](skills/review-pr/SKILL.md) § 5 says (never update the branch). That red is expected, not a flake, and it
