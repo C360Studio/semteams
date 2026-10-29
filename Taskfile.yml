@@ -88,7 +88,7 @@ tasks:
     cmds:
       - scripts/merge-check.sh {{.CLI_ARGS}}
 
-  # Mirrors ateam's own target (ateam v0.3.3 Taskfile.yml mutate:check) but calls the pinned,
+  # Mirrors ateam's own target (ateam v0.3.4 Taskfile.yml mutate:check) but calls the pinned,
   # installed ateam binary; SemTeams does not vendor ateam's source. Integration-tagged tests are
   # reached through the environment: GOFLAGS=-tags=integration task mutate:check -- ...
   mutate:check:
@@ -97,10 +97,9 @@ tasks:
       - "ateam mutate {{.CLI_ARGS}}"
 
   spec:check:
-    desc: Validate all OpenSpec changes and specs strictly, and fail on a hold written outside every task
+    desc: Validate all OpenSpec changes and specs strictly, then run ateam's spec-check (fails on a hold written outside every task)
     cmds:
       - openspec validate --all --strict
-      - scripts/openspec-queue.sh --check
       - ateam state spec-check
 
   spec:queue:

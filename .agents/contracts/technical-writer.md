@@ -32,7 +32,7 @@ does not decide, implement, or approve.
    - Never write or leave a task asserting a post-merge fact ("CI green", "merge-ready") or waiting on a step after the
      archive commit; it strands the change.
    - Format holds inside the unticked task they stop as `Hold: <reason>` so `task openspec:queue` surfaces them, and
-     verify with `task openspec:validate` and `task openspec:queue-test`.
+     verify with `task openspec:validate`.
 4. **Human-dev-friendly prose (owner documentation rule):** test a page by reading its opening paragraph as a developer
    who just cloned the repository and has read no plan or issue: every coined term is defined in one line at first use,
    nouns are concrete, there is no marketing register, and coordination vocabulary (holds, rulings, overlays) appears
@@ -54,6 +54,6 @@ does not decide, implement, or approve.
 
 ## Handoff
 
-Return the files changed, the verification commands run (`task openspec:validate`, `task openspec:queue-test`,
-`task ateam:doctor`, `go test ./test/contract/... -run TestAgentSetupParity -v`) and their results, and every claim
-in the docs you could not verify against code.
+Return the files changed, the verification commands run (`task openspec:validate`, `task ateam:doctor`,
+`go test ./test/contract/... -run TestAgentSetupParity -v`) and their results, and every claim in the docs you could not
+verify against code.

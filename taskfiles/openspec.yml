@@ -18,23 +18,8 @@ tasks:
     cmds:
       - ateam state spec-queue
 
-  queue-strict:
-    desc: |
-      Same report, but exits non-zero when any caveat is found. For a
-      pre-archive check or CI. Deliberately NOT wired into `task check`:
-      an in-flight change with a recorded halt is a normal, healthy state
-      and must not fail the everyday gate.
-    cmds:
-      - scripts/openspec-queue.sh --strict
-
-  queue-test:
-    desc: Verify scripts/openspec-queue.sh (--check and --strict) catches the caveat shapes it claims to
-    cmds:
-      - scripts/openspec-queue_fixture_test.sh
-
   validate:
-    desc: Validate all OpenSpec changes and specs strictly, and fail on a hold written outside every task
+    desc: Validate all OpenSpec changes and specs strictly, then run ateam's spec-check (fails on a hold written outside every task)
     cmds:
       - openspec validate --all --strict
-      - scripts/openspec-queue.sh --check
       - ateam state spec-check

@@ -1,369 +1,24 @@
 package contract
 
 import (
-	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"strconv"
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
 
-// spec-queue › all four requirements: scripts/openspec-queue.sh runs from a throwaway root with a
-// stand-in openspec CLI and one planted tasks.md, as openspec/changes/fx/tasks.md.
-
-const openspecStandIn = `#!/bin/sh
-[ "$*" = "list --json" ] || { echo "stand-in openspec: unexpected call: $*" >&2; exit 3; }
-`
-
-const (
-	listOneChange = `echo '{"changes":[{"name":"fx","completedTasks":0,"totalTasks":2}]}'`
-	listNoChange  = `echo '{"changes":[]}'`
-	listFails     = `echo 'stand-in openspec: list failed' >&2; exit 1`
-	listNotJSON   = `echo 'not json'`
-)
-
-const holdOutsideMsg = "Hold: outside every task; task spec:queue cannot show it. Put it in the task it stops."
-
-const notUTF8Tasks = "## 1. Work\n\n- [ ] 1.1 (D) Write the reader. \xff\xfe\n"
-
-type queueRun struct {
-	stdout, stderr string
-	status         int
-}
-
-func runSpecQueue(t *testing.T, list, tasks string, args ...string) queueRun {
-	t.Helper()
-	root := copyScript(t, "openspec-queue.sh")
-	bin := filepath.Join(root, "node_modules", ".bin")
-	change := filepath.Join(root, "openspec", "changes", "fx")
-	for _, dir := range []string{bin, change} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(bin, "openspec"), []byte(openspecStandIn+list+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(change, "tasks.md"), []byte(tasks), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("bash", append([]string{filepath.Join("scripts", "openspec-queue.sh")}, args...)...)
-	cmd.Dir = root
-	var stdout, stderr strings.Builder
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	err := cmd.Run()
-	r := queueRun{stdout: stdout.String(), stderr: stderr.String()}
-	var exit *exec.ExitError
-	switch {
-	case errors.As(err, &exit):
-		r.status = exit.ExitCode()
-	case err != nil:
-		t.Fatalf("run openspec-queue.sh: %v", err)
-	}
-	return r
-}
-
-func lines(ls ...string) string { return strings.Join(ls, "\n") + "\n" }
-
-type queueLine struct {
-	label string
-	line  int
-	text  string
-}
-
-func (l queueLine) String() string { return fmt.Sprintf("%s L%d %q", l.label, l.line, l.text) }
-
-var (
-	reportedRE = regexp.MustCompile(`^      (\S+) +L(\d+) +(.*)$`)
-	okLineRE   = regexp.MustCompile(`(?m)^      ok +no halt/hold/deliberate marker in the open tasks$`)
-)
-
-func requireReported(t *testing.T, r queueRun, want ...queueLine) {
-	t.Helper()
-	if r.status != 0 {
-		t.Fatalf("exit %d, want 0\nstdout:\n%s\nstderr:\n%s", r.status, r.stdout, r.stderr)
-	}
-	var got []queueLine
-	for _, s := range strings.Split(r.stdout, "\n") {
-		m := reportedRE.FindStringSubmatch(s)
-		if m == nil {
-			continue
-		}
-		n, _ := strconv.Atoi(m[2])
-		got = append(got, queueLine{m[1], n, m[3]})
-		if len(m[3]) > 104 {
-			t.Errorf("reported text is %d bytes, over the queue's 104: %q", len(m[3]), m[3])
-		}
-	}
-	same := len(got) == len(want)
-	for i := 0; same && i < len(want); i++ {
-		same = got[i].label == want[i].label && got[i].line == want[i].line && strings.HasPrefix(got[i].text, want[i].text)
-	}
-	if !same {
-		t.Fatalf("reported %v\nwant %v (each text a prefix)\nstdout:\n%s", got, want, r.stdout)
-	}
-	if ok := okLineRE.MatchString(r.stdout); ok != (len(want) == 0) {
-		t.Fatalf("ok line printed: %t, want %t\nstdout:\n%s", ok, len(want) == 0, r.stdout)
-	}
-}
-
-func requireCannotRead(t *testing.T, r queueRun) {
-	t.Helper()
-	const want = "queue unavailable: cannot read openspec/changes/fx/tasks.md"
-	if r.status != 2 {
-		t.Errorf("exit %d, want 2\nstderr:\n%s", r.status, r.stderr)
-	}
-	if !slices.Contains(strings.Split(r.stderr, "\n"), want) {
-		t.Errorf("stderr has no line %q\nstderr:\n%s", want, r.stderr)
-	}
-}
-
-var taskB91c60d = []string{
-	"- [ ] 3.1 (D) `TestNoSecondAuthorityNameSensitivity`, written first, in `authority_test.go`: the fixture of",
-	"      `design.md` D2 (the seven matching names across a public, an internal and a `main` package; the four",
-	"      non-matches: an unexported `federationMeta`, lowercase `federation`, a `_test.go` `TestFederation`, a comment",
-	"      and a string literal saying `BuildGlobalID`). Seen to fail first. Then `TestNoSecondAuthorityName` over the",
-	"      repository, as a second predicate over the public-signature loader (`signatures_test.go:212-258`): every",
-	"      exported object of every loaded module package — package scope, methods of named types, struct fields — whose",
-	"      name contains `Federation`, `GlobalID` or `EntityIRI`, with D2's failure line. Gate: `task test:unit`.",
-	"      Hold: until PR #48 merges — it carries `signatures_test.go`, and at its pushed head `c64ac338` the check names",
-	"      seven identifiers #48 is ruled to remove (design P2). When the hold lifts, the `signatures_test.go` lines this",
-	"      file and `design.md` cite (`:212-258` at `c64ac338`) are re-cited at #48's merged head, where the load has",
-	"      moved into `loadModuleTypes`.",
-	"- [ ] 3.2 (D) Shown able to fail, as 2.3: drop the internal-package scope; drop methods; drop struct fields; match",
-}
-
-var tasksPreamble = []string{
-	"# Tasks: fx",
-	"",
-	"Each task names the outcome and the gate that proves it. An unticked task that carries `Hold:` waits for what it",
-	"names.",
-	"",
-}
-
-func TestSpecQueueHolds(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		tasks string
-		want  []queueLine
-	}{
-		{"H1 hold on a continuation line", lines(taskB91c60d...),
-			[]queueLine{{"BLOCKED", 8, "3.1 Hold: until PR #48 merges"}}},
-		{"H2 hold in a nested bullet", lines(
-			"- [ ] 3.6 (D) `message`, `pkg/cache` (level 5), destinations by design D5 (#9 comment 5953295358, refining",
-			"      - Every `internal/cache` constructor that returns `Cache` with an error (`NewSimple`, `NewLRU`, `NewTTL`, the",
-			"        hybrid constructor, and `NewFromConfig` through them) returns a nil `Cache` on error, not a nil pointer",
-			"        inside a non-nil interface (`TestCacheConstructorsReturnNilCacheOnError`). Implementer-reported: it failed",
-			"        first for `NewSimple`, `NewLRU` and `NewFromConfig`'s simple and lru paths; the TTL and hybrid ones were",
-			"        fixed in c6d7108.",
-			"      - Hold: `message` waits for task 2.8. Its tests import `internal/semantictest`",
-			"        (`payload_test.go:10`, `triple_helpers_test.go:9` at the pin), and the harness copy is task 2.8's.",
-		), []queueLine{{"BLOCKED", 7, "3.6 Hold: `message` waits for task 2.8"}}},
-		{"H3 what the hold waits for is on the next line", lines(
-			"- [ ] 3.12b (D) Read the whole block. Hold:",
-			"      task 3.12a.",
-		), []queueLine{{"BLOCKED", 1, "3.12b Hold: task 3.12a."}}},
-		{"H4 hold on the first line", lines(
-			"- [ ] 3.1 Hold: until PR #48 merges — it carries `signatures_test.go`, and at its pushed head `c64ac338` the",
-			"      check names seven identifiers #48 is ruled to remove (design P2); those lines are re-cited at #48's merged",
-			"      head, where the load moved into `loadModuleTypes`.",
-			"      (D) `TestNoSecondAuthorityNameSensitivity`, written first, in `authority_test.go`: the fixture of",
-			"      `design.md` D2 (the seven matching names across a public, an internal and a `main` package; the four",
-			"      non-matches: an unexported `federationMeta`, lowercase `federation`, a `_test.go` `TestFederation`, a comment",
-			"      and a string literal saying `BuildGlobalID`). Seen to fail first. Then `TestNoSecondAuthorityName` over the",
-			"      repository, as a second predicate over the public-signature loader (`signatures_test.go:212-258`): every",
-			"      exported object of every loaded module package — package scope, methods of named types, struct fields — whose",
-			"      name contains `Federation`, `GlobalID` or `EntityIRI`, with D2's failure line. Gate: `task test:unit`.",
-			"- [ ] 3.2 (D) Shown able to fail, as 2.3: drop the internal-package scope; drop methods; drop struct fields; match",
-		), []queueLine{{"BLOCKED", 1, "3.1 Hold: until PR #48 merges"}}},
-		{"H5 the hold belongs to the next task", lines(
-			"- [ ] 2.1 (D) Write the reader.",
-			"      Gate: `task test:unit`.",
-			"- [ ] 2.2 (D) Write the writer.",
-			"      Hold: until #12 merges.",
-		), []queueLine{{"BLOCKED", 4, "2.2 Hold: until #12 merges."}}},
-		{"H6 ticked task", lines(
-			"- [x] 1.2 (D) Write the reader.",
-			"      Hold: until #12 merges.",
-			"- [ ] 1.3 (D) Write the writer.",
-		), nil},
-		{"H7 hold outside any task", lines(slices.Concat(tasksPreamble, []string{
-			"## 1. Work",
-			"",
-			"- [ ] 1.1 (D) Write the reader.",
-			"      Gate: `task test:unit`.",
-			"",
-			"Hold: task 1.1 waits for #12.",
-		})...), nil},
-		{"H8 other words on a continuation line", lines(
-			"- [ ] 1.1 (D) Write the reader.",
-			"      hold: until #12",
-			"- [ ] 1.2 (D) Write the writer.",
-			"      blocked on #12",
-		), nil},
-		{"H9 a partly done task with a hold", lines(
-			"- [~] 4.2 (D) Port the reader.",
-			"      Hold: until #12 merges.",
-		), []queueLine{{"WONTDO", 1, "4.2 (D) Port the reader."}, {"BLOCKED", 2, "4.2 Hold: until #12 merges."}}},
-		{"H10 a held task with a red first line", lines(
-			"- [ ] 4.2 (D) The end-to-end test is failing on main.",
-			"      Hold: until #12 merges.",
-		), []queueLine{{"RED", 1, "4.2 (D) The end-to-end test is failing on main."}, {"BLOCKED", 2, "4.2 Hold: until #12 merges."}}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			requireReported(t, runSpecQueue(t, listOneChange, tc.tasks), tc.want...)
-		})
-	}
-
-	t.Run("H11 strict run", func(t *testing.T) {
-		if r := runSpecQueue(t, listOneChange, lines(taskB91c60d...), "--strict"); r.status != 1 {
-			t.Errorf("--strict: exit %d, want 1\nstdout:\n%s\nstderr:\n%s", r.status, r.stdout, r.stderr)
-		}
-		if r := runSpecQueue(t, listOneChange, lines(taskB91c60d...)); r.status != 0 {
-			t.Errorf("without --strict: exit %d, want 0\nstdout:\n%s\nstderr:\n%s", r.status, r.stdout, r.stderr)
-		}
-	})
-
-	t.Run("H12 a tasks.md that is not UTF-8", func(t *testing.T) {
-		r := runSpecQueue(t, listOneChange, notUTF8Tasks)
-		requireCannotRead(t, r)
-		for _, s := range strings.Split(r.stdout, "\n") {
-			if f := strings.Fields(s); len(f) > 0 && f[0] == "ok" {
-				t.Errorf("stdout has the ok line %q, want none\nstdout:\n%s", s, r.stdout)
-			}
-		}
-	})
-}
-
-func TestSpecQueueFirstLineCaveats(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		tasks string
-		want  []queueLine
-	}{
-		{"lowercase halt mid-sentence in an open task",
-			lines("- [ ] 4.3 If the pre-v1 wipe window closed before 3.1, halt: record the missed window."),
-			[]queueLine{{"HALT", 1, "4.3 If the pre-v1 wipe window closed before 3.1, halt: record the missed window."}}},
-		{"partial marker regardless of wording",
-			lines("- [~] 4.2 Verifying Workflow.Name equals the Schema own Workflow()."),
-			[]queueLine{{"WONTDO", 1, "4.2 Verifying Workflow.Name equals the Schema own Workflow()."}}},
-		{"explicit RED gate",
-			lines("- [ ] 4.2 RED — semantic e2e is failing, see gh#830."),
-			[]queueLine{{"RED", 1, "4.2 RED — semantic e2e is failing, see gh#830."}}},
-		{"HOLD wording",
-			lines("- [ ] 8.3 On HOLD pending the owner ruling."),
-			[]queueLine{{"BLOCKED", 1, "8.3 On HOLD pending the owner ruling."}}},
-		{"STILL OPEN wording",
-			lines("- [ ] 8.3 **STILL OPEN** — decide whether it rides the sister replay."),
-			[]queueLine{{"OPEN-Q", 1, "8.3 STILL OPEN — decide whether it rides the sister replay."}}},
-		{"deliberate not-done wording",
-			lines("- [ ] 4.2 Not enforced, deliberately, because it converts a posture into a boot failure."),
-			[]queueLine{{"WONTDO", 1, "4.2 Not enforced, deliberately, because it converts a posture into a boot failure."}}},
-		{"completed task mentioning halt is history, not a live condition",
-			lines("- [x] 4.3 The wipe window halt condition was evaluated and did not fire."), nil},
-		{"ordinary open task with no caveat",
-			lines("- [ ] 2.1 Run one comparative benchmark and record it as ADR evidence."), nil},
-		{"clean change emits an explicit no-marker line",
-			lines("- [ ] 2.1 Run one comparative benchmark and record it as ADR evidence.", "- [x] 2.2 Enumerate the consumers."), nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			requireReported(t, runSpecQueue(t, listOneChange, tc.tasks), tc.want...)
-		})
-	}
-}
-
-func TestSpecQueueCheck(t *testing.T) {
-	const path = "openspec/changes/fx/tasks.md"
-	strayParagraph := lines(
-		"# Tasks: fx",
-		"",
-		"## 1. Work",
-		"",
-		"- [ ] 1.1 (D) Write the reader.",
-		"      Gate: `task test:unit`.",
-		"",
-		"Hold: task 1.1 waits for #12.",
-	)
-	for _, tc := range []struct {
-		name   string
-		list   string
-		tasks  string
-		status int
-		stdout string
-	}{
-		{"C1 hold in a paragraph after the task list", listOneChange, strayParagraph,
-			1, path + ":8: " + holdOutsideMsg + "\n"},
-		{"C2 hold in a heading", listOneChange, lines(
-			"# Tasks: fx",
-			"",
-			"## 1. Work",
-			"",
-			"- [x] 1.1 (D) Write the reader.",
-			"",
-			"## 3. Hold: waits for #12",
-			"",
-			"- [ ] 3.1 (D) Write the writer.",
-		), 1, path + ":7: " + holdOutsideMsg + "\n"},
-		{"C3 the sentence that explains holds", listOneChange, lines(slices.Concat(tasksPreamble, []string{
-			"## 1. Work",
-			"",
-			"- [ ] 1.1 (D) Write the reader.",
-		})...), 0, "holds: ok (1 tasks.md read)\n"},
-		{"C4 hold in a ticked task", listOneChange, lines(
-			"# Tasks: fx",
-			"",
-			"## 1. Work",
-			"",
-			"- [x] 1.2 (D) Write the reader.",
-			"      Hold: until #12 merges.",
-			"- [ ] 1.3 (D) Write the writer.",
-		), 0, "holds: ok (1 tasks.md read)\n"},
-		{"C5 hold in an open task", listOneChange,
-			lines(slices.Concat([]string{"# Tasks: fx", "", "## 3. C-1: the name check", ""}, taskB91c60d)...),
-			0, "holds: ok (1 tasks.md read)\n"},
-		{"C6 no change in flight", listNoChange, strayParagraph,
-			0, "holds: ok (0 tasks.md read)\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := runSpecQueue(t, tc.list, tc.tasks, "--check")
-			if r.status != tc.status || r.stdout != tc.stdout {
-				t.Fatalf("exit %d, stdout %q\nwant exit %d, stdout %q\nstderr:\n%s", r.status, r.stdout, tc.status, tc.stdout, r.stderr)
-			}
-		})
-	}
-
-	for _, tc := range []struct{ name, list string }{
-		{"C7 the change list exits non-zero", listFails},
-		{"C7 the change list is not JSON", listNotJSON},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := runSpecQueue(t, tc.list, strayParagraph, "--check")
-			if r.status != 2 || !strings.HasPrefix(r.stderr, "queue unavailable:") || strings.Contains(r.stdout, "holds: ok") {
-				t.Fatalf("exit %d, stdout %q, stderr %q\nwant exit 2, stderr starting %q, no %q on stdout",
-					r.status, r.stdout, r.stderr, "queue unavailable:", "holds: ok")
-			}
-		})
-	}
-
-	t.Run("C8 a tasks.md that is not UTF-8", func(t *testing.T) {
-		r := runSpecQueue(t, listOneChange, notUTF8Tasks, "--check")
-		requireCannotRead(t, r)
-		if strings.Contains(r.stdout, "holds: ok") {
-			t.Errorf("stdout has %q, want none\nstdout:\n%s", "holds: ok", r.stdout)
-		}
-	})
-}
+// repository-governance › governance checks: `task spec:check` and `task openspec:validate` run
+// `openspec validate --all --strict` and then `ateam state spec-check` (design D3 of
+// adopt-ateam-v034). The explicit strict step keeps the check fail-closed: without `openspec`,
+// `ateam state spec-check` prints "strict validation skipped" and exits 0 (ateam v0.3.4
+// internal/state/openspec.go). Hold placement is ateam's `spec-check` since #369 retired the
+// repository's own queue script.
 
 const (
 	specValidateCmd   = `openspec validate --all --strict`
-	specHoldCmd       = `scripts/openspec-queue.sh --check`
 	specAteamCheckCmd = `ateam state spec-check`
 )
 
@@ -395,22 +50,24 @@ func TestSpecCheckWiring(t *testing.T) {
 		return []byte(s)
 	}
 	t.Run("clean fixture", func(t *testing.T) {
-		requireNoViolations(t, "clean fixture", specCheckWiringViolations(taskfile("", specValidateCmd, specHoldCmd, specAteamCheckCmd), "spec:check"))
+		requireNoViolations(t, "clean fixture", specCheckWiringViolations(taskfile("", specValidateCmd, specAteamCheckCmd), "spec:check"))
 	})
 	for _, tc := range []struct {
 		name  string
 		file  []byte
 		wants []string
 	}{
-		{"check line removed", taskfile("", specValidateCmd, specAteamCheckCmd),
-			[]string{"spec:check", "command 2", `want "` + specHoldCmd + `"`}},
-		{"ateam spec-check line removed", taskfile("", specValidateCmd, specHoldCmd),
-			[]string{"spec:check", "command 3", `want "` + specAteamCheckCmd + `"`}},
-		{"the first two lines swapped", taskfile("", specHoldCmd, specValidateCmd, specAteamCheckCmd),
-			[]string{"spec:check", "command 2", `want "` + specHoldCmd + `"`}},
-		{"--check dropped", taskfile("", specValidateCmd, "scripts/openspec-queue.sh", specAteamCheckCmd),
-			[]string{"spec:check", "command 2", `want "` + specHoldCmd + `"`}},
-		{"ignore_error on the task", taskfile("    ignore_error: true\n", specValidateCmd, specHoldCmd, specAteamCheckCmd),
+		{"ateam spec-check line removed", taskfile("", specValidateCmd),
+			[]string{"spec:check", "command 2", `want "` + specAteamCheckCmd + `"`}},
+		{"strict validate line removed", taskfile("", specAteamCheckCmd),
+			[]string{"spec:check", "command 1", `want "` + specValidateCmd + `"`}},
+		{"the two lines swapped", taskfile("", specAteamCheckCmd, specValidateCmd),
+			[]string{"spec:check", "command 1", `want "` + specValidateCmd + `"`}},
+		{"--strict dropped", taskfile("", "openspec validate --all", specAteamCheckCmd),
+			[]string{"spec:check", "command 1", `want "` + specValidateCmd + `"`}},
+		{"a third command added", taskfile("", specValidateCmd, specAteamCheckCmd, "scripts/hold-check.sh"),
+			[]string{"spec:check", "runs 3 commands, want exactly 2"}},
+		{"ignore_error on the task", taskfile("    ignore_error: true\n", specValidateCmd, specAteamCheckCmd),
 			[]string{"spec:check", "ignore_error"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -446,7 +103,7 @@ func specCheckWiringViolations(taskfile []byte, taskName string) []string {
 			violations = append(violations, fmt.Sprintf("Taskfile.yml: %s: key %q can skip a command or discard its exit status; only desc, summary and cmds are allowed", taskName, key))
 		}
 	}
-	wantCmds := []string{specValidateCmd, specHoldCmd, specAteamCheckCmd}
+	wantCmds := []string{specValidateCmd, specAteamCheckCmd}
 	for i, want := range wantCmds {
 		got := "nothing"
 		if i < len(cmds) {

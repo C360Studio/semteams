@@ -36,9 +36,9 @@ else bad node "not found"; fi
 
 if command -v npm >/dev/null; then ok npm "$(npm --version)"; else bad npm "not found"; fi
 
-# python3: scripts/openspec-queue.sh and scripts/qualify-migration-browser.py use it.
+# python3: scripts/qualify-migration-browser.py and its unittest (task test:browser-runner) use it.
 if command -v python3 >/dev/null; then ok python3 "$(python3 --version 2>&1 | sed 's/^Python //')"
-else bad python3 "not found (task spec:check and task validate need it)"; fi
+else bad python3 "not found (task test:browser-runner and task validate need it)"; fi
 
 # jq: scripts/publish-verify.sh and scripts/publish-verify_fixture_test.sh use it.
 if command -v jq >/dev/null; then ok jq "$(jq --version 2>&1)"
@@ -59,12 +59,12 @@ if command -v openspec >/dev/null; then
   if [ "$have_openspec" = "$want_openspec" ]; then ok openspec "$have_openspec"; else bad openspec "${have_openspec:-unknown} != $want_openspec"; fi
 else bad openspec "not found (npm install --global @fission-ai/openspec@1.7.0)"; fi
 
-# ateam: pinned in .github/workflows/ci.yml (v0.3.3).
+# ateam: pinned in .github/workflows/ci.yml (v0.3.4).
 if command -v ateam >/dev/null; then
-  want_ateam="v0.3.3"
+  want_ateam="v0.3.4"
   have_ateam=$(ateam version 2>&1 | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
   if [ "$have_ateam" = "$want_ateam" ]; then ok ateam "$have_ateam"; else bad ateam "${have_ateam:-unknown} != $want_ateam"; fi
-else bad ateam "not found (GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.3)"; fi
+else bad ateam "not found (GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.4)"; fi
 
 # ui/node_modules: required for UI checks and task validate.
 if [ -d "ui/node_modules" ]; then

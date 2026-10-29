@@ -3,8 +3,8 @@ name: Repository CI
 on:
   push:
     branches: [main]
-  # Listing types replaces GitHub's default three, so ready_for_review is listed with them: marking a draft ready
-  # starts the run whose Merge check applies the review check, which does not fail a draft.
+  # Listing types replaces GitHub's default three, so ready_for_review is listed with them: a draft skips every job, so
+  # marking it ready starts the first run that checks it. Merge check is its own workflow (merge-check.yml).
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -15,9 +15,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'ready_for_review' }}
 
+# On a draft every job is skipped and renamed, so a draft head carries no check run named Required (GitHub counts a
+# skipped one as passing, ateam #250). A skipped job's name is not evaluated: the draft check run shows the raw
+# expression. Push events are unaffected.
 jobs:
   go:
-    name: Go
+    name: ${{ github.event.pull_request.draft && 'Go (draft, skipped)' || 'Go' }}
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,7 +37,7 @@ jobs:
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
           go install github.com/mgechev/revive@v1.15.0
-          GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.3
+          GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.4
 
       - name: Lint
         run: task lint
@@ -56,7 +60,8 @@ jobs:
           task schema:check-changes
 
   ui:
-    name: UI
+    name: ${{ github.event.pull_request.draft && 'UI (draft, skipped)' || 'UI' }}
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     env:
       OPENAPI_SPEC_PATH: ../specs/openapi.v3.yaml
@@ -94,7 +99,8 @@ jobs:
         run: npm run build
 
   governance:
-    name: Governance
+    name: ${{ github.event.pull_request.draft && 'Governance (draft, skipped)' || 'Governance' }}
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -116,7 +122,7 @@ jobs:
           GOTOOLCHAIN: auto
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
-          go install github.com/c360studio/ateam/cmd/ateam@v0.3.3
+          go install github.com/c360studio/ateam/cmd/ateam@v0.3.4
           npm install --global @fission-ai/openspec@1.7.0
 
       - name: Check ATeam multi-agent parity
@@ -125,63 +131,23 @@ jobs:
       - name: Validate OpenSpec
         run: task openspec:validate
 
-      - name: Test OpenSpec queue reporter
-        run: task openspec:queue-test
-
       - name: Test publish verify script
         run: task publish:verify-test
 
-  # Up-to-date rule, review check and known-flake check (scripts/merge-check.sh), as in ateam's own ci.yml (#372).
-  merge-check:
-    name: Merge check
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-    steps:
-      # The base commit, not the pull request: the script and the review policy it reads are not taken from the tree
-      # they judge (ateam #140); the pull request itself is read through the API. This workflow file is read from the
-      # pull request, so a change to it is caught by review only (ateam's Gate files workflow is a non-goal, #372).
-      - name: Checkout base commit
-        uses: actions/checkout@v5
-        with:
-          ref: ${{ github.event.pull_request.base.sha || github.sha }}
-          persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: false
-
-      - name: Install pinned ateam
-        env:
-          GOTOOLCHAIN: auto
-        run: GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@v0.3.3
-
-      # Exit 1 is a rule failure, exit 2 means a forge read was unavailable; the gate's log names which.
-      - name: Check the up-to-date rule, the review and its strength, and known flakes
-        env:
-          ATEAM: ${{ runner.temp }}/ateam
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: scripts/merge-check.sh "$PR_NUMBER"
-
+  # Single required status check: anything other than success in a needed job fails the aggregate. Merge check is
+  # its own workflow and required check (merge-check.yml, ateam #255), so an open flake issue or a missing review never
+  # fails Required.
   required:
-    name: Required
+    name: ${{ github.event.pull_request.draft && 'Required (draft, skipped)' || 'Required' }}
     runs-on: ubuntu-latest
-    needs: [go, ui, governance, merge-check]
-    if: ${{ always() }}
+    needs: [go, ui, governance]
+    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     steps:
       - name: Require every CI lane to pass
         run: |
           if [[ "${{ needs.go.result }}" != "success" ]] || \
              [[ "${{ needs.ui.result }}" != "success" ]] || \
-             [[ "${{ needs.governance.result }}" != "success" ]] || \
-             [[ "${{ needs.merge-check.result }}" != "success" ]]; then
+             [[ "${{ needs.governance.result }}" != "success" ]]; then
             echo "Required CI check failed: one or more lanes did not succeed"
             exit 1
           fi
