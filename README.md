@@ -203,11 +203,14 @@ task ui:test:e2e        # Playwright E2E (auto-manages Docker stack)
 task schema:generate    # Regenerate schemas/ + specs/openapi.v3.yaml
 ```
 
-The single `Repository CI` workflow runs on every pull request to
+The `Repository CI` workflow runs on every non-draft pull request to
 `main`. Its Go, UI, and Governance jobs feed the always-reported
 `Required` aggregate. The Governance job strictly validates
-ATeam multi-agent parity, OpenSpec, and its queue reporter. The live
-`main` branch ruleset (`main-required-checks`) requires `Required` with
+ATeam multi-agent parity and OpenSpec (`openspec validate --all --strict`,
+then `ateam state spec-check`). The separate `Merge check` workflow runs
+`ateam review gate` from the base commit. A draft pull request skips both.
+The live `main` branch ruleset (`main-required-checks`) requires
+`Required` and `Merge check` with
 strict up-to-date (`strict_required_status_checks_policy=true`) and
 squash-only PR merges, while required mock E2E in CI remains future
 work.
@@ -221,7 +224,6 @@ task test:integration
 go build ./...
 task schema:generate && task schema:check-changes
 task openspec:validate
-task openspec:queue-test
 ```
 
 See [CLAUDE.md](CLAUDE.md) for the deeper project context — config

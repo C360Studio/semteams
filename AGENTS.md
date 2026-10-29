@@ -76,11 +76,10 @@ task test:race            # Go unit/contract tests with -race
 task test:repeat          # Run unit tests 5x shuffled at -cpu 1 without -race
 task test:integration     # Integration tests (testcontainers; sequential w/ -p 1 on macOS)
 task schema:generate      # Regenerate schemas/ + specs/openapi.v3.yaml
-task spec:check           # Strict OpenSpec validation + stray Hold: + ateam spec-check (alias: openspec:validate)
+task spec:check           # Strict OpenSpec validation + ateam spec-check, incl. stray Hold: (alias: openspec:validate)
 task spec:queue           # In-flight OpenSpec changes and Hold: lines (alias: openspec:queue)
-task openspec:queue-test  # Fixture test for OpenSpec queue reporter
 task publish:verify-test  # Fixture test for release publication gate
-task merge:check -- <pr>  # Run ateam review gate (Required ruleset, review policy/record, class:flake)
+task merge:check -- <pr>  # Run ateam review gate (ruleset, review policy/record, class:flake)
 task mutate:check -- ...  # ateam mutate: Go -overlay mutation check (-pkg -test -file -mutant -expect)
 task ui:lint              # ESLint
 task ui:check             # svelte-check (TypeScript)
@@ -159,9 +158,9 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | Gate | Rule | Where |
 | --- | --- | --- |
 | `spec:check+review` | OpenSpec changes and specs are well formed (`task openspec:validate` / `task spec:check`) and truthful against code | `writer`, `go-rev`, `svelte-rev`; `task validate` |
-| `spec:check+review` | Every OpenSpec task can be ticked in or before the archive commit; holds are written as `Hold:` inside the unticked task they stop (`scripts/openspec-queue.sh --check`, `ateam state spec-check`, `TestSpecQueueCheck`) | `protocol`; `writer`, `go-rev`, `svelte-rev`; `task validate` |
+| `spec:check+review` | Every OpenSpec task can be ticked in or before the archive commit; holds are written as `Hold:` inside the unticked task they stop (`ateam state spec-check`, `TestSpecCheckWiring`) | `protocol`; `writer`, `go-rev`, `svelte-rev`; `task validate` |
 | `verify+review` | Steps end when `task validate` passes locally on a clean tree; reviewer `APPROVE` cites commit SHA + local verification run, never CI (#171) | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `protocol` |
-| `CI required` | A merge needs `Repository CI` (`Required`, which needs `Merge check`) green on a head up to date with `main` (`task merge:check -- <pr>`) | `protocol`; `repository-governance` spec; `Merge check` job (`ateam review gate` from the base commit) |
+| `CI required` | A merge needs `Required` (`Repository CI`) and `Merge check` (`merge-check.yml`) green on a head up to date with `main`; draft PRs skip both (`task merge:check -- <pr>`) | `protocol`; `repository-governance` spec; `merge-check.yml` (`ateam review gate` from the base commit) |
 | `verify+review` | No merge while a known flake (`class:flake` issue) is open in a required job unless the PR closes every open one with before/after reproduction evidence (`task merge:check -- <pr>`) | `protocol`; `scripts/merge-check.sh` (`ateam review gate`) |
 | `verify+review` | Code/UI PRs require review by the appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) and cross-agent review (`implemented-by:` and `reviewed-by:` with `(<model>, <effort>)` + commit-bound review record; `task merge:check -- <pr>`); docs-only PRs take any agent's reviewer | `protocol`; `go-rev`, `svelte-rev`; `scripts/merge-check.sh` (`ateam review gate`) |
 | `review` | Any defect found in repo code not fixed in the active change is filed as a GitHub issue (`status:blocked` while its code is only on a PR branch), never left in comments | `protocol`; `go-rev`, `svelte-rev` |
@@ -198,8 +197,8 @@ The canonical protocol is [`.agents/protocol.md`](.agents/protocol.md); role con
 - **Merge:** appropriate SemTeams reviewer lane (`go-reviewer`, `svelte-reviewer`, or both) + cross-agent review on
   code/UI PRs (`Review request` and `reviewed-by:` + `Reviewed at <sha>` + `Verdict:` comments; `implemented-by:` and
   `reviewed-by:` with `(<model>, <effort>)` in the PR body) → archive/spec sync (`openspec archive <id>`) as the final
-  content commit → `task validate`, `task merge:check -- <pr>`, and `Repository CI` (`Required`) green on a head up to
-  date with `main` with no open unfixed `class:flake` → squash merge.
+  content commit → `task validate`, `task merge:check -- <pr>`, `Required`, and `Merge check` green on a head up to date
+  with `main` with no open unfixed `class:flake` → squash merge.
 - **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` or the squash merge of an approved PR that
   declared `Closes #n`. After the squash merge, the claiming agent removes its worktree and deletes the remote branch
   (never one it does not own, or one that is dirty or unpushed).

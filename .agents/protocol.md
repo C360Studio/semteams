@@ -115,11 +115,13 @@ rewired parked pack, or an unproved composition-root invariant.
   and another agent's reviewer on code/UI pull requests: "Cross-agent review" below) → fixes and re-review → archive
   (`openspec archive <id>`, moving the change into `openspec/changes/archive/` + spec sync) as the final content commit
   → narrow reviewer check of the archive/spec sync (any agent's reviewer) → undraft → `task validate`,
-  `task merge:check -- <pr>`, and `Repository CI` (`Required`) green on a head up to date with `main` and with **no
-  known flake open** → squash merge. On a non-draft code/UI PR, `Merge check` (and so `Required`) is red until the
-  approving review record and the `reviewed-by:` line exist; the reviewer then clears it as
-  [review-pr](skills/review-pr/SKILL.md) § 5 says (rerun the failed job, never update the branch). That red is
-  expected, not a flake. A correction after archive re-enters reconciliation and final review. State
+  `task merge:check -- <pr>`, `Required`, and `Merge check` green on a head up to date with `main` and with **no
+  known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (each renamed
+  `<name> (draft, skipped)`), so undrafting starts the first run that checks it. On a non-draft code/UI PR,
+  `Merge check` (its own workflow, `merge-check.yml`) is red until the approving review record and the `reviewed-by:`
+  line exist; the reviewer's description edit that adds `reviewed-by:` reruns it on the `edited` event, as
+  [review-pr](skills/review-pr/SKILL.md) § 5 says (never update the branch). That red is expected, not a flake, and it
+  never turns `Required` red. A correction after archive re-enters reconciliation and final review. State
   `implemented-by: <agent> (<model>, <effort>)` in the PR body naming the implementing model family (`claude`, `codex`,
   or `gemini`), resolved model, and reasoning effort (`implemented-by: gemini (gemini-4-argon, high)`), and
   `reviewed-by: <agent> (<model>, <effort>)` once the reviewing agent's newest record approves. Never write unresolved
@@ -163,17 +165,18 @@ rewired parked pack, or an unproved composition-root invariant.
     labelled `status:needs-decision`.
 - **Known flakes:** a known flake is an open issue labelled `class:flake`: a test or check that passes and fails on the
   same tree. A network fetch that did not answer is not one; record it on the pull request and re-run. A red you cannot
-  explain by your diff is filed before the next push. A fresh green over an open `class:flake` in a required job is
-  rerun-to-green, not a fix: fix the flake in a PR that closes the `class:flake` issue and shows the reproduction
-  (command and failure rate before and after). A flake that comes back reopens its issue.
+  explain by your diff is filed before the next push. An open `class:flake` the PR does not close fails `Merge check`,
+  not `Required`. A fresh green over an open `class:flake` in a required job is rerun-to-green, not a fix: fix the flake
+  in a PR that closes the `class:flake` issue and shows the reproduction (command and failure rate before and after). A flake that comes back reopens its issue.
 - **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` on the issue itself or the squash merge of an
   approved PR that declared `Closes #n`. A PR that only `Addresses` an epic closes nothing. Approval of adjacent work
   never widens into a close.
 
 ## Verification and CI baseline
 
-`.github/workflows/ci.yml` runs the Go, UI, and Governance/OpenSpec jobs for every pull request and push to `main`; all
-three feed the stable `Required` aggregate check-run. Locally, `task validate` (`scripts/validate.sh`, alias
-`task verify`) mirrors all three lanes (including `task ateam:doctor`) in read-only mode without mutating tracked or
-untracked worktree files. Gate selection per diff and evidence recording live in [preflight](skills/preflight/SKILL.md).
+`.github/workflows/ci.yml` runs the Go, UI, and Governance/OpenSpec jobs for every non-draft pull request and push to
+`main`; all three feed the stable `Required` aggregate check-run. `.github/workflows/merge-check.yml` runs `Merge check`
+(`ateam review gate` from the base commit) as a second required check; the `main` ruleset requires both. Locally,
+`task validate` (`scripts/validate.sh`, alias `task verify`) mirrors all three lanes (including `task ateam:doctor`) in
+read-only mode without mutating tracked or untracked worktree files. Gate selection per diff and evidence recording live in [preflight](skills/preflight/SKILL.md).
 Publication is tag-only through `.github/workflows/publish.yml`; see [`docs/release.md`](../docs/release.md).

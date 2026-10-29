@@ -14,8 +14,8 @@ import (
 // `openspec validate --all --strict` and then `ateam state spec-check` (design D3 of
 // adopt-ateam-v034). The explicit strict step keeps the check fail-closed: without `openspec`,
 // `ateam state spec-check` prints "strict validation skipped" and exits 0 (ateam v0.3.4
-// internal/state/openspec.go). Hold placement is ateam's `spec-check` since #369 retired
-// scripts/openspec-queue.sh.
+// internal/state/openspec.go). Hold placement is ateam's `spec-check` since #369 retired the
+// repository's own queue script.
 
 const (
 	specValidateCmd   = `openspec validate --all --strict`
