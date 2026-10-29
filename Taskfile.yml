@@ -88,7 +88,7 @@ tasks:
     cmds:
       - scripts/merge-check.sh {{.CLI_ARGS}}
 
-  # Mirrors ateam's own target (ateam v0.3.3 Taskfile.yml mutate:check) but calls the pinned,
+  # Mirrors ateam's own target (ateam v0.3.4 Taskfile.yml mutate:check) but calls the pinned,
   # installed ateam binary; SemTeams does not vendor ateam's source. Integration-tagged tests are
   # reached through the environment: GOFLAGS=-tags=integration task mutate:check -- ...
   mutate:check:
