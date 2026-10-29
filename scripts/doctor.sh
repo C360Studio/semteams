@@ -36,9 +36,9 @@ else bad node "not found"; fi
 
 if command -v npm >/dev/null; then ok npm "$(npm --version)"; else bad npm "not found"; fi
 
-# python3: scripts/openspec-queue.sh and scripts/qualify-migration-browser.py use it.
+# python3: scripts/qualify-migration-browser.py and its unittest (task test:browser-runner) use it.
 if command -v python3 >/dev/null; then ok python3 "$(python3 --version 2>&1 | sed 's/^Python //')"
-else bad python3 "not found (task spec:check and task validate need it)"; fi
+else bad python3 "not found (task test:browser-runner and task validate need it)"; fi
 
 # jq: scripts/publish-verify.sh and scripts/publish-verify_fixture_test.sh use it.
 if command -v jq >/dev/null; then ok jq "$(jq --version 2>&1)"

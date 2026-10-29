@@ -97,10 +97,9 @@ tasks:
       - "ateam mutate {{.CLI_ARGS}}"
 
   spec:check:
-    desc: Validate all OpenSpec changes and specs strictly, and fail on a hold written outside every task
+    desc: Validate all OpenSpec changes and specs strictly, then run ateam's spec-check (fails on a hold written outside every task)
     cmds:
       - openspec validate --all --strict
-      - scripts/openspec-queue.sh --check
       - ateam state spec-check
 
   spec:queue:

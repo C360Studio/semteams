@@ -52,7 +52,6 @@ func expectedCIStepMappings() []ciStepMapping {
 		{job: "ui", ciRun: "npm run build", validateFragment: "npm run build"},
 		{job: "governance", ciRun: "task ateam:doctor", validateFragment: "task ateam:doctor"},
 		{job: "governance", ciRun: "task openspec:validate", validateFragment: "task openspec:validate"},
-		{job: "governance", ciRun: "task openspec:queue-test", validateFragment: "task openspec:queue-test"},
 		{job: "governance", ciRun: "task publish:verify-test", validateFragment: "task publish:verify-test"},
 	}
 }
@@ -159,7 +158,7 @@ func TestValidateTaskMirrorsRepositoryCI(t *testing.T) {
 	})
 
 	t.Run("detects_missing_validate_step_drift", func(t *testing.T) {
-		driftedScript := strings.Replace(scriptText, "task openspec:queue-test", "# removed", 1)
+		driftedScript := strings.Replace(scriptText, "task publish:verify-test", "# removed", 1)
 		if err := verifyCIWorkflowParity(ciBytes, driftedScript); err == nil {
 			t.Fatal("expected parity check to fail when scripts/validate.sh omits a CI step, but it passed")
 		}
@@ -436,7 +435,6 @@ func TestValidateScriptCommandCompositionAndWorktreePreservation(t *testing.T) {
 			"npm run build",
 			"task ateam:doctor",
 			"task openspec:validate",
-			"task openspec:queue-test",
 			"task publish:verify-test",
 		}
 		if len(lines) != len(wantPrefixes) {

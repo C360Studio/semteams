@@ -131,9 +131,6 @@ jobs:
       - name: Validate OpenSpec
         run: task openspec:validate
 
-      - name: Test OpenSpec queue reporter
-        run: task openspec:queue-test
-
       - name: Test publish verify script
         run: task publish:verify-test
 
