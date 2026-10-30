@@ -67,9 +67,15 @@ Group findings by severity. Every actionable finding must contain:
 Use `BLOCKING` for silent data misrepresentation (e.g., rendering `unknown`/error state as `none`), leaked browser
 credentials/NATS access, broken reactivity loops, or wire-contract breaks. Use `HIGH` for a likely functional or
 accessibility defect or project discipline failure, `MEDIUM` for a non-blocking correction, and `NIT` for style only.
-End with the record block from [`reviewer.md` § Record](reviewer.md#record), naming your exact model and effort:
+End with the record block from [`reviewer.md` § Record](reviewer.md#record), naming your model as
+`.agents/review-policy.json` lists it (for example `opus`) and your effort:
 `Verdict: APPROVE` when there are no `BLOCKING` or `HIGH` findings, otherwise `Verdict: REQUEST CHANGES` and the exact
 blocking list. State explicitly when evidence was unavailable.
+
+**Reviewing a pull request.** Follow [`review-pr`](../skills/review-pr/SKILL.md) §§ 4–5: post the record as one PR
+comment (`gh pr comment`), never only in your reply; after `Verdict: APPROVE`, add your `reviewed-by:` line to the PR
+description, which reruns `Merge check`; after `Verdict: REQUEST CHANGES`, leave `Merge check` red. When your session
+cannot write to the forge, say so and return the record for the caller to post verbatim.
 
 **Severity needs a real-world trigger (owner ruling #185).** A failure that happens only under a condition the code
 does not choose (browser/library timing, mid-operation fault injection, or a test-only call sequence) is `BLOCKING` or
