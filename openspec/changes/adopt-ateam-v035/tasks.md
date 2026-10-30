@@ -21,9 +21,10 @@
   fails `task test:spec`. Evidence: commit `2ab5ffa4`; `TestCIWorkflowGate` and `TestValidateTaskMirrorsRepositoryCI`
   rows fail when the step or base is dropped, and `TestValidateTaskAndDocsContract` failed with the `--base` form
   removed from `Taskfile.yml`; planted uncited Go and Vitest tests each reported `missing spec citation`.
-- [ ] 3.2 Rewrite the three malformed citations per design D3. Acceptance: `ateam test-spec --base origin/main` exits 0.
-  Hold: the D3 A rewrite touches each test's attached comment, so `--base` reports it as a changed, uncited test, and
-  two more sites fail (notes/3.2.md); the order or option needs a re-ruling.
+- [ ] 3.2 Rewrite the five malformed citations per design D3 A in precursor PR #392, which merges before this PR (owner
+  sequencing ruling, 2026-10-30; notes/3.2.md), then merge `origin/main` here. Acceptance: `ateam test-spec --base
+  origin/main` exits 0 on this branch.
+  Hold: waits for #392 to merge
 
 ## 4. Merge check probe
 
