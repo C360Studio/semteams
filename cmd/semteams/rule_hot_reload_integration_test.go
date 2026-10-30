@@ -117,7 +117,7 @@ func nextApplied(t *testing.T, applied <-chan map[string]any) map[string]any {
 // TestComponentsImplementingReturnsTheBuiltComponentsThatImplementTheSeam
 // (service) proves the walk it uses.
 //
-// spec: component-runtime-config / Config Manager delivers a registered key family to its owner
+// upstream spec: semstreams component-runtime-config / Config Manager delivers a registered key family to its owner
 func TestRootRuleManagerHotReloadsIntoTheProcessor(t *testing.T) {
 	testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)

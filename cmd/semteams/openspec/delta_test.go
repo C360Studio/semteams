@@ -11,9 +11,9 @@ import (
 // round-trip comparisons (Warnings is a parse-time artifact, not rendered).
 var ignoreDeltaWarnings = cmpopts.IgnoreFields(Delta{}, "Warnings")
 
-// TestParseDelta_AuthFixture pins the parsed structure of a real OpenSpec delta
-// spec: ADDED (new requirement), MODIFIED (revised + "(Previously:)"), and
-// REMOVED (name + "(Rationale:)") — ADR-057 §D1.
+// TestParseDelta_AuthFixture pins the parsed structure of a real OpenSpec
+// delta spec: ADDED (new requirement), MODIFIED (revised + "(Previously:)"),
+// and REMOVED (name + "(Rationale:)") — ADR-057 §D1.
 func TestParseDelta_AuthFixture(t *testing.T) {
 	d := ParseDelta(readFixture(t, "auth-delta.md"))
 
