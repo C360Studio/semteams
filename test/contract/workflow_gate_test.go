@@ -12,7 +12,7 @@ import (
 )
 
 // repository-governance › "Merge check is its own required workflow" and "One unconditional repository CI
-// workflow reports one aggregate" (ateam v0.3.4 layout, C360Studio/ateam#250 and #255). Each assertion
+// workflow reports one aggregate" (ateam v0.3.5 layout, C360Studio/ateam#250, #255 and #262). Each assertion
 // below has a sensitivity row that mutates the real workflow text and expects the violation.
 
 const (
@@ -21,6 +21,13 @@ const (
 	ciDraftGuard = "github.event_name != 'pull_request' || !github.event.pull_request.draft"
 	// merge-check.yml has only pull_request events, so its guard is upstream's shorter form.
 	mergeCheckDraftGuard = "${{ !github.event.pull_request.draft }}"
+	// The merge-check job also skips while the awaiting probe answers awaiting=true (ateam#262). always()
+	// keeps it running when the probe fails, so a failed probe means the full check runs.
+	mergeCheckGuard = "${{ always() && !github.event.pull_request.draft && needs.awaiting.outputs.awaiting != 'true' }}"
+	mergeCheckName  = "${{ github.event.pull_request.draft && 'Merge check (draft, skipped)' || needs.awaiting.outputs.awaiting == 'true' && 'Merge check (awaiting review record, skipped)' || 'Merge check' }}"
+	probeRun        = `out=$("$ATEAM" review gate --awaiting "$PR_NUMBER")
+printf '%s\n' "$out"
+printf '%s\n' "$out" | grep -xE 'awaiting=(true|false)' >> "$GITHUB_OUTPUT"`
 )
 
 // draftName is the name a job carries so that a skipped draft run is never a check-run with the
@@ -48,12 +55,30 @@ type gateWorkflow struct {
 type gateJob struct {
 	Name        string            `yaml:"name"`
 	If          string            `yaml:"if"`
-	Needs       []string          `yaml:"needs"`
+	Needs       needsList         `yaml:"needs"`
 	Permissions map[string]string `yaml:"permissions"`
+	Outputs     map[string]string `yaml:"outputs"`
 	Steps       []gateStep        `yaml:"steps"`
 }
 
+// needsList accepts both forms GitHub allows for needs: a single job id or a list.
+type needsList []string
+
+func (n *needsList) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		*n = needsList{node.Value}
+		return nil
+	}
+	var list []string
+	if err := node.Decode(&list); err != nil {
+		return err
+	}
+	*n = list
+	return nil
+}
+
 type gateStep struct {
+	ID   string            `yaml:"id"`
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
 	With map[string]any    `yaml:"with"`
@@ -93,38 +118,65 @@ func mergeCheckWorkflowViolations(data []byte) []string {
 	if want := map[string]string{"contents": "read"}; !mapsEqual(wf.Permissions, want) {
 		bad("workflow permissions are %v, want %v", wf.Permissions, want)
 	}
-	if len(wf.Jobs) != 1 {
-		bad("has %d jobs, want only merge-check", len(wf.Jobs))
+	if len(wf.Jobs) != 2 {
+		bad("has %d jobs, want only awaiting and merge-check", len(wf.Jobs))
 	}
+	readOnly := map[string]string{"contents": "read", "issues": "read", "pull-requests": "read"}
+	install := `GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@` + ateamPin
+	// Both jobs run ateam from the base commit's checkout with the pinned release, never the tree they judge.
+	baseJob := func(id string, job gateJob) {
+		if !mapsEqual(job.Permissions, readOnly) {
+			bad("%s permissions are %v, want read-only %v", id, job.Permissions, readOnly)
+		}
+		if len(job.Steps) == 0 || !strings.HasPrefix(job.Steps[0].Uses, "actions/checkout@") {
+			bad("%s does not start with a checkout", id)
+		} else {
+			with := job.Steps[0].With
+			if ref := fmt.Sprint(with["ref"]); ref != "${{ github.event.pull_request.base.sha }}" {
+				bad("%s checkout ref is %q, want the base commit", id, ref)
+			}
+			if with["persist-credentials"] != false {
+				bad("%s checkout persist-credentials is %v, want false", id, with["persist-credentials"])
+			}
+		}
+		if !slices.ContainsFunc(job.Steps, func(s gateStep) bool { return strings.TrimSpace(s.Run) == install }) {
+			bad("%s has no step that runs %q", id, install)
+		}
+	}
+
+	if probe, ok := wf.Jobs["awaiting"]; !ok {
+		bad("no awaiting job (Merge check probe)")
+	} else {
+		if probe.Name != "Merge check probe" {
+			bad("awaiting name is %q, want %q", probe.Name, "Merge check probe")
+		}
+		if probe.If != mergeCheckDraftGuard {
+			bad("awaiting if is %q, want the draft guard %q", probe.If, mergeCheckDraftGuard)
+		}
+		baseJob("awaiting", probe)
+		if !slices.ContainsFunc(probe.Steps, func(s gateStep) bool { return s.ID == "probe" && strings.TrimSpace(s.Run) == probeRun }) {
+			bad("awaiting has no step with id probe that runs %q", probeRun)
+		}
+		if got, want := probe.Outputs["awaiting"], "${{ steps.probe.outputs.awaiting }}"; got != want {
+			bad("awaiting output is %q, want %q", got, want)
+		}
+	}
+
 	job, ok := wf.Jobs["merge-check"]
 	if !ok {
 		bad("no merge-check job")
 		return v
 	}
-	if want := draftName("Merge check"); job.Name != want {
-		bad("merge-check name is %q, want the draft rename %q", job.Name, want)
+	if !slices.Equal(job.Needs, needsList{"awaiting"}) {
+		bad("merge-check needs %q, want [awaiting]", job.Needs)
 	}
-	if job.If != mergeCheckDraftGuard {
-		bad("merge-check if is %q, want the draft guard %q", job.If, mergeCheckDraftGuard)
+	if job.Name != mergeCheckName {
+		bad("merge-check name is %q, want the draft and awaiting rename %q", job.Name, mergeCheckName)
 	}
-	if want := map[string]string{"contents": "read", "issues": "read", "pull-requests": "read"}; !mapsEqual(job.Permissions, want) {
-		bad("merge-check permissions are %v, want read-only %v", job.Permissions, want)
+	if job.If != mergeCheckGuard {
+		bad("merge-check if is %q, want the draft and awaiting guard %q", job.If, mergeCheckGuard)
 	}
-	if len(job.Steps) == 0 || !strings.HasPrefix(job.Steps[0].Uses, "actions/checkout@") {
-		bad("merge-check does not start with a checkout")
-	} else {
-		with := job.Steps[0].With
-		if ref := fmt.Sprint(with["ref"]); ref != "${{ github.event.pull_request.base.sha }}" {
-			bad("checkout ref is %q, want the base commit", ref)
-		}
-		if with["persist-credentials"] != false {
-			bad("checkout persist-credentials is %v, want false", with["persist-credentials"])
-		}
-	}
-	install := `GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@` + ateamPin
-	if !slices.ContainsFunc(job.Steps, func(s gateStep) bool { return strings.TrimSpace(s.Run) == install }) {
-		bad("no step runs %q", install)
-	}
+	baseJob("merge-check", job)
 	var gate *gateStep
 	for i := range job.Steps {
 		if strings.TrimSpace(job.Steps[i].Run) == `scripts/merge-check.sh "$PR_NUMBER"` {
@@ -254,22 +306,48 @@ func runWorkflowMutations(t *testing.T, text string, check func([]byte) []string
 	}
 }
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Merge check is its own required workflow
 func TestMergeCheckWorkflow(t *testing.T) {
 	text := readWorkflow(t, "merge-check.yml")
 	requireNoViolations(t, "merge-check.yml", mergeCheckWorkflowViolations([]byte(text)))
 
+	// Both jobs check out the base commit the same way; these anchors pick one. The probe's checkout follows
+	// its steps: key directly, the merge-check job's follows the comment that ends "read through the API.".
+	const (
+		checkout      = "      - name: Checkout base commit\n        uses: actions/checkout@v5\n        with:\n          ref: ${{ github.event.pull_request.base.sha }}\n          persist-credentials: false\n"
+		probeCheckout = "    steps:\n" + checkout
+		gateCheckout  = "read through the API.\n" + checkout
+	)
 	runWorkflowMutations(t, text, mergeCheckWorkflowViolations, []workflowMutation{
 		{"edited dropped", "ready_for_review, edited]", "ready_for_review]", []string{"pull_request types"}},
 		{"push trigger added", "on:\n", "on:\n  push:\n    branches: [main]\n", []string{"push"}},
 		{"concurrency cancels", "cancel-in-progress: false", "cancel-in-progress: true", []string{"cancel-in-progress"}},
 		{"concurrency group not per pull request", "group: merge-check-${{ github.event.pull_request.number }}", "group: merge-check", []string{"concurrency group"}},
-		{"draft guard dropped", "    if: " + mergeCheckDraftGuard + "\n", "", []string{"draft guard"}},
-		{"rename dropped", "name: " + draftName("Merge check"), "name: Merge check", []string{"draft rename"}},
-		{"head checked out", "ref: ${{ github.event.pull_request.base.sha }}", "ref: ${{ github.event.pull_request.head.sha }}", []string{"checkout ref"}},
-		{"credentials persisted", "persist-credentials: false", "persist-credentials: true", []string{"persist-credentials"}},
-		{"job permission writes", "pull-requests: read", "pull-requests: write", []string{"read-only"}},
 		{"workflow permission writes", "permissions:\n  contents: read", "permissions:\n  contents: write", []string{"workflow permissions"}},
-		{"ateam pin drifts", "ateam@" + ateamPin, "ateam@v0.3.3", []string{"go install"}},
+
+		// The awaiting probe (ateam#262).
+		{"probe dropped", "  awaiting:\n    name: Merge check probe", "  probe-renamed:\n    name: Merge check probe", []string{"no awaiting job"}},
+		{"probe renamed", "name: Merge check probe", "name: Merge check", []string{"awaiting name"}},
+		{"probe draft guard dropped", "    name: Merge check probe\n    if: " + mergeCheckDraftGuard + "\n", "    name: Merge check probe\n", []string{"awaiting if"}},
+		{"probe checks out the head", probeCheckout, strings.Replace(probeCheckout, "base.sha", "head.sha", 1), []string{"awaiting checkout ref"}},
+		{"probe checkout dropped", probeCheckout, "    steps:\n", []string{"awaiting does not start with a checkout"}},
+		{"probe persists credentials", probeCheckout, strings.Replace(probeCheckout, "persist-credentials: false", "persist-credentials: true", 1), []string{"awaiting checkout persist-credentials"}},
+		{"probe permission writes", "      pull-requests: read\n    outputs:", "      pull-requests: write\n    outputs:", []string{"awaiting permissions"}},
+		{"probe ateam pin drifts", "ateam@" + ateamPin + "\n\n      - name: Is the pull request", "ateam@v0.3.4\n\n      - name: Is the pull request", []string{"awaiting has no step"}},
+		{"probe does not ask --awaiting", `review gate --awaiting "$PR_NUMBER"`, `review gate "$PR_NUMBER"`, []string{"id probe"}},
+		{"probe output unwired", "awaiting: ${{ steps.probe.outputs.awaiting }}", "awaiting: ${{ steps.probe.outputs.result }}", []string{"awaiting output"}},
+
+		// The merge-check job.
+		{"needs awaiting dropped", "    needs: awaiting\n", "", []string{"merge-check needs"}},
+		{"awaiting condition dropped", " && needs.awaiting.outputs.awaiting != 'true' }}", " }}", []string{"merge-check if"}},
+		{"always dropped", "if: ${{ always() && ", "if: ${{ ", []string{"merge-check if"}},
+		{"draft guard dropped", "if: ${{ always() && !github.event.pull_request.draft && ", "if: ${{ always() && ", []string{"merge-check if"}},
+		{"awaiting rename dropped", "needs.awaiting.outputs.awaiting == 'true' && 'Merge check (awaiting review record, skipped)' || ", "", []string{"merge-check name"}},
+		{"draft rename dropped", "github.event.pull_request.draft && 'Merge check (draft, skipped)' || ", "", []string{"merge-check name"}},
+		{"head checked out", gateCheckout, strings.Replace(gateCheckout, "base.sha", "head.sha", 1), []string{"merge-check checkout ref"}},
+		{"credentials persisted", gateCheckout, strings.Replace(gateCheckout, "persist-credentials: false", "persist-credentials: true", 1), []string{"merge-check checkout persist-credentials"}},
+		{"job permission writes", "      pull-requests: read\n    steps:\n      # The base commit", "      pull-requests: write\n    steps:\n      # The base commit", []string{"merge-check permissions"}},
+		{"ateam pin drifts", "ateam@" + ateamPin + "\n\n      # Exit 1", "ateam@v0.3.4\n\n      # Exit 1", []string{"merge-check has no step"}},
 		{"Merge check dropped from ATEAM_REQUIRED_CHECKS", "ATEAM_REQUIRED_CHECKS: Required,Merge check", "ATEAM_REQUIRED_CHECKS: Required", []string{"ATEAM_REQUIRED_CHECKS"}},
 		{"Required dropped from ATEAM_REQUIRED_CHECKS", "ATEAM_REQUIRED_CHECKS: Required,Merge check", "ATEAM_REQUIRED_CHECKS: Merge check", []string{"ATEAM_REQUIRED_CHECKS"}},
 	})
