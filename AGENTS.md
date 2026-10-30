@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Guidance for coding agents. Codex and Antigravity (Gemini) load this file as `AGENTS.md`; `CLAUDE.md` imports it, so
-there is one copy (kept strictly under 24,000 bytes so rule loaders with a 24 KB per-file cap never truncate it). Role
+there is one copy (kept under 24,000 bytes so 24 KB rule loaders never truncate it). Role
 contracts, model/effort routing, and shared skills live in [`.agents/README.md`](.agents/README.md); the full shared
 work protocol lives in [`.agents/protocol.md`](.agents/protocol.md); the enforcement audit matrix lives in
 [`.agents/rules-index.md`](.agents/rules-index.md).
@@ -78,6 +78,7 @@ task test:integration     # Integration tests (testcontainers; sequential w/ -p 
 task schema:generate      # Regenerate schemas/ + specs/openapi.v3.yaml
 task spec:check           # Strict OpenSpec validation + ateam spec-check, incl. stray Hold: (alias: openspec:validate)
 task spec:queue           # In-flight OpenSpec changes and Hold: lines (alias: openspec:queue)
+task test:spec            # New/changed tests cite a spec (ateam test-spec)
 task publish:verify-test  # Fixture test for release publication gate
 task merge:check -- <pr>  # Run ateam review gate (ruleset, review policy/record, class:flake)
 task mutate:check -- ...  # ateam mutate: Go -overlay mutation check (-pkg -test -file -mutant -expect)
@@ -101,12 +102,11 @@ Gate selection per diff and evidence rules: [`.agents/skills/preflight/SKILL.md`
 
 ## Rules and what enforces them
 
-Domain-grouped working reference. [`.agents/rules-index.md`](.agents/rules-index.md) carries the full audit matrix
-(what enforces each rule and what stays review only). Short names in "Where": `arch`, `go-dev`, `go-rev`, `svelte-dev`,
-`svelte-rev`, `writer` → `.agents/contracts/<role>.md`; `protocol` → `.agents/protocol.md`. In "Gate": `review` means
-review only; `verify` means enforced by `task validate` (`verify+review` when structural checks cover the core rule and
-edge cases remain review only). A new repo-wide or agent-conduct rule updates both this file and
-`.agents/rules-index.md`.
+Domain-grouped working reference. [`.agents/rules-index.md`](.agents/rules-index.md) carries the full audit matrix.
+Short names in "Where": `arch`, `go-dev`, `go-rev`, `svelte-dev`, `svelte-rev`, `writer` → `.agents/contracts/<role>.md`;
+`protocol` → `.agents/protocol.md`. In "Gate": `review` means review only; `verify` means enforced by `task validate`
+(`verify+review` when structural checks cover the core rule and edge cases remain review only). A new repo-wide or
+agent-conduct rule updates both this file and `.agents/rules-index.md`.
 
 ### 1. Go, composition root, and runtime ownership
 
@@ -147,6 +147,7 @@ edge cases remain review only). A new repo-wide or agent-conduct rule updates bo
 | --- | --- | --- |
 | `verify+review` | `task validate` (and `task verify`) runs the read-only local parity gate (Go, UI, Governance) without mutating tracked, staged, unstaged, or untracked worktree files | `go-dev`, `svelte-dev`, `go-rev`, `svelte-rev`; `TestValidateScriptCommandCompositionAndWorktreePreservation` |
 | `verify+review` | Non-trivial logic ships with a test using an independent oracle, proven able to fail via non-destructive mutation check (`task mutate:check` for Go; `cp` + SHA-256 for Vitest and anything `-overlay` cannot reach), reporting `detection`, `survivor`, `invalid`, or `inconclusive`; structural guards carry paired sensitivity tests | `protocol`; `preflight` skill; `TestAgentSetupParitySensitivity` |
+| `verify+review` | New or changed tests cite a spec Requirement (`// spec: openspec/specs/<cap>/spec.md#Requirement: <name>`); untouched tests are exempt | `protocol`; `task test:spec` |
 | `verify` | Tests bind ephemeral TCP ports (`net.Listen("tcp", "127.0.0.1:0")`) and bound `.Stop`/`.Close`/`.Terminate` cleanup with `context.WithTimeout`, never `context.Background()`/`context.TODO()` | `task lint`; `scripts/lint-test-ports.sh`, `scripts/cleanup-roots-check.sh`; `TestCleanupRootsCheckSensitivity` |
 | `review` | Integration tests run sequentially (`-p 1`) under `task test:integration`; serialize heavy Docker/testcontainers runs across concurrent sessions on a shared host | `go-dev`, `go-rev`; `preflight` skill |
 | `review` | Playwright E2E journeys (`task ui:test:e2e`) run in background and are monitored every 20–30s via test output, backend Docker logs, and `/message-logger/entries`, aborting early on loops with quoted log evidence | `svelte-dev`, `svelte-rev` |

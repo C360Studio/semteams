@@ -35,10 +35,13 @@ conservative OpenSpec task truth. Role contracts, `.agents/review-policy.json`, 
 OpenSpec changes are contract deltas or approval-gated proposals, not backlogs: a change either carries spec deltas or
 is proposal-only (Work lifecycle, Clarify). Sequencing, discovery, holds, and future work belong in GitHub issues.
 
-ATeam's test-to-spec default (`ateam test-spec` / `task test:spec`: a `// spec:` or `//aip:verifies` reference on
-every Go and Vitest test) is deferred to `horizon:post-mvp` (owner ruling on #374; tracked in #386) until
-[C360Studio/ateam#237](https://github.com/C360Studio/ateam/issues/237) can scope it to new tests; SemTeams has no
-`task test:spec` target and no CI gate for it.
+New and changed tests cite a spec Requirement: every Go or Vitest test a pull request adds or changes carries
+`// spec: openspec/specs/<capability>/spec.md#Requirement: <name>` (or `//aip:verifies <scenario-id>`) in the comment
+attached to it. `task test:spec` (`ateam test-spec --base`,
+[C360Studio/ateam#237](https://github.com/C360Studio/ateam/issues/237)) checks it in the Governance job of
+`Repository CI` against the pull request base, and in `task validate` against `origin/main`. Uncited legacy tests the
+diff does not touch are not reported; a malformed or dangling citation fails wherever it is. A citation of an in-flight
+change's spec moves to `openspec/specs/` in the archive commit (owner ruling on #386, lifting the #374 deferral).
 
 ## Bounded port and extraction scope
 
@@ -118,8 +121,10 @@ rewired parked pack, or an unproved composition-root invariant.
   `task merge:check -- <pr>`, `Required`, and `Merge check` green on a head up to date with `main` and with **no
   known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (no skipped
   check-run carries the name `Required` or `Merge check`), so undrafting starts the first run that checks it. On a non-draft code/UI PR,
-  `Merge check` (its own workflow, `merge-check.yml`) is red until the approving review record and the `reviewed-by:`
-  line exist; the reviewer's description edit that adds `reviewed-by:` reruns it on the `edited` event, as
+  `Merge check` (its own workflow, `merge-check.yml`) is skipped as `Merge check (awaiting review record, skipped)` while
+  the PR has no review record and no `reviewed-by:` line, so the required context is absent and the merge stays
+  blocked; once either exists it runs in full and is red until both the approving record and the line exist. The
+  reviewer's description edit that adds `reviewed-by:` reruns it on the `edited` event, as
   [review-pr](skills/review-pr/SKILL.md) § 5 says (never update the branch). That red is expected, not a flake, and it
   never turns `Required` red. A correction after archive re-enters reconciliation and final review. State
   `implemented-by: <agent> (<model>, <effort>)` in the PR body naming the implementing model family (`claude`, `codex`,
