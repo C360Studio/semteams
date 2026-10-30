@@ -25,7 +25,10 @@ const (
 	// keeps it running when the probe fails, so a failed probe means the full check runs.
 	mergeCheckGuard = "${{ always() && !github.event.pull_request.draft && needs.awaiting.outputs.awaiting != 'true' }}"
 	mergeCheckName  = "${{ github.event.pull_request.draft && 'Merge check (draft, skipped)' || needs.awaiting.outputs.awaiting == 'true' && 'Merge check (awaiting review record, skipped)' || 'Merge check' }}"
-	probeRun        = `out=$("$ATEAM" review gate --awaiting "$PR_NUMBER")
+	// The Governance job's test-to-spec base: the pull request base, else the previous main commit, else
+	// origin/main when a push has no previous commit (an all-zero before).
+	testSpecBase = "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before || 'origin/main') }}"
+	probeRun     = `out=$("$ATEAM" review gate --awaiting "$PR_NUMBER")
 printf '%s\n' "$out"
 printf '%s\n' "$out" | grep -xE 'awaiting=(true|false)' >> "$GITHUB_OUTPUT"`
 )
@@ -78,11 +81,12 @@ func (n *needsList) UnmarshalYAML(node *yaml.Node) error {
 }
 
 type gateStep struct {
-	ID   string            `yaml:"id"`
-	Uses string            `yaml:"uses"`
-	Run  string            `yaml:"run"`
-	With map[string]any    `yaml:"with"`
-	Env  map[string]string `yaml:"env"`
+	ID               string            `yaml:"id"`
+	Uses             string            `yaml:"uses"`
+	Run              string            `yaml:"run"`
+	WorkingDirectory string            `yaml:"working-directory"`
+	With             map[string]any    `yaml:"with"`
+	Env              map[string]string `yaml:"env"`
 }
 
 func parseGateWorkflow(file string, data []byte) (gateWorkflow, []string) {
@@ -230,6 +234,21 @@ func ciWorkflowGateViolations(data []byte) []string {
 			bad("%s if is %q, want the draft guard %q", id, job.If, ciDraftGuard)
 		}
 	}
+	if gov, ok := wf.Jobs["governance"]; ok {
+		// ateam test-spec --base (ateam#237) needs full history for the merge base and the UI's TypeScript for
+		// its Vitest scan, and judges the diff against the base this event names.
+		if len(gov.Steps) == 0 || !strings.HasPrefix(gov.Steps[0].Uses, "actions/checkout@") || fmt.Sprint(gov.Steps[0].With["fetch-depth"]) != "0" {
+			bad("governance does not start with a fetch-depth: 0 checkout")
+		}
+		if !slices.ContainsFunc(gov.Steps, func(s gateStep) bool { return s.WorkingDirectory == "ui" && strings.TrimSpace(s.Run) == "npm ci" }) {
+			bad("governance has no npm ci step in ui")
+		}
+		if i := slices.IndexFunc(gov.Steps, func(s gateStep) bool { return strings.TrimSpace(s.Run) == "task test:spec" }); i < 0 {
+			bad("governance has no step that runs task test:spec")
+		} else if got := gov.Steps[i].Env["TEST_SPEC_BASE"]; got != testSpecBase {
+			bad("governance test:spec TEST_SPEC_BASE is %q, want %q", got, testSpecBase)
+		}
+	}
 	req, ok := wf.Jobs["required"]
 	if !ok {
 		bad("no required job")
@@ -353,6 +372,8 @@ func TestMergeCheckWorkflow(t *testing.T) {
 	})
 }
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: One unconditional repository CI workflow reports one aggregate
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestCIWorkflowGate(t *testing.T) {
 	text := readWorkflow(t, "ci.yml")
 	requireNoViolations(t, "ci.yml", ciWorkflowGateViolations([]byte(text)))
@@ -369,5 +390,11 @@ func TestCIWorkflowGate(t *testing.T) {
 		{"edited added to ci triggers", "ready_for_review]", "ready_for_review, edited]", []string{"pull_request types"}},
 		{"go lane compared to failure only", `"${{ needs.go.result }}" != "success"`, `"${{ needs.go.result }}" == "failure"`, []string{"needs.go.result is success"}},
 		{"required step exits 0", "            exit 1\n", "            exit 0\n", []string{"exit 1"}},
+		{"governance shallow checkout", "        with:\n          fetch-depth: 0\n", "", []string{"fetch-depth: 0"}},
+		{"governance UI install dropped", "        working-directory: ui\n        run: npm ci\n", "        run: echo skipped\n", []string{"npm ci step in ui"}},
+		{"test:spec step dropped", "        run: task test:spec\n", "        run: echo skipped\n", []string{"runs task test:spec"}},
+		{"test:spec base unset", "          TEST_SPEC_BASE: " + testSpecBase + "\n", "", []string{"TEST_SPEC_BASE"}},
+		{"test:spec base is head", "github.event.pull_request.base.sha || (github.event.before", "github.event.pull_request.head.sha || (github.event.before", []string{"TEST_SPEC_BASE"}},
+		{"test:spec zero-before fallback dropped", "(github.event.before != '0000000000000000000000000000000000000000' && github.event.before || 'origin/main')", "github.event.before", []string{"TEST_SPEC_BASE"}},
 	})
 }

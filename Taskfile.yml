@@ -107,6 +107,14 @@ tasks:
     cmds:
       - ateam state spec-queue
 
+  # ateam's own test:spec runs unscoped; with thousands of legacy uncited tests we scope missing citations to tests
+  # changed since the merge base of TEST_SPEC_BASE and HEAD (ateam #237). Broken citations fail everywhere. CI sets
+  # TEST_SPEC_BASE to the pull request base, or the previous main commit on a push; locally it defaults to origin/main.
+  test:spec:
+    desc: Check that new and changed Go and Vitest tests cite a spec Requirement (ateam test-spec --base)
+    cmds:
+      - ateam test-spec --base "${TEST_SPEC_BASE:-origin/main}"
+
   # Observability shortcuts
   observe:up:
     desc: Start Prometheus + Grafana for local monitoring
