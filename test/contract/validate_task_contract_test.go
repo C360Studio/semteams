@@ -52,6 +52,7 @@ func expectedCIStepMappings() []ciStepMapping {
 		{job: "ui", ciRun: "npm run build", validateFragment: "npm run build"},
 		{job: "governance", ciRun: "task ateam:doctor", validateFragment: "task ateam:doctor"},
 		{job: "governance", ciRun: "task openspec:validate", validateFragment: "task openspec:validate"},
+		{job: "governance", ciRun: "task test:spec", validateFragment: "task test:spec"},
 		{job: "governance", ciRun: "task publish:verify-test", validateFragment: "task publish:verify-test"},
 	}
 }
@@ -125,6 +126,7 @@ func verifyCIWorkflowParity(ciYAML []byte, validateScript string) error {
 	return nil
 }
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestValidateTaskMirrorsRepositoryCI(t *testing.T) {
 	repoRoot, err := findRepoRoot()
 	if err != nil {
@@ -161,6 +163,17 @@ func TestValidateTaskMirrorsRepositoryCI(t *testing.T) {
 		driftedScript := strings.Replace(scriptText, "task publish:verify-test", "# removed", 1)
 		if err := verifyCIWorkflowParity(ciBytes, driftedScript); err == nil {
 			t.Fatal("expected parity check to fail when scripts/validate.sh omits a CI step, but it passed")
+		}
+	})
+
+	t.Run("detects_missing_test_spec_drift", func(t *testing.T) {
+		driftedScript := strings.Replace(scriptText, "task test:spec\n", "", 1)
+		if err := verifyCIWorkflowParity(ciBytes, driftedScript); err == nil {
+			t.Fatal("expected parity check to fail when scripts/validate.sh omits task test:spec, but it passed")
+		}
+		driftedCI := strings.Replace(string(ciBytes), "        run: task test:spec\n", "", 1)
+		if err := verifyCIWorkflowParity([]byte(driftedCI), scriptText); err == nil {
+			t.Fatal("expected parity check to fail when ci.yml omits task test:spec, but it passed")
 		}
 	})
 
@@ -391,6 +404,7 @@ func (fx *worktreeFixture) assertWorktreeUnchanged(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestValidateScriptCommandCompositionAndWorktreePreservation(t *testing.T) {
 	repoRoot, err := findRepoRoot()
 	if err != nil {
@@ -435,6 +449,7 @@ func TestValidateScriptCommandCompositionAndWorktreePreservation(t *testing.T) {
 			"npm run build",
 			"task ateam:doctor",
 			"task openspec:validate",
+			"task test:spec",
 			"task publish:verify-test",
 		}
 		if len(lines) != len(wantPrefixes) {
@@ -616,6 +631,7 @@ func TestValidateScriptPrerequisiteFailures(t *testing.T) {
 	})
 }
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestValidateTaskAndDocsContract(t *testing.T) {
 	repoRoot, err := findRepoRoot()
 	if err != nil {
@@ -638,6 +654,7 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 		"merge:check:", "scripts/merge-check.sh",
 		"mutate:check:", `- "ateam mutate {{.CLI_ARGS}}"`,
 		"spec:check:", "spec:queue:",
+		"test:spec:", `- ateam test-spec --base "${TEST_SPEC_BASE:-origin/main}"`,
 		"verify:", "scripts/verify.sh",
 	} {
 		if !strings.Contains(taskfileText, wantTask) {

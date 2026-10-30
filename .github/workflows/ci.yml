@@ -37,7 +37,7 @@ jobs:
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
           go install github.com/mgechev/revive@v1.15.0
-          GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.4
+          GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.5
 
       - name: Lint
         run: task lint
@@ -103,8 +103,11 @@ jobs:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     steps:
+      # Full history: ateam test-spec --base diffs from the merge base of the base commit and HEAD.
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v6
@@ -116,13 +119,20 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22.20.0
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      # The test-to-spec Vitest scan parses UI tests with ui/node_modules/typescript.
+      - name: Install UI dependencies
+        working-directory: ui
+        run: npm ci
 
       - name: Install pinned governance tools
         env:
           GOTOOLCHAIN: auto
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
-          go install github.com/c360studio/ateam/cmd/ateam@v0.3.4
+          go install github.com/c360studio/ateam/cmd/ateam@v0.3.5
           npm install --global @fission-ai/openspec@1.7.0
 
       - name: Check ATeam multi-agent parity
@@ -130,6 +140,14 @@ jobs:
 
       - name: Validate OpenSpec
         run: task openspec:validate
+
+      # New and changed tests cite a spec Requirement (ateam test-spec --base, ateam #237). The base is the pull
+      # request's base commit, or on a push the previous main commit. A push whose before is all zeros (a new ref) has
+      # no previous commit, so it falls back to origin/main, which on a push to main is HEAD and reports nothing.
+      - name: Check test-to-spec citations
+        env:
+          TEST_SPEC_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before || 'origin/main') }}
+        run: task test:spec
 
       - name: Test publish verify script
         run: task publish:verify-test

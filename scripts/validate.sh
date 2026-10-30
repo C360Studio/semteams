@@ -108,6 +108,7 @@ echo "=== [3/3] Governance lane ==="
 gov_start=$SECONDS
 task ateam:doctor
 task openspec:validate
+task test:spec
 task publish:verify-test
 gov_elapsed=$((SECONDS - gov_start))
 
