@@ -46,7 +46,7 @@ func (h *heldApplyTarget) ApplyConfigUpdate(map[string]any) error {
 // error and does not report stopped; once the work is released, a second Stop
 // completes. Review round 4 on #1188, MEDIUM-1.
 //
-// spec: component-runtime-config / Config Manager delivers a registered key family to its owner
+// upstream spec: semstreams component-runtime-config / Config Manager delivers a registered key family to its owner
 func TestRuleConfigServiceStopIsBoundedAndReportsStoppedOnlyWhenJoined(t *testing.T) {
 	testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)

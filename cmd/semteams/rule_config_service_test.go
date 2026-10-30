@@ -66,7 +66,7 @@ func quietLogger() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard
 // after the components and stops before them. Owner ruling on #1188, docket 6
 // Q11 (b-full).
 //
-// spec: component-runtime-config / Config Manager delivers a registered key family to its owner
+// upstream spec: semstreams component-runtime-config / Config Manager delivers a registered key family to its owner
 func TestRuleConfigServiceStartsAfterAndStopsBeforeTheComponents(t *testing.T) {
 	manager := service.NewServiceManager(service.NewServiceRegistry())
 	components := newComponentsStandIn(t, manager)
@@ -118,7 +118,7 @@ func (idleTarget) ApplyConfigUpdate(map[string]any) error               { return
 // no-op through the adapter, so the service manager never sees a false
 // "reconcile loop still running" error. Codex round 2 on #1188.
 //
-// spec: component-runtime-config / Config Manager delivers a registered key family to its owner
+// upstream spec: semstreams component-runtime-config / Config Manager delivers a registered key family to its owner
 func TestRuleConfigServiceRepeatedStopAfterCompletionIgnoresACanceledContext(t *testing.T) {
 	rules, err := rulepkg.NewConfigManager(quietLogger())
 	require.NoError(t, err)
