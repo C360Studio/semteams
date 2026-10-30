@@ -21,10 +21,11 @@
   fails `task test:spec`. Evidence: commit `2ab5ffa4`; `TestCIWorkflowGate` and `TestValidateTaskMirrorsRepositoryCI`
   rows fail when the step or base is dropped, and `TestValidateTaskAndDocsContract` failed with the `--base` form
   removed from `Taskfile.yml`; planted uncited Go and Vitest tests each reported `missing spec citation`.
-- [ ] 3.2 Rewrite the five malformed citations per design D3 A in precursor PR #392, which merges before this PR (owner
+- [x] 3.2 Rewrite the five malformed citations per design D3 A in precursor PR #392, which merges before this PR (owner
   sequencing ruling, 2026-10-30; notes/3.2.md), then merge `origin/main` here. Acceptance: `ateam test-spec --base
-  origin/main` exits 0 on this branch.
-  Hold: waits for #392 to merge
+  origin/main` exits 0 on this branch. Evidence: #392 squash-merged as `4de5b097`; merged into this branch at
+  `7078b344`; `ateam test-spec --base origin/main` (v0.3.5) prints "all discovered supported tests have valid
+  citations", exit 0.
 
 ## 4. Merge check probe
 
@@ -41,5 +42,5 @@
   Acceptance: `AGENTS.md` is under 24,000 bytes, and `TestAgentSetupParity` passes. Evidence: `wc -c AGENTS.md` is
   23982; `go test ./test/contract/...` passes; `task ateam:doctor` reports a § 4 row-count violation when the
   rules-index row is removed.
-- [ ] 5.2 Apply the `repository-governance` delta. Acceptance: `task spec:check` and `task validate` pass on a clean
-  tree with ateam v0.3.5 first on PATH.
+- [x] 5.2 Apply the `repository-governance` delta. Acceptance: `task spec:check` and `task validate` pass on a clean
+  tree with ateam v0.3.5 first on PATH. Evidence: `openspec archive adopt-ateam-v035` synced the delta in the archive commit; `task validate` passed on that clean tree.

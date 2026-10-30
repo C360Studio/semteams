@@ -59,8 +59,9 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 - WHEN it evaluates repository policy artifacts
 - THEN it runs `ateam doctor --check` with session-ID environment variables unset so multi-agent setup, hooks, MCP config, skills, and review-policy parity are verified without mutating the worktree
 - AND it runs `task openspec:validate`, which runs `openspec validate --all --strict` and then `ateam state spec-check`, so a missing `openspec` fails rather than skips
+- AND it runs `task test:spec` against the pull request base, or the previous `main` commit on a push (`ateam test-spec --base`)
 - AND it runs `task publish:verify-test`, which proves the publication evidence gate fails closed
-- AND ATeam is v0.3.4, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
+- AND ATeam is v0.3.5, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
 - AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
 
@@ -169,7 +170,7 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 - GIVEN a non-draft pull request targets `main`
 - WHEN `Merge check` runs
 - THEN it checks out the base commit, not the pull request head, without persisted credentials
-- AND it installs ATeam v0.3.4 and runs `scripts/merge-check.sh` with the pull request number and
+- AND it installs ATeam v0.3.5 and runs `scripts/merge-check.sh` with the pull request number and
   `ATEAM_REQUIRED_CHECKS: Required,Merge check`
 - AND its token permissions are read-only for contents, issues, and pull requests
 - AND the workflow file itself is read from the pull request, so a change to it is caught by review only
@@ -182,7 +183,7 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 
 #### Scenario: A description edit reruns the check
 
-- GIVEN a non-draft code pull request whose `Merge check` failed for want of a review record
+- GIVEN a non-draft code pull request whose `Merge check` was skipped while awaiting its review record
 - WHEN the reviewer posts an approving record and then edits the description to add `reviewed-by:`
 - THEN `Merge check` reruns on the `edited` event at the same head without rerunning `Repository CI`
 - AND runs for one pull request queue rather than cancel one another
@@ -206,5 +207,38 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 - GIVEN a draft pull request
 - WHEN `merge-check.yml` runs
 - THEN its job is skipped, and its check-run is not named `Merge check` (it shows the raw `name:` expression)
-- AND marking the pull request ready runs `Merge check` with the review check applied
+- AND marking the pull request ready runs the `Merge check probe`, and `Merge check` runs in full unless the pull request
+  is awaiting its review record
+
+#### Scenario: A code pull request awaiting its review record carries no Merge check
+
+- GIVEN a non-draft code pull request with no `reviewed-by:` line in its description and no review record comment
+- WHEN `merge-check.yml` runs
+- THEN the `Merge check probe` job, which runs ATeam from the base commit, answers `awaiting=true`
+- AND the `Merge check` job is skipped, so no check-run named `Merge check` exists and the merge stays blocked
+- AND a failed probe gives no answer and the full `Merge check` runs (ATeam v0.3.5, `C360Studio/ateam#262`)
+
+### Requirement: New and changed tests cite a spec Requirement
+
+`Repository CI` SHALL fail when a Go or Vitest test that the pull request adds or changes has no resolvable spec citation
+(`// spec: openspec/specs/<capability>/spec.md#Requirement: <name>`). Tests the pull request does not touch SHALL NOT be
+required to carry one.
+
+#### Scenario: A new uncited test fails Governance
+
+- GIVEN a pull request that adds a Go `Test` function or a Vitest `it`/`test` with no `// spec:` citation
+- WHEN the Governance job runs `task test:spec` with the pull request base
+- THEN `ateam test-spec --base` reports the test as missing a citation and `Governance` fails, so `Required` fails
+
+#### Scenario: Legacy uncited tests do not fail
+
+- GIVEN a pull request that changes no test
+- WHEN the Governance job runs `task test:spec`
+- THEN no missing citation is reported for tests outside the diff
+
+#### Scenario: A malformed citation fails anywhere
+
+- GIVEN a test whose `// spec:` comment does not name an `openspec/specs/` path and Requirement
+- WHEN `task test:spec` runs
+- THEN it is reported as malformed whether or not the pull request changes it
 
