@@ -121,7 +121,7 @@ rewired parked pack, or an unproved composition-root invariant.
   `task merge:check -- <pr>`, `Required`, and `Merge check` green on a head up to date with `main` and with **no
   known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (no skipped
   check-run carries the name `Required` or `Merge check`), so undrafting starts the first run that checks it. On a non-draft code/UI PR,
-  `Merge check` (its own workflow, `merge-check.yml`) is skipped as `Merge check (awaiting review record, skipped)` while
+  `Merge check` (its own workflow, `merge-check.yml`) is skipped (under a name that is never `Merge check`) while
   the PR has no review record and no `reviewed-by:` line, so the required context is absent and the merge stays
   blocked; once either exists it runs in full and is red until both the approving record and the line exist. The
   reviewer's description edit that adds `reviewed-by:` reruns it on the `edited` event, as

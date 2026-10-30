@@ -87,6 +87,8 @@ type gateStep struct {
 	WorkingDirectory string            `yaml:"working-directory"`
 	With             map[string]any    `yaml:"with"`
 	Env              map[string]string `yaml:"env"`
+	If               string            `yaml:"if"`
+	ContinueOnError  any               `yaml:"continue-on-error"`
 }
 
 func parseGateWorkflow(file string, data []byte) (gateWorkflow, []string) {
@@ -245,8 +247,15 @@ func ciWorkflowGateViolations(data []byte) []string {
 		}
 		if i := slices.IndexFunc(gov.Steps, func(s gateStep) bool { return strings.TrimSpace(s.Run) == "task test:spec" }); i < 0 {
 			bad("governance has no step that runs task test:spec")
-		} else if got := gov.Steps[i].Env["TEST_SPEC_BASE"]; got != testSpecBase {
-			bad("governance test:spec TEST_SPEC_BASE is %q, want %q", got, testSpecBase)
+		} else {
+			step := gov.Steps[i]
+			if got := step.Env["TEST_SPEC_BASE"]; got != testSpecBase {
+				bad("governance test:spec TEST_SPEC_BASE is %q, want %q", got, testSpecBase)
+			}
+			// A step-level if or continue-on-error would let the gate stop failing Governance.
+			if step.If != "" || step.ContinueOnError != nil {
+				bad("governance test:spec step must carry no if or continue-on-error")
+			}
 		}
 	}
 	req, ok := wf.Jobs["required"]
@@ -393,6 +402,8 @@ func TestCIWorkflowGate(t *testing.T) {
 		{"governance shallow checkout", "        with:\n          fetch-depth: 0\n", "", []string{"fetch-depth: 0"}},
 		{"governance UI install dropped", "        working-directory: ui\n        run: npm ci\n", "        run: echo skipped\n", []string{"npm ci step in ui"}},
 		{"test:spec step dropped", "        run: task test:spec\n", "        run: echo skipped\n", []string{"runs task test:spec"}},
+		{"test:spec step continue-on-error", "        run: task test:spec\n", "        continue-on-error: true\n        run: task test:spec\n", []string{"no if or continue-on-error"}},
+		{"test:spec step if false", "        run: task test:spec\n", "        if: false\n        run: task test:spec\n", []string{"no if or continue-on-error"}},
 		{"test:spec base unset", "          TEST_SPEC_BASE: " + testSpecBase + "\n", "", []string{"TEST_SPEC_BASE"}},
 		{"test:spec base is head", "github.event.pull_request.base.sha || (github.event.before", "github.event.pull_request.head.sha || (github.event.before", []string{"TEST_SPEC_BASE"}},
 		{"test:spec zero-before fallback dropped", "(github.event.before != '0000000000000000000000000000000000000000' && github.event.before || 'origin/main')", "github.event.before", []string{"TEST_SPEC_BASE"}},

@@ -79,7 +79,8 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 - GIVEN a draft pull request
 - WHEN `merge-check.yml` runs
 - THEN its job is skipped, and its check-run is not named `Merge check` (it shows the raw `name:` expression)
-- AND marking the pull request ready runs `Merge check` with the review check applied
+- AND marking the pull request ready runs the `Merge check probe`, and `Merge check` runs in full unless the pull request
+  is awaiting its review record
 
 #### Scenario: A code pull request awaiting its review record carries no Merge check
 

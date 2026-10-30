@@ -19,7 +19,7 @@ Line references are to `origin/main` `4f45a387`. Upstream references are to `C36
   `ui/node_modules` and a shallow checkout. The `ui` job (`:62-99`) has `ui/node_modules` but no Go.
 - Upstream `merge-check.yml` adds an `awaiting` job named `Merge check probe`. It builds ateam from the base commit and
   runs `ateam review gate --awaiting <pr>`, which prints `awaiting=true|false`. The `merge-check` job then
-  `needs: awaiting`, gets the name `Merge check (awaiting review record, skipped)` when the answer is true, and skips.
+  `needs: awaiting` and skips when the answer is true (GitHub shows the raw `name:` expression, never `Merge check`).
   A failed probe gives no answer, and the full check runs.
 - `ateam doctor --check` under v0.3.5 reports one violation: `.agents/contracts/reviewer.md: missing or drifted review
   instructions` (`ateam#262` added the PR-description line). The `architect.md` drift check (`ateam#217`) passes.

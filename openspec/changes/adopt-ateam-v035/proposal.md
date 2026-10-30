@@ -18,7 +18,7 @@ Owner ruling on #375: match ateam unless there is a very good reason not to.
 
 - Pin `ateam@v0.3.5` in `ci.yml`, `merge-check.yml`, and `scripts/doctor.sh`, and sync `reviewer.md` to the v0.3.5 template.
 - Add `task test:spec`, which runs `ateam test-spec --base <ref>` (default `origin/main`). `Repository CI` runs it against the PR base (design D1).
-- Fix the three `// spec:` citations that `test-spec` reports as malformed (design D3).
+- Fix the `// spec:` citations that `test-spec` reports as malformed (design D3): five sites, landed first in #392 (notes/3.2.md).
 - In `merge-check.yml`, add ateam's `Merge check probe` job. `Merge check` is skipped and renamed while the PR is still awaiting its review record (design D2).
 - Update `.agents/protocol.md` to replace the deferral paragraph with the adopted rule, and add the rule row to both `AGENTS.md` and `.agents/rules-index.md`. Update the `repository-governance` spec and the contract tests to match.
 
