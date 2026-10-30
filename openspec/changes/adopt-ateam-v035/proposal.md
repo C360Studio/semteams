@@ -1,6 +1,6 @@
 # Adopt ATeam v0.3.5: diff-scoped test-to-spec gate and the Merge check awaiting probe
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-10-30)
 
 Track: design. This change edits `.github/workflows/`, which counts as a gate file. It also adds a `repository-governance` Requirement.
 

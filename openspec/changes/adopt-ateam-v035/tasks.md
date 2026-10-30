@@ -1,8 +1,8 @@
 ## 1. Approval
 
-- [ ] 1.1 Owner approves `proposal.md` and `design.md` by filling in `Approved-by: <name> (<YYYY-MM-DD>)` and removing
-  this hold in the same edit. The approval rules on design Open Questions 1-2 (#386, #374).
-  Hold: OPEN-Q proposal awaits owner approval
+- [x] 1.1 Owner approves `proposal.md` and `design.md` by filling in `Approved-by: <name> (<YYYY-MM-DD>)` and removing
+  this hold in the same edit. The approval rules on design Open Questions 1-2 (#386, #374). Evidence: the owner
+  approved in Enjoy on 2026-10-30 ("lift the #374 deferral, D1–D3 all A"); Claude wrote the header at their request.
 
 ## 2. Pin and harness
 
