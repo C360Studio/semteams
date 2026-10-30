@@ -16,7 +16,7 @@ import (
 // below has a sensitivity row that mutates the real workflow text and expects the violation.
 
 const (
-	ateamPin = "v0.3.4"
+	ateamPin = "v0.3.5"
 	// The job guard in ci.yml: push events run, draft pull requests skip.
 	ciDraftGuard = "github.event_name != 'pull_request' || !github.event.pull_request.draft"
 	// merge-check.yml has only pull_request events, so its guard is upstream's shorter form.

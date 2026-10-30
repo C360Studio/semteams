@@ -37,7 +37,7 @@ jobs:
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
           go install github.com/mgechev/revive@v1.15.0
-          GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.4
+          GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.5
 
       - name: Lint
         run: task lint
@@ -122,7 +122,7 @@ jobs:
           GOTOOLCHAIN: auto
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.51.1
-          go install github.com/c360studio/ateam/cmd/ateam@v0.3.4
+          go install github.com/c360studio/ateam/cmd/ateam@v0.3.5
           npm install --global @fission-ai/openspec@1.7.0
 
       - name: Check ATeam multi-agent parity

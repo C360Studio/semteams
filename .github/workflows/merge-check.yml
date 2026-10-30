@@ -1,6 +1,6 @@
 name: Merge check
 
-# As in ateam v0.3.4's merge-check.yml: its own workflow and required check, apart from Repository CI (ateam #255).
+# As in ateam v0.3.5's merge-check.yml: its own workflow and required check, apart from Repository CI (ateam #255).
 # The merge check reads pull request state (the review record, the reviewed-by: line, open flake issues), so it reruns
 # on edited, which is how the reviewer's description edit reaches it, without rerunning Go, UI, or Governance; and an
 # open class:flake fails Merge check only, never Required. pull_request, not pull_request_target, so the pull request
@@ -50,7 +50,7 @@ jobs:
       - name: Install pinned ateam
         env:
           GOTOOLCHAIN: auto
-        run: GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@v0.3.4
+        run: GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@v0.3.5
 
       # Exit 1 is a rule failure, exit 2 means a forge read was unavailable; the gate's log names which.
       - name: Check the up-to-date rule, the review and its strength, and known flakes
