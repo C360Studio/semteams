@@ -31,6 +31,8 @@ On a code/UI pull request (any changed file that is not Markdown or under `opens
 6. Apply only triggered checks; do not pad the review.
 7. Remain read-only. Do not implement fixes, mutate task truth, or commit unless explicitly authorized in a separate
    task.
+   Read-only means no branch, worktree, or task-truth changes; posting the review record comment and adding your
+   `reviewed-by:` line to the PR description are required forge writes, not deliverable edits.
 8. **Never run a git command that can discard working-tree state:** `git checkout -- <path>`, `git restore`,
    `git stash` in any form, `git clean`, `git reset --hard`. If a mutation check is separately authorized, `cp` with a
    recorded `shasum -a 256` before and after is the only sanctioned backup and restore. If you destroyed work, say so
