@@ -404,7 +404,7 @@ func (fx *worktreeFixture) assertWorktreeUnchanged(t *testing.T) {
 	}
 }
 
-// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
+// spec: openspec/specs/repository-governance/spec.md#Requirement: task validate is the read-only local mirror of Repository CI
 func TestValidateScriptCommandCompositionAndWorktreePreservation(t *testing.T) {
 	repoRoot, err := findRepoRoot()
 	if err != nil {
@@ -631,7 +631,7 @@ func TestValidateScriptPrerequisiteFailures(t *testing.T) {
 	})
 }
 
-// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
+// spec: openspec/specs/repository-governance/spec.md#Requirement: task validate is the read-only local mirror of Repository CI
 func TestValidateTaskAndDocsContract(t *testing.T) {
 	repoRoot, err := findRepoRoot()
 	if err != nil {
