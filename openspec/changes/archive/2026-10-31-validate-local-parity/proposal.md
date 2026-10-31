@@ -1,6 +1,6 @@
 # Specify `task validate` as the read-only local mirror of Repository CI
 
-Approved-by:
+Approved-by: Coby Leuschke (2026-10-31)
 
 Track: design, because it adds a `repository-governance` Requirement.
 
