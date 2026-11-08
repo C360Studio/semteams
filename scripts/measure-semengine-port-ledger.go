@@ -63,7 +63,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "repair-before-port",
 		PostPortHome:         "semengine/composition",
 		UpstreamRefs:         "ADR-100",
-		ConsumerAction:       "M2 (#407): replace composition.AssertValid with composition.Validate in test/contract/composition_contract_test.go",
+		ConsumerAction:       "M2 (#407): replace composition.AssertValid(t, registry, cfg) with composition.Validate(registry, cfg) (*Result, error) in test/contract/composition_contract_test.go",
 	},
 	{
 		Subpath:              "config",
@@ -79,7 +79,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "adapt",
 		PostPortHome:         "semengine/graph",
 		UpstreamRefs:         "ADR-109, ADR-110",
-		ConsumerAction:       "M2 (#406, #407): NewExactEntityReader returns (*ExactEntityReader, error); ExactEntity json kv_revision; EntityMutationResponse + ReconcilePredicatesRequest.Source",
+		ConsumerAction:       "M2 (#406, #407): NewExactEntityReader returns (*ExactEntityReader, error); ExactEntity json kv_revision; EntityMutationResponse + ReconcilePredicatesRequest.Source (and per-triple Source/Timestamp)",
 	},
 	{
 		Subpath:              "graph/inference",
@@ -119,7 +119,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "adapt",
 		PostPortHome:         "semengine/natsclient",
 		UpstreamRefs:         "ADR-110, ADR-112",
-		ConsumerAction:       "M1 (#400): replace NewTestClient/TestClient in 10 test files with internal/natstest; M2 (#404, #407): use pkg/retry.Config and WaitConsumerHandlers",
+		ConsumerAction:       "M1 (#400): replace NewTestClient/TestClient in 11 _test.go files with internal/natstest; M2 (#404, #407): use pkg/retry.Config and WaitConsumerHandlers",
 	},
 	{
 		Subpath:              "payloadregistry",

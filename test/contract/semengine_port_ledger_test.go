@@ -43,6 +43,71 @@ type ledgerSummaryJSON struct {
 	} `json:"rows"`
 }
 
+func buildLedgerAnalyzer(t *testing.T, repoRoot string, src []byte) string {
+	t.Helper()
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "measure-semengine-port-ledger.go")
+	if err := os.WriteFile(srcFile, src, 0o644); err != nil {
+		t.Fatalf("write temp analyzer source: %v", err)
+	}
+	binFile := filepath.Join(tmpDir, "measure-semengine-port-ledger")
+	cmd := exec.Command("go", "build", "-o", binFile, srcFile)
+	cmd.Dir = repoRoot
+	if out, buildErr := cmd.CombinedOutput(); buildErr != nil {
+		t.Fatalf("compile analyzer: %v\n%s", buildErr, string(out))
+	}
+	return binFile
+}
+
+func runLedgerAnalyzer(bin string, args ...string) (string, int) {
+	cmd := exec.Command(bin, args...)
+	out, runErr := cmd.CombinedOutput()
+	code := 0
+	if runErr != nil {
+		if exitErr, ok := runErr.(*exec.ExitError); ok {
+			code = exitErr.ExitCode()
+		} else {
+			code = -1
+		}
+	}
+	return string(out), code
+}
+
+func writeLedgerFixtureFiles(t *testing.T, root string, files map[string]string) {
+	t.Helper()
+	for rel, content := range files {
+		full := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", full, err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", full, err)
+		}
+	}
+}
+
+func checkLedgerDocMatchesGenerated(docContent, expectedMarkdown string) error {
+	const (
+		beginMarker = "<!-- BEGIN GENERATED CROSSWALK -->"
+		endMarker   = "<!-- END GENERATED CROSSWALK -->"
+	)
+	startIdx := strings.Index(docContent, beginMarker)
+	if startIdx < 0 {
+		return os.ErrNotExist
+	}
+	afterBegin := docContent[startIdx+len(beginMarker):]
+	endIdx := strings.Index(afterBegin, endMarker)
+	if endIdx < 0 {
+		return os.ErrInvalid
+	}
+	gotBlock := strings.TrimSpace(afterBegin[:endIdx])
+	wantBlock := strings.TrimSpace(expectedMarkdown)
+	if gotBlock != wantBlock {
+		return &crosswalkDriftError{got: gotBlock, want: wantBlock}
+	}
+	return nil
+}
+
 // spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestSemEnginePortLedger(t *testing.T) {
 	repoRoot, err := findRepoRoot()
@@ -56,50 +121,7 @@ func TestSemEnginePortLedger(t *testing.T) {
 		t.Fatalf("read %s: %v", scriptPath, err)
 	}
 
-	buildAnalyzer := func(t *testing.T, src []byte) string {
-		t.Helper()
-		tmpDir := t.TempDir()
-		srcFile := filepath.Join(tmpDir, "measure-semengine-port-ledger.go")
-		if err := os.WriteFile(srcFile, src, 0o644); err != nil {
-			t.Fatalf("write temp analyzer source: %v", err)
-		}
-		binFile := filepath.Join(tmpDir, "measure-semengine-port-ledger")
-		cmd := exec.Command("go", "build", "-o", binFile, srcFile)
-		cmd.Dir = repoRoot
-		if out, buildErr := cmd.CombinedOutput(); buildErr != nil {
-			t.Fatalf("compile analyzer: %v\n%s", buildErr, string(out))
-		}
-		return binFile
-	}
-
-	runAnalyzer := func(bin string, args ...string) (string, int) {
-		cmd := exec.Command(bin, args...)
-		out, runErr := cmd.CombinedOutput()
-		code := 0
-		if runErr != nil {
-			if exitErr, ok := runErr.(*exec.ExitError); ok {
-				code = exitErr.ExitCode()
-			} else {
-				code = -1
-			}
-		}
-		return string(out), code
-	}
-
-	writeFiles := func(t *testing.T, root string, files map[string]string) {
-		t.Helper()
-		for rel, content := range files {
-			full := filepath.Join(root, filepath.FromSlash(rel))
-			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-				t.Fatalf("mkdir %s: %v", full, err)
-			}
-			if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-				t.Fatalf("write %s: %v", full, err)
-			}
-		}
-	}
-
-	analyzerBin := buildAnalyzer(t, scriptBytes)
+	analyzerBin := buildLedgerAnalyzer(t, repoRoot, scriptBytes)
 
 	t.Run("stdlib_only_and_build_ignore_header", func(t *testing.T) {
 		fset := token.NewFileSet()
@@ -131,7 +153,7 @@ func TestSemEnginePortLedger(t *testing.T) {
 
 	t.Run("synthetic_tree_separates_prod_test_scripts_and_skips_ignored_dirs", func(t *testing.T) {
 		fixture := t.TempDir()
-		writeFiles(t, fixture, map[string]string{
+		writeLedgerFixtureFiles(t, fixture, map[string]string{
 			"cmd/app/main.go": `package main
 import (
 	_ "github.com/c360studio/semstreams/agentic"
@@ -162,7 +184,7 @@ const extraMod = "github.com/c360studio/semstreams/custom-probe"
 			".svelte-kit/output/ignored.go": "package p\nimport _ \"github.com/c360studio/semstreams/unclassified/svelte\"\n",
 		})
 
-		rawJSON, code := runAnalyzer(analyzerBin, "-root", fixture, "-format=json")
+		rawJSON, code := runLedgerAnalyzer(analyzerBin, "-root", fixture, "-format=json")
 		if code != 0 {
 			t.Fatalf("expected exit 0 on synthetic fixture, got %d:\n%s", code, rawJSON)
 		}
@@ -185,7 +207,7 @@ const extraMod = "github.com/c360studio/semstreams/custom-probe"
 			t.Fatalf("default -active-only=false should emit all 56 baseline rows, got %d", len(summary.Rows))
 		}
 
-		activeJSON, activeCode := runAnalyzer(analyzerBin, "-root", fixture, "-format=json", "-active-only")
+		activeJSON, activeCode := runLedgerAnalyzer(analyzerBin, "-root", fixture, "-format=json", "-active-only")
 		if activeCode != 0 {
 			t.Fatalf("expected exit 0 with -active-only, got %d:\n%s", activeCode, activeJSON)
 		}
@@ -213,19 +235,19 @@ const extraMod = "github.com/c360studio/semstreams/custom-probe"
 
 	t.Run("fails_closed_on_unclassified_semstreams_import", func(t *testing.T) {
 		fixture := t.TempDir()
-		writeFiles(t, fixture, map[string]string{
+		writeLedgerFixtureFiles(t, fixture, map[string]string{
 			"cmd/app/unclassified.go": `package main
 import _ "github.com/c360studio/semstreams/unclassified/newpkg"
 `,
 		})
-		out, code := runAnalyzer(analyzerBin, "-root", fixture, "-format=json")
+		out, code := runLedgerAnalyzer(analyzerBin, "-root", fixture, "-format=json")
 		if code == 0 || !strings.Contains(out, "unclassified SemStreams import(s)") || !strings.Contains(out, "cmd/app/unclassified.go") {
 			t.Fatalf("expected non-zero fail-closed exit naming unclassified import, got exit %d:\n%s", code, out)
 		}
 	})
 
 	t.Run("live_repo_all_imports_classified_and_ledger_doc_complete", func(t *testing.T) {
-		rawJSON, code := runAnalyzer(analyzerBin, "-root", repoRoot, "-format=json")
+		rawJSON, code := runLedgerAnalyzer(analyzerBin, "-root", repoRoot, "-format=json")
 		if code != 0 {
 			t.Fatalf("live repository has unclassified SemStreams imports (exit %d):\n%s", code, rawJSON)
 		}
@@ -250,6 +272,11 @@ import _ "github.com/c360studio/semstreams/unclassified/newpkg"
 			}
 		}
 
+		expectedMarkdown, mdCode := runLedgerAnalyzer(analyzerBin, "-root", repoRoot)
+		if mdCode != 0 {
+			t.Fatalf("analyzer markdown mode failed on live repo (exit %d):\n%s", mdCode, expectedMarkdown)
+		}
+
 		ledgerDocPath := filepath.Join(repoRoot, "docs", "migrations", "semengine-port-ledger.md")
 		docBytes, docErr := os.ReadFile(ledgerDocPath)
 		if docErr != nil {
@@ -270,11 +297,35 @@ import _ "github.com/c360studio/semstreams/unclassified/newpkg"
 				t.Fatalf("docs/migrations/semengine-port-ledger.md missing required section/token %q", required)
 			}
 		}
-		for _, row := range summary.Rows {
-			token := "| `" + row.Subpath + "` |"
-			if !strings.Contains(docText, token) {
-				t.Fatalf("docs/migrations/semengine-port-ledger.md missing crosswalk row for subpath %q", row.Subpath)
-			}
+		if driftErr := checkLedgerDocMatchesGenerated(docText, expectedMarkdown); driftErr != nil {
+			t.Fatalf("docs/migrations/semengine-port-ledger.md generated crosswalk block is stale; regenerate with `go run ./scripts/measure-semengine-port-ledger.go`:\n%v", driftErr)
+		}
+	})
+
+	t.Run("sensitivity_stale_generated_crosswalk_block_is_detected", func(t *testing.T) {
+		expectedMarkdown, mdCode := runLedgerAnalyzer(analyzerBin, "-root", repoRoot)
+		if mdCode != 0 {
+			t.Fatalf("analyzer markdown mode failed: %s", expectedMarkdown)
+		}
+		ledgerDocPath := filepath.Join(repoRoot, "docs", "migrations", "semengine-port-ledger.md")
+		docBytes, docErr := os.ReadFile(ledgerDocPath)
+		if docErr != nil {
+			t.Fatalf("read %s: %v", ledgerDocPath, docErr)
+		}
+		mutatedDoc := strings.Replace(string(docBytes), "| `message` | 22 |", "| `message` | 99 |", 1)
+		if mutatedDoc == string(docBytes) {
+			t.Fatal("stale-count mutation did not apply to docs/migrations/semengine-port-ledger.md")
+		}
+		mutatedPath := filepath.Join(t.TempDir(), "semengine-port-ledger.md")
+		if err := os.WriteFile(mutatedPath, []byte(mutatedDoc), 0o644); err != nil {
+			t.Fatalf("write mutated doc copy: %v", err)
+		}
+		reRead, err := os.ReadFile(mutatedPath)
+		if err != nil {
+			t.Fatalf("read mutated doc copy: %v", err)
+		}
+		if driftErr := checkLedgerDocMatchesGenerated(string(reRead), expectedMarkdown); driftErr == nil {
+			t.Fatal("expected checkLedgerDocMatchesGenerated to reject stale generated crosswalk block, proving drift sensitivity")
 		}
 	})
 
@@ -288,12 +339,12 @@ import _ "github.com/c360studio/semstreams/unclassified/newpkg"
 		if mutated == string(scriptBytes) {
 			t.Fatal("mutation did not apply to unclassified guard")
 		}
-		mutatedBin := buildAnalyzer(t, []byte(mutated))
+		mutatedBin := buildLedgerAnalyzer(t, repoRoot, []byte(mutated))
 		fixture := t.TempDir()
-		writeFiles(t, fixture, map[string]string{
+		writeLedgerFixtureFiles(t, fixture, map[string]string{
 			"cmd/app/unclassified.go": "package main\nimport _ \"github.com/c360studio/semstreams/unclassified/newpkg\"\n",
 		})
-		_, code := runAnalyzer(mutatedBin, "-root", fixture, "-format=json")
+		_, code := runLedgerAnalyzer(mutatedBin, "-root", fixture, "-format=json")
 		if code != 0 {
 			t.Fatal("expected mutated guard to exit 0, proving fails_closed_on_unclassified_semstreams_import sensitivity")
 		}
@@ -309,12 +360,12 @@ import _ "github.com/c360studio/semstreams/unclassified/newpkg"
 		if mutated == string(scriptBytes) {
 			t.Fatal("mutation did not apply to _test.go classification")
 		}
-		mutatedBin := buildAnalyzer(t, []byte(mutated))
+		mutatedBin := buildLedgerAnalyzer(t, repoRoot, []byte(mutated))
 		fixture := t.TempDir()
-		writeFiles(t, fixture, map[string]string{
+		writeLedgerFixtureFiles(t, fixture, map[string]string{
 			"cmd/app/main_test.go": "package main\nimport _ \"github.com/c360studio/semstreams/natsclient\"\n",
 		})
-		rawJSON, code := runAnalyzer(mutatedBin, "-root", fixture, "-format=json", "-active-only")
+		rawJSON, code := runLedgerAnalyzer(mutatedBin, "-root", fixture, "-format=json", "-active-only")
 		if code != 0 {
 			t.Fatalf("mutated binary failed unexpectedly: %s", rawJSON)
 		}
@@ -327,4 +378,31 @@ import _ "github.com/c360studio/semstreams/unclassified/newpkg"
 				summary.DistinctProdFilesImporting, summary.DistinctTestFilesImporting)
 		}
 	})
+}
+
+type crosswalkDriftError struct {
+	got  string
+	want string
+}
+
+func (e *crosswalkDriftError) Error() string {
+	gotLines := strings.Split(e.got, "\n")
+	wantLines := strings.Split(e.want, "\n")
+	limit := len(gotLines)
+	if len(wantLines) > limit {
+		limit = len(wantLines)
+	}
+	for i := 0; i < limit; i++ {
+		var g, w string
+		if i < len(gotLines) {
+			g = gotLines[i]
+		}
+		if i < len(wantLines) {
+			w = wantLines[i]
+		}
+		if g != w {
+			return "first differing line " + strconv.Itoa(i+1) + ":\n  doc: " + g + "\n  gen: " + w
+		}
+	}
+	return "generated crosswalk block differs"
 }

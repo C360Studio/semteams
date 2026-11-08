@@ -2,21 +2,21 @@
 
 This document is the regenerable import crosswalk and consumer adaptation ledger for Epic `#412` (`SemTeams → SemEngine` migration, issue `#398`).
 
-> **Current runtime truth vs. migration plan:** On `main` (`6581898e6a2d6bd78d0d21f6099a1819f18f2aaa`), SemTeams ships on the frozen SemStreams pin `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`), with live category packs `research` and `autoresearch` and unwired dev packs (`create-change`, `proof-readiness`, `dev-from-task`, `dev-via-test`) held per [ADR-058](../adr/058-semdev-extraction-boundary.md). All SemEngine rewires, Milestone 1 trims (`#399`–`#401`), and Milestone 2 runtime absorptions (`#404`–`#407`, `#287`) described below are target migration actions; none alter shipped behavior in `#398`.
+> **Current runtime truth vs. migration plan:** On `main` (`6581898e6a2d6bd78d0d21f6099a1819f18f2aaa`), SemTeams ships on the frozen SemStreams pin `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`), with live category packs `research` and `autoresearch` and unwired dev packs (`create-change`, `proof-readiness`, `dev-from-task`, `dev-via-test`) held per [ADR-058](../adr/058-beta159-realignment-and-demo-lane-focus.md). All SemEngine rewires, Milestone 1 trims (`#399`–`#401`), and Milestone 2 runtime absorptions (`#404`–`#407`, `#287`) described below are target migration actions; none alter shipped behavior in `#398`.
 
 ## Pinned audit baseline and cross-repo authorities
 
 | Artifact | Pinned reference | Role |
 | --- | --- | --- |
 | SemTeams base commit | `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa` (`main`) | Baseline repository state audited by `scripts/measure-semengine-port-ledger.go` |
-| Frozen SemStreams module | `github.com/c360studio/semstreams v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`) | Authoritative source for Milestone 2 agent-runtime absorption under [ADR-061](../adr/061-semteams-absorbs-agent-runtime-layer.md) and the `#403` acceptance floor (`docs/migrations/semengine-port-baseline/`) |
-| Audited SemEngine commit | `C360Studio/semengine@01567cc48d4d89ede05dfdf0aa1675a68bf9402b` (`main`, 2026-11-08) | Source for `docs/port-ledger/admission-ledger.yaml`, `ADR-108`..`ADR-113`, `processor/graph-query/MIGRATION.md`, and compiler-backed symbol checks |
+| Frozen SemStreams module | `github.com/c360studio/semstreams v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`) | Authoritative source for Milestone 2 agent-runtime absorption under [ADR-061](../adr/061-agent-runtime-ownership-and-observable-work.md) and the `#403` acceptance floor (`docs/migrations/semengine-port-baseline/`) |
+| Audited SemEngine commit | `C360Studio/semengine@01567cc48d4d89ede05dfdf0aa1675a68bf9402b` (`main`, 2026-11-08) | Source for `docs/admission-ledger.yaml`, `ADR-108`..`ADR-113`, `processor/graph-query/MIGRATION.md`, and exported symbol checks |
 | Sibling consumer crosswalk | `C360Studio/semsource#226` | SemSource consumer crosswalk; `C360Studio/semengine#9` (`issuecomment-6724212898`, 2026-11-08) sequences `processor/graph-clustering` ahead of `setup-04a-06` (`processor/rule`) and cuts `v0.1.0-alpha.3` for SemSource first |
-| SemTeams ownership boundary | [ADR-061](../adr/061-semteams-absorbs-agent-runtime-layer.md), [ADR-058](../adr/058-semdev-extraction-boundary.md) | SemTeams absorbs the agent runtime layer (`agentic*`, `persona`, `vocabulary/agentic`, `MilestoneService`) in Milestone 2 while keeping SemDev packs unwired |
+| SemTeams ownership boundary | [ADR-061](../adr/061-agent-runtime-ownership-and-observable-work.md), [ADR-058](../adr/058-beta159-realignment-and-demo-lane-focus.md) | SemTeams absorbs the agent runtime layer (`agentic*`, `persona`, `vocabulary/agentic`, `MilestoneService`) in Milestone 2 while keeping SemDev packs unwired |
 
 ## Regenerating and verifying this ledger
 
-`scripts/measure-semengine-port-ledger.go` is a `//go:build ignore`, Go-stdlib-only AST analyzer. It parses every `.go` file in the repository (skipping `.git`, `.worktrees`, `node_modules`, `vendor`, and `.svelte-kit`), classifies `github.com/c360studio/semstreams/...` imports into non-test `.go`, `_test.go`, and `scripts/*.go` counts, extracts string-literal-only occurrences in `scripts/`, and exits non-zero if any unclassified SemStreams import path is introduced.
+`scripts/measure-semengine-port-ledger.go` is a `//go:build ignore`, Go-stdlib-only AST analyzer. It parses every `.go` file in the repository (skipping `.git`, `.worktrees`, `node_modules`, `vendor`, and `.svelte-kit`), classifies `github.com/c360studio/semstreams/...` imports into non-test `.go`, `_test.go`, and `scripts/*.go` counts, extracts string-literal-only occurrences in `scripts/`, and exits non-zero if any unclassified SemStreams import path is introduced. `TestSemEnginePortLedger` enforces exact equality between the script's default Markdown output and the generated crosswalk block below.
 
 ```sh
 # Emit the full 56-row baseline crosswalk and group summary tables (Markdown)
@@ -28,7 +28,7 @@ go run ./scripts/measure-semengine-port-ledger.go -active-only
 # Emit machine-readable JSON (including exact per-row file lists)
 go run ./scripts/measure-semengine-port-ledger.go -format=json
 
-# Run stdlib-only, fail-closed, and mutation-sensitivity contract tests
+# Run stdlib-only, fail-closed, doc-equality, and mutation-sensitivity contract tests
 go test ./test/contract/... -run TestSemEnginePortLedger
 ```
 
@@ -36,8 +36,8 @@ go test ./test/contract/... -run TestSemEnginePortLedger
 
 The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is produced directly by `go run ./scripts/measure-semengine-port-ledger.go`.
 
-- **56** distinct `github.com/c360studio/semstreams/...` import paths appear in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message` and `payloadregistry`, and `agentic` in AST imports).
-- **2** additional `github.com/c360studio/semstreams*` strings appear only as string literals inside `scripts/` (`github.com/c360studio/semstreams` module root and synthetic test fixture `github.com/c360studio/semstreams/agentic-extra`), reconciling the **56** Go package imports with the **58** raw `git grep` path matches across the tree.
+- **56** distinct `github.com/c360studio/semstreams/...` import paths appear in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message`, `payloadregistry`, and `agentic` in AST imports).
+- **2** additional `github.com/c360studio/semstreams*` strings appear only as string literals inside `scripts/` (`github.com/c360studio/semstreams` module root and synthetic test fixture `github.com/c360studio/semstreams/agentic-extra`), reconciling the **56** Go package imports with the **58** raw `git grep` path matches across the tree at baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa` (excluding synthetic fixture literals in `test/contract/semengine_port_ledger_test.go`).
 
 <!-- BEGIN GENERATED CROSSWALK -->
 ### Summary counts
@@ -58,14 +58,14 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | SemStreams subpath | Non-test | `_test.go` | `scripts/` | SemEngine disposition | Post-port home | Upstream refs | SemTeams action |
 | --- | ---: | ---: | ---: | --- | --- | --- | --- |
 | `component` | 4 | 9 | 0 | `adapt` | `semengine/component` | ADR-108, ADR-113, semengine#29 | M2 (#404, #407): rewire imports; Registry.Register/ListFactories in catalog_test.go; types.PlatformMeta; Dependencies drops ToolRegistry/LifecycleManager |
-| `composition` | 0 | 2 | 0 | `repair-before-port` | `semengine/composition` | ADR-100 | M2 (#407): replace composition.AssertValid with composition.Validate in test/contract/composition_contract_test.go |
+| `composition` | 0 | 2 | 0 | `repair-before-port` | `semengine/composition` | ADR-100 | M2 (#407): replace composition.AssertValid(t, registry, cfg) with composition.Validate(registry, cfg) (*Result, error) in test/contract/composition_contract_test.go |
 | `config` | 3 | 11 | 0 | `adapt` | `semengine/config` | ADR-104, ADR-113 | M2 (#407): Manager.Stop(ctx); SEMENGINE_ env prefix and semengine_config_<org>_<stem> bucket; strict unknown-key rejection |
-| `graph` | 2 | 8 | 0 | `adapt` | `semengine/graph` | ADR-109, ADR-110 | M2 (#406, #407): NewExactEntityReader returns (*ExactEntityReader, error); ExactEntity json kv_revision; EntityMutationResponse + ReconcilePredicatesRequest.Source |
+| `graph` | 2 | 8 | 0 | `adapt` | `semengine/graph` | ADR-109, ADR-110 | M2 (#406, #407): NewExactEntityReader returns (*ExactEntityReader, error); ExactEntity json kv_revision; EntityMutationResponse + ReconcilePredicatesRequest.Source (and per-triple Source/Timestamp) |
 | `graph/inference` | 1 | 1 | 0 | `adapt` | `semengine/graph/inference` | semengine#97 | M1 (#399) / M2 (#402, #406): hierarchy slice on main; anomaly/detector types stay out of trimmed SemTeams graph-gateway |
 | `message` | 22 | 35 | 1 | `adapt` | `semengine/message` | ADR-110 | M2 (#404, #407): rewire imports; stream-lane statements require Source and Timestamp |
 | `metric` | 1 | 0 | 0 | `adapt` | `semengine/metric` | semengine#69 | M2 (#407): rewire cmd/semteams/main.go import; core metrics use semengine_ namespace |
 | `model` | 0 | 2 | 0 | `adapt` | `semengine/model` | semengine#155 | M2 (#404, #407): rewire test/runtime imports; track semengine#155 reader/endpoint refactor before pin |
-| `natsclient` | 12 | 14 | 0 | `adapt` | `semengine/natsclient` | ADR-110, ADR-112 | M1 (#400): replace NewTestClient/TestClient in 10 test files with internal/natstest; M2 (#404, #407): use pkg/retry.Config and WaitConsumerHandlers |
+| `natsclient` | 12 | 14 | 0 | `adapt` | `semengine/natsclient` | ADR-110, ADR-112 | M1 (#400): replace NewTestClient/TestClient in 11 _test.go files with internal/natstest; M2 (#404, #407): use pkg/retry.Config and WaitConsumerHandlers |
 | `payloadregistry` | 6 | 7 | 1 | `adapt` | `semengine/payloadregistry` | semengine#219 | M2 (#404, #407): rewire imports; GetRegistration/IndexingProfileFor take pkg/types.Type where called |
 | `pkg/errs` | 6 | 6 | 0 | `adapt` | `semengine/pkg/errs` | ADR-112, semengine#146, semengine#167 | M2 (#404, #407): rewire imports; Classify defaults unknown errors to fatal and classifies by sentinel/type only |
 | `pkg/lifecycle` | 3 | 5 | 0 | `adapt` | `semengine/pkg/lifecycle` | ADR-110, ADR-111, semengine#24 | M2 (#404, #405, #407): rewire imports; bind lifecycle.Manager onto rule processor at host construction; align with semengine#24 |
@@ -149,22 +149,22 @@ Several SemEngine and frozen-SemStreams packages have zero direct AST imports in
 | `semstreams/internal/{looptoken,deliverylane,agentterminal}` | Frozen SemStreams `8b99efe9` (`internal/`) | Private helpers behind `processor/agentic-loop` and `processor/agentic-dispatch`; absorbed into SemTeams internal packages in `#404`. |
 | `configs/flow-bootstrap.json` `graph_index_queries` port | `configs/flow-bootstrap.json:746` | `processor/graph-index` is uncomposed as a component in both `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json` (its unused factory registration leaves in `#399`), but `graph-gateway`'s port list at `configs/flow-bootstrap.json:746` still declares `graph_index_queries`. Reconcile this port declaration in `#402`/`#406` when replacing `gateway/graph-gateway`. |
 
-## Compiler-verified symbol and wire adaptations (Group 1)
+## Verified symbol and wire adaptations (Group 1)
 
-Type-checking all **788** SemTeams symbol references across Group 1 packages against `C360Studio/semengine@01567cc48d4d89ede05dfdf0aa1675a68bf9402b` surfaced the following concrete compile-time and wire-format adaptations. Every item maps to an existing SemTeams Milestone 1 or Milestone 2 issue; none requires a new upstream SemEngine change.
+Comparing SemTeams's Group 1 symbol and wire usage against `C360Studio/semengine@01567cc48d4d89ede05dfdf0aa1675a68bf9402b` surfaced the following concrete compile-time and wire-format adaptations. Every item maps to an existing SemTeams Milestone 1 or Milestone 2 issue; none requires a new upstream SemEngine change.
 
 | Package | SemStreams `8b99efe9` usage in SemTeams | SemEngine `01567cc` contract | SemTeams call sites & target issue |
 | --- | --- | --- | --- |
 | `component` | `component.PlatformMeta` | Moved to `types.PlatformMeta`; `component.Dependencies` drops `ToolRegistry` (`semengine#29`) and `LifecycleManager` | `cmd/semteams/rule_hot_reload_integration_test.go:82`, `cmd/semteams/main.go:207,212` (`#404`, `#407`) |
 | `component` | `Registry.RegisterFactory` / `Registry.GetFactory` | Replaced by `Registry.Register(Registration)` and `Registry.ListFactories()` | `internal/runtimecatalog/catalog_test.go:40,41,94,95` (`#399` / `#407`) |
-| `composition` | `composition.AssertValid(t, registry, cfg)` | Replaced by `composition.Validate(cfg, registry)` returning `ValidationResult` | `test/contract/composition_contract_test.go:30` (`#407`) |
+| `composition` | `composition.AssertValid(t, registry, cfg)` | Replaced by `composition.Validate(catalog *component.Registry, cfg *config.Config) (*Result, error)` (`composition/validate.go:21`) | `test/contract/composition_contract_test.go:30` (`#407`) |
 | `config` | `(*config.Manager).Stop(5 * time.Second)` | `(*config.Manager).Stop(ctx context.Context) error` (ADR-113); `SEMENGINE_` env override prefix; `semengine_config_<org>_<stem>` KV bucket; case-insensitive unknown-key rejection | `cmd/semteams/main.go:149`, `cmd/semteams/loop_runtime_integration_test.go:53`, `cmd/semteams/loop_cost_stamp_integration_test.go:139` (`#407`) |
-| `graph` | `graph.NewExactEntityReader(bucket)` returning interface | Returns concrete `(*graph.ExactEntityReader, error)` (`graph/exact_entity.go:38,46`) | `cmd/semteams/approvalpause/projection.go:49`, `cmd/semteams/loop_runtime_integration_test.go:95`, `cmd/semteams/loop_cost_stamp_integration_test.go:161` (`#407`) |
+| `graph` | `graph.NewExactEntityReader(requester, timeout)` returning interface | Returns concrete `(*graph.ExactEntityReader, error)` (`graph/exact_entity.go:38,46`) | `cmd/semteams/approvalpause/projection.go:49`, `cmd/semteams/loop_runtime_integration_test.go:95`, `cmd/semteams/loop_cost_stamp_integration_test.go:161` (`#407`) |
 | `graph` | `ExactEntity.KVRevision` JSON tag `kvRevision` | JSON tag is snake_case `kv_revision` (`graph/exact_entity.go:19`) | `cmd/semteams/chain/entity_reader.go:189`, `cmd/semteams/chainpause/decision_handler.go:439`, test fixtures, and `ui/src/lib/services/graphApi.ts:228,236` (`#402`, `#406`, `#407`) |
-| `graph` | `graph.ReconcilePredicatesResponse` (`KVRevision` JSON `kvRevision`) and `ReconcilePredicatesRequest` without `Source` | Renamed `graph.EntityMutationResponse` (`kv_revision`); `ReconcilePredicatesRequest` requires non-empty `Source` matching every desired triple's `Source` and non-zero `Timestamp` (`graph/mutation_requests.go:25-36`, ADR-110) | `cmd/semteams/approvalpause/projection.go:103,124` (`#407`) |
+| `graph` | `graph.ReconcilePredicatesResponse` (`KVRevision` JSON `kvRevision`) and `ReconcilePredicatesRequest` without `Source` | Renamed `graph.EntityMutationResponse` (`kv_revision`); `ReconcilePredicatesRequest` (`graph/mutation_requests.go:28-36`) requires non-empty `Source` matching every desired `message.Triple.Source`, and every desired `message.Triple` requires non-empty `Source` and non-zero `Timestamp` (ADR-110 Decision 5) | `cmd/semteams/approvalpause/projection.go:103,124` (`#407`) |
 | `natsclient` | `natsclient.RetryConfig`, `natsclient.DefaultRetryConfig()` | Moved to `pkg/retry.Config` and `retry.DefaultConfig()` | `cmd/semteams/tools/addsource/executor.go:55,183` (`#407`) |
 | `natsclient` | `natsclient.FilteredKeys(ctx, kv, pattern)` over `ListKeysFiltered` | Parameter interface uses `WatchFiltered(ctx, filter, ...WatchOpt)` (`jetstream.KeyValue` implements both; verify test doubles) | `cmd/semteams/tools/emitartifact/derivation.go:979` (`#407`) |
-| `natsclient` | `NewTestClient`, `TestClient`, `CreateKVBucket`, `WithJetStream`, `WithKV`, `WithNATSVersion` | Removed from `semengine/natsclient` | 10 `cmd/semteams/**/_test.go` files → local `internal/natstest` helper (`#400`) |
+| `natsclient` | `NewTestClient`, `TestClient`, `CreateKVBucket`, `WithJetStream`, `WithKV`, `WithNATSVersion` | Removed from `semengine/natsclient` | 11 `_test.go` files (`10` under `cmd/semteams/**` + `test/contract/autoresearch_reply_integration_test.go`) → local `internal/natstest` helper (`#400`) |
 | `service` | `service.NewBaseServiceWithOptions(name, cfg, opts...)` | Drops unused `cfg *config.Config` parameter → `NewBaseServiceWithOptions(name, opts...)` | `cmd/semteams/rule_config_service.go:41` (`#407`) |
 | `service` | `ComponentManager.Initialize()` | Removed; `NewComponentManager` constructs components directly | `cmd/semteams/loop_runtime_integration_test.go:76`, `cmd/semteams/loop_cost_stamp_integration_test.go:153`, `cmd/semteams/model_runtime_integration_test.go:104` (`#407`) |
 | `service` | `service.MaybeStartPProf(debug, port)` | `service.MaybeStartPProf(debug, port, logger)` returning `*service.PProfServer` (`Shutdown(ctx)`) | `cmd/semteams/main.go:93` (`#407`) |
@@ -177,9 +177,9 @@ Type-checking all **788** SemTeams symbol references across Group 1 packages aga
 
 ### ADR-108 — Processor shell (`Start` / `Stop` / health / metrics)
 
-SemEngine processors expose a uniform lifecycle shell (`Initialize`, `Start(ctx)`, `Stop(timeout)`, health, and `semengine_`-namespaced metrics) without ad-hoc background goroutines escaping `Stop`.
+SemEngine processors expose a uniform lifecycle shell (`Initialize`, `Start(ctx)`, `Stop(ctx context.Context) error` per `component/lifecycle.go:90`, health, and `semengine_`-namespaced metrics) without ad-hoc background goroutines escaping `Stop`.
 
-- **SemTeams impact:** Absorbed Milestone 2 processors (`agentic-dispatch`, `agentic-loop`, `agentic-model`, `agentic-tools`) and the trimmed `graph-gateway` (`#402`, `#404`, `#406`) adopt this shell and use `semengine/pkg/lifecyclecleanup` (`semengine#77`) for bounded shutdown cleanup.
+- **SemTeams impact:** Absorbed Milestone 2 processors (`agentic-dispatch`, `agentic-loop`, `agentic-model`, `agentic-tools`) and the trimmed `graph-gateway` (`#402`, `#404`, `#406`) adopt `Stop(ctx)` and use `semengine/pkg/lifecyclecleanup` (`semengine#77`) for bounded shutdown cleanup.
 
 ### ADR-109 — Readiness on query and service replies
 
@@ -189,9 +189,9 @@ Query and service endpoints do not silently serve empty results before projectio
 
 ### ADR-110 — Single graph write seam and statement provenance
 
-`processor/graph-ingest` is the sole authority writing `ENTITY_STATES`. Every stream-lane triple and every `graph.ingest.mutation.*` request (`ReconcilePredicatesRequest`, triple add/remove) must carry non-empty `Source` provenance matching its triples and a non-zero `Timestamp`.
+`processor/graph-ingest` is the sole authority writing `ENTITY_STATES`. Every stored statement (`message.Triple`) carries a non-empty `Source` and non-zero `Timestamp`, and `ReconcilePredicatesRequest` carries a request-level `Source` matching its desired triples.
 
-- **SemTeams impact:** `cmd/semteams/approvalpause/projection.go:103,124` (`reconcileEntity`) must populate `ReconcilePredicatesRequest.Source` + `Timestamp` and unmarshal `graph.EntityMutationResponse` (`#407`). Absorbed agentic/product-shell emitters (`#404`, `#405`) must preserve `Source` and `Timestamp` on emitted triples.
+- **SemTeams impact:** `cmd/semteams/approvalpause/projection.go:103,124` (`reconcileEntity`) must populate `ReconcilePredicatesRequest.Source`, ensure every desired `message.Triple` sets matching `Source` and non-zero `Timestamp`, and unmarshal `graph.EntityMutationResponse` (`#407`). Absorbed agentic/product-shell emitters (`#404`, `#405`) must preserve `Source` and `Timestamp` on emitted triples.
 
 ### ADR-112 — `natsclient` consumer ownership and `pkg/errs` classification
 
@@ -201,11 +201,11 @@ Components register JetStream consumers through `natsclient` ownership APIs and 
 
 ### ADR-113 — `Start` context bounds `Start` only (`semengine#361`)
 
-Under SemEngine ADR-113, the `ctx` passed to `service.Manager.StartAll(ctx)` and `component.Startable.Start(ctx)` bounds **startup readiness only**; components and services derive their own internal runtime lifecycle context cancelled by `Stop`, rather than tying background loops to `Start`'s `ctx`.
+Under SemEngine ADR-113 ("Stop Is the Only Stop"), `Stop(ctx context.Context) error` is the sole shutdown signal and the `ctx` passed to `service.Manager.StartAll(ctx)` and `component.Startable.Start(ctx)` bounds **startup readiness only**; components and services derive their own internal runtime lifecycle context cancelled by `Stop(ctx)`, rather than tying background loops to `Start`'s `ctx`.
 
 - **SemTeams impact (two concrete call sites):**
-  1. `cmd/semteams/main.go:901-904,916` currently passes an uncancelled `context.Background()` (`ctx`) instead of `signalCtx` to `manager.StartAll(ctx)` because SemStreams `8b99efe9` components bound long-lived loops to `Start`'s `ctx`. When rewiring to SemEngine in `#407`, `main.go` **must** pass `signalCtx` (or a startup-timeout child of `signalCtx`) into `StartAll` so `SIGINT`/`SIGTERM` aborts a hung boot cleanly (`semengine#361`), and every absorbed Milestone 2 component (`#404`) must own its internal run context until `Stop`.
-  2. `cmd/semteams/rule_config_service.go:56` (`ruleConfigService.Start(ctx)`) delegates to `rule.ConfigManager.Start(ctx)`; verify during `#405`/`#407` that `ConfigManager` and `ruleConfigService` keep KV watch reconciliation alive until `Stop(timeout)` after `Start(ctx)` returns.
+  1. `cmd/semteams/main.go:901-904,916` currently passes an uncancelled `context.Background()` (`ctx`) instead of `signalCtx` to `manager.StartAll(ctx)` because SemStreams `8b99efe9` components bound long-lived loops to `Start`'s `ctx`. When rewiring to SemEngine in `#407`, `main.go` **must** pass `signalCtx` (or a startup-timeout child of `signalCtx`) into `StartAll` so `SIGINT`/`SIGTERM` aborts a hung boot cleanly (`semengine#361`), and every absorbed Milestone 2 component (`#404`) must own its internal run context until `Stop(ctx)`.
+  2. `cmd/semteams/rule_config_service.go:56,73` (`ruleConfigService.Start(ctx)` / `Stop(ctx)`) delegates to `rule.ConfigManager.Start(ctx)`; verify during `#405`/`#407` that `ConfigManager` and `ruleConfigService` keep KV watch reconciliation alive until `Stop(ctx)` after `Start(ctx)` returns.
 
 ### Milestone 2 parking gate (`semengine#9` 2026-11-08 ruling)
 
