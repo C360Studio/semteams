@@ -9,10 +9,10 @@ SemTeams SHALL explicitly register only the 9 composed component factories (`gra
 framework aggregator packages (`componentregistry`, `payloadbuiltins`). Names, factory metadata, schemas, port
 declarations, registered payload type identities, concrete factory types, metadata, and decoding behavior for all
 admitted factories, framework payload owners (including internal lifecycle and hierarchy births), and existing product
-payload families SHALL be preserved. Uncomposed framework component factories and payload owners (`processor/gated-dag`,
-`governance`) SHALL NOT be registered in the product catalog. Product bootstrap and generated component interfaces SHALL
-use the same 9-factory component catalog. Registration errors SHALL fail startup rather than leave a partial admitted
-catalog.
+payload families SHALL be preserved. Uncomposed framework component factories and framework payload owners with no
+composed consumer (`processor/gated-dag`, `governance`) SHALL NOT be registered in the product catalog. Product
+bootstrap and generated component interfaces SHALL use the same 9-factory component catalog. Registration errors SHALL
+fail startup rather than leave a partial admitted catalog.
 
 #### Scenario: Supported bootstrap admission
 
@@ -35,9 +35,11 @@ catalog.
 - **THEN** they describe the exact 9 registered factories used by the product bootstrap with no orphaned uncomposed component schemas
 - **AND** regeneration is reproducible
 
-#### Scenario: Composed catalog and payload preservation without aggregators
+#### Scenario: Frozen public catalog preservation
 
-- **GIVEN** the package-owned registration functions of the 9 composed factories and five framework payload owners
+- **GIVEN** the package-owned registration functions of the 9 composed factories and five framework payload owners from the frozen baseline
 - **WHEN** the product-owned catalog and payload registry are constructed without `componentregistry` or `payloadbuiltins`
 - **THEN** every admitted component retains its metadata, schema, and port declarations
 - **AND** all five framework payload owners and existing product payload owners retain their registrations and wire round-trip decoding contracts
+- **AND** uncomposed factories and payload owners with no composed consumer (`processor/gated-dag`, `governance`) remain unregistered
+

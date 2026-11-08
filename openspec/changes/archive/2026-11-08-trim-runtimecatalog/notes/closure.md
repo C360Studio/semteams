@@ -17,7 +17,7 @@ Direct repository AST import paths (`go run ./scripts/measure-semengine-port-led
 
 - Direct SemTeams imports of `github.com/c360studio/semstreams/governance` are now **0** (dropped from `internal/runtimecatalog/payloads.go` and `internal/runtimecatalog/payloads_test.go`).
 - Verified against `configs/rules/**` and `configs/{flow-bootstrap,e2e-flow-bootstrap}.json`: rule action types across all live and parked packs are strictly `add_triple`, `lifecycle_transition`, `publish_agent`, `reconcile_predicates`, `remove_triple`, and `replace_owned` (zero `deny` or `approve` actions, and neither bootstrap configures loop governance).
-- `github.com/c360studio/semstreams/governance` still appears transitively in `go list -deps ./cmd/semteams` at frozen `8b99efe9c66a` solely because `processor/rule/actions.go:18,2109,2123,2183` imports it for `executeDeny` / `executeApprove` verdict auditing (`SetVerdictAuditor`, never wired by `cmd/semteams/main.go`); upstream `C360Studio/semengine#28` removes that hook in `setup-04a-06`.
+- `github.com/c360studio/semstreams/governance` still appears transitively in `go list -deps ./cmd/semteams` at frozen `8b99efe9c66a` because `rule-processor` self-wires `newVerdictAuditor(rp)` via `SetVerdictAuditor` whenever `rp.natsClient != nil` (`processor/rule/processor.go:712-718`), causing `executeDeny` / `executeApprove` (`processor/rule/actions.go:18,2109,2123,2183`, `processor/rule/verdict_auditor.go:55-67`) to marshal and publish `governance.verdict.v1` `BaseMessage` envelopes without consulting `payloadregistry`. Dropping `governance` from `RegisterPayloads` is safe because zero live or parked rules use `deny` or `approve` and nothing in SemTeams subscribes to or decodes `governance.verdict.>` / `GOVERNANCE_VERDICT_AUDIT` (a rule hot-loaded via the rule-config KV using `deny`/`approve` would still emit verdict envelopes readable only by external decoders registering `governance`); upstream `C360Studio/semengine#28` removes the verdict hook in `setup-04a-06`.
 
 ## 25 Packages Removed from `go list -deps ./cmd/semteams` and `go list -deps ./internal/runtimecatalog`
 
@@ -236,3 +236,16 @@ github.com/c360studio/semstreams/vocabulary/agentic
 github.com/c360studio/semstreams/vocabulary/builtins
 github.com/c360studio/semstreams/vocabulary/rulepacks
 ```
+
+## Non-Destructive Mutation Checks (`8ccab98544ce9e8a0926094ad1d4524b888f7ede`)
+
+5/5 `task mutate:check` (`ateam mutate` via `go test -overlay` against external mutant copies) reported `detection`:
+
+1. `task mutate:check -- -pkg ./internal/runtimecatalog -test TestComponentsMatchComposedCatalog -file internal/runtimecatalog/components.go -mutant <ext>/mutant_components.go -expect-text 'registered factory set mismatch'` (omitting `graph-gateway`, mutant SHA-256 `91b1f1e6e4682976e7bd30b1c42a2082c7d70931a7590ac7d054578f70aafc7f`) → **`detection`**
+2. `task mutate:check -- -pkg ./internal/runtimecatalog -test TestComponentsMatchShippedBootstraps -file internal/runtimecatalog/components.go -mutant <ext>/mutant_components.go -expect-text 'references unregistered factory'` → **`detection`**
+3. `task mutate:check -- -pkg ./internal/runtimecatalog -test TestPayloadsMatchRetainedOwners -file internal/runtimecatalog/payloads.go -mutant <ext>/mutant_payloads.go -expect-text 'payload metadata/profile/projection-contract drift'` (omitting `graph/inference`, mutant SHA-256 `69f653c23b7073f415237b87b1f8f774dd1f6f9aa67b3521cb738f8e3e7fe62e`) → **`detection`**
+4. `task mutate:check -- -pkg ./internal/runtimecatalog -test TestPayloadOwnersRoundTrip -file internal/runtimecatalog/payloads.go -mutant <ext>/mutant_payloads.go -expect-text graph.hierarchy_container.v1` → **`detection`**
+5. `task mutate:check -- -pkg ./cmd/openapi-generator -test TestPruneStaleSchemas -file cmd/openapi-generator/main.go -mutant <ext>/mutant_openapi_main.go -expect-text 'stale schema'` (skipping `os.Remove`, mutant SHA-256 `50b09107e6b12fe4bc30f7caaad25ca53ec809299ff587346f743d6980c45900`) → **`detection`**
+
+Cross-provider review (`PR #416`, `issuecomment-6727961568`) also independently verified `go test -count=1 -overlay` `detection` for dropping `graph-gateway`, re-adding uncomposed `udp`, re-adding dropped `governance`, and inverting the `pruneStaleSchemas` keep-check.
+

@@ -6,9 +6,9 @@ Track: quick. Updates one existing Requirement (`Product-owned registration boun
 
 ## Why
 
-`internal/runtimecatalog` currently registers all 27 SemStreams component factories and 7 framework payload owners from the frozen `8b99efe9c66a` baseline, even though `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json` compose only 9 factories (`graph-ingest`, `graph-query`, `rule-processor`, `objectstore`, `agentic-loop`, `agentic-model`, `agentic-tools`, `agentic-dispatch`, and `graph-gateway`). In addition, `internal/runtimecatalog/payloads.go` registers `processor/gated-dag` and `governance` without any live composed consumer, and `internal/runtimecatalog/catalog_test.go` imports `semstreams/componentregistry` and `semstreams/payloadbuiltins` — aggregator packages permanently dropped in SemEngine (`C360Studio/semengine#3`).
+`internal/runtimecatalog` registers all 27 SemStreams factories and 7 payload owners from `8b99efe9c66a`, while `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json` compose only 9 factories (`graph-ingest`, `graph-query`, `rule-processor`, `objectstore`, `agentic-loop`, `agentic-model`, `agentic-tools`, `agentic-dispatch`, `graph-gateway`). `payloads.go` also registers `processor/gated-dag` and `governance` with no composed consumer, and `catalog_test.go` imports `componentregistry` and `payloadbuiltins`, both dropped in SemEngine (`C360Studio/semengine#3`).
 
-Trimming the catalog now on `main` (substrate-neutral) eliminates 20 Group 4 SemStreams import edges (`18` uncomposed component packages + `componentregistry` + `payloadbuiltins` + `governance`) ahead of the `#403` acceptance floor and Milestone 2 port.
+Trimming the catalog now on `main` (substrate-neutral) eliminates 21 Group 4 SemStreams import paths (`18` uncomposed component packages + `componentregistry` + `payloadbuiltins` + `governance`) ahead of the `#403` acceptance floor and Milestone 2 port.
 
 ## What changes
 
