@@ -647,14 +647,15 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 		t.Fatal("Taskfile.yml must define top-level 'validate' task invoking scripts/validate.sh")
 	}
 	for _, wantTask := range []string{
+		"tools:ateam:",
 		"doctor:", "scripts/doctor.sh",
-		"ateam:doctor:", "env -u ATEAM_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_SESSION_ID -u GEMINI_SESSION_ID ateam doctor --check",
+		"ateam:doctor:", "env -u ATEAM_SESSION_ID -u CLAUDE_SESSION_ID -u CODEX_SESSION_ID -u GEMINI_SESSION_ID scripts/ateam doctor --check",
 		"fmt:", "fmt:check:", "tidy:check:",
 		"cleanup-roots:check:", "scripts/cleanup-roots-check.sh",
 		"merge:check:", "scripts/merge-check.sh",
-		"mutate:check:", `- "ateam mutate {{.CLI_ARGS}}"`,
+		"mutate:check:", `- "scripts/ateam mutate {{.CLI_ARGS}}"`,
 		"spec:check:", "spec:queue:",
-		"test:spec:", `- ateam test-spec --base "${TEST_SPEC_BASE:-origin/main}"`,
+		"test:spec:", `- scripts/ateam test-spec --base "${TEST_SPEC_BASE:-origin/main}"`,
 		"verify:", "scripts/verify.sh",
 	} {
 		if !strings.Contains(taskfileText, wantTask) {

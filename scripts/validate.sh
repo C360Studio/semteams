@@ -67,6 +67,16 @@ check_prereqs() {
   fi
 }
 
+main_root="$REPO_ROOT"
+if [ -f "$REPO_ROOT/.git" ]; then
+  read -r gitdir <"$REPO_ROOT/.git"
+  gitdir="${gitdir#gitdir: }"
+  main_root="${gitdir%/.git/worktrees/*}"
+fi
+for tools_bin in "$REPO_ROOT/.tools/bin" "$main_root/.tools/bin"; do
+  [ -d "$tools_bin" ] && PATH="$tools_bin:$PATH"
+done
+
 check_prereqs
 
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/semteams-validate.XXXXXX")

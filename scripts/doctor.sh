@@ -59,12 +59,21 @@ if command -v openspec >/dev/null; then
   if [ "$have_openspec" = "$want_openspec" ]; then ok openspec "$have_openspec"; else bad openspec "${have_openspec:-unknown} != $want_openspec"; fi
 else bad openspec "not found (npm install --global @fission-ai/openspec@1.7.0)"; fi
 
-# ateam: pinned in .github/workflows/ci.yml (v0.3.5).
+# ateam: pinned in Taskfile.yml and .github/workflows/ci.yml (v0.3.9).
+main_root="$PWD"
+if [ -f "$PWD/.git" ]; then
+  read -r gitdir <"$PWD/.git"
+  gitdir="${gitdir#gitdir: }"
+  main_root="${gitdir%/.git/worktrees/*}"
+fi
+for tools_bin in "$PWD/.tools/bin" "$main_root/.tools/bin"; do
+  [ -d "$tools_bin" ] && PATH="$tools_bin:$PATH"
+done
 if command -v ateam >/dev/null; then
-  want_ateam="v0.3.5"
+  want_ateam="v0.3.9"
   have_ateam=$(ateam version 2>&1 | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
-  if [ "$have_ateam" = "$want_ateam" ]; then ok ateam "$have_ateam"; else bad ateam "${have_ateam:-unknown} != $want_ateam"; fi
-else bad ateam "not found (GOTOOLCHAIN=auto go install github.com/c360studio/ateam/cmd/ateam@v0.3.5)"; fi
+  if [ "$have_ateam" = "$want_ateam" ]; then ok ateam "$have_ateam"; else bad ateam "${have_ateam:-unknown} != $want_ateam (run 'task tools:ateam')"; fi
+else bad ateam "not found (run 'task tools:ateam')"; fi
 
 # ui/node_modules: required for UI checks and task validate.
 if [ -d "ui/node_modules" ]; then

@@ -16,10 +16,10 @@ tasks:
       Read from tasks.md every run, so the program baton does not carry
       these caveats and cannot drift from them.
     cmds:
-      - ateam state spec-queue
+      - scripts/ateam state spec-queue
 
   validate:
     desc: Validate all OpenSpec changes and specs strictly, then run ateam's spec-check (fails on a hold written outside every task)
     cmds:
       - openspec validate --all --strict
-      - ateam state spec-check
+      - scripts/ateam state spec-check
