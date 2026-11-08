@@ -21,8 +21,8 @@ below holds:
   and posts no review record.
 - **Clarify pointer.** SemTeams' protocol sections are unnumbered: the `design` skill's "protocol § 2 Clarify" is
   `.agents/protocol.md` § Work lifecycle, **Clarify** (its **Proposal approval** and **Track** items).
-- **No routes.** `.agents/review-policy.json` declares only `model_tiers`, `effort_bands` and `cross_provider`, with no
-  `routes` key, so it routes no role, not even the developer and reviewer the base names.
+- **No routes.** `.agents/review-policy.json` declares `model_tiers`, `effort_bands`, `cross_provider`, and
+  `review_launch`, with no `routes` key, so it routes no role, not even the developer and reviewer the base names.
 - **Effort.** SemTeams pins this role at `medium` effort with escalation to `high` for cross-cutting designs
   (`.agents/README.md`), not ATeam ADR 0003's `high` default; that ADR scopes its defaults to the ATeam repository
   ("the defaults here are this repository's", `docs/adr/0003-roles-and-routes.md:68` at `v0.3.3`).

@@ -89,6 +89,7 @@ configs/*.gen.json
 /docs/research/
 /docs/plans/
 .ateam/
+.tools/
 .worktrees/
 .enjoy-logs/
 benchmarks/runs/

@@ -80,8 +80,9 @@ rewired parked pack, or an unproved composition-root invariant.
     touches a boot path, durability/ack behavior, or a gate file, otherwise `quick` with no `design.md`. On `design`,
     the [design](skills/design/SKILL.md) skill drafts `design.md` in OpenSpec's `spec-driven` sections (≤ 120 lines;
     `task spec:check` warns past it), and the one approval hold covers `proposal.md` and `design.md`. SemTeams runs no
-    `Gate files` check (#372); a gate file here is one that decides whether a pull request may merge:
-    `.agents/review-policy.json`, `scripts/merge-check.sh`, and `.github/workflows/`.
+    `Gate files` check (#372); a gate file here is one that decides whether a pull request may merge or how its
+    reviewer is launched: `.agents/review-policy.json`, `.agents/hosts/`, `scripts/merge-check.sh`, and
+    `.github/workflows/`.
 - **Take work:** an unclaimed issue → a dedicated worktree on an agent-prefixed branch (`claude/<topic>`,
   `codex/<topic>`, `gemini/<topic>`; the prefix names who claimed it) → push → draft PR with `Closes #n` (or
   `Addresses #n` for an epic) → then implementation. One claimed PR owns one worktree. When multiple agents share a
@@ -146,11 +147,18 @@ rewired parked pack, or an unproved composition-root invariant.
   files under `openspec/`, and none under `.claude/agents/` or `.agents/contracts/`; it keeps any agent's reviewer. Any
   other changed file (`.go`, `.svelte`, `.ts`, `go.mod`, `package.json`, a rule/persona JSON or prompt file, a script
   including `openspec/*.sh`, `Taskfile.yml`, a CI workflow, `.claude/agents/*`, `.codex/agents/*`, `.agents/contracts/*`,
-  `.agents/review-policy.json`) makes it a code/UI pull request.
+  `.agents/review-policy.json`, `.agents/hosts/*`) makes it a code/UI pull request.
   - The implementer asks with a PR comment headed `Review request`: the review lane (`go-reviewer`, `svelte-reviewer`,
     or both), the commit SHA to read, the diff range, the implementer's local verification result (`task validate`) on
     that commit (clean tree), and the issue or ruling the change answers. It does not say what the reviewer should
     conclude.
+  - The implementer then starts the reviewer: `.agents/review-policy.json` sets `review_launch: agent` (owner ruling,
+    2026-11-08). `scripts/ateam review request <n>` prints the reviewer runs the merge gate accepts, the prompt
+    `/review-pr <n>`, and the head SHA. Pass `--return-to <conversation-id>` in Enjoy, which puts no conversation ID in
+    the environment; `.agents/hosts/enjoy.toml` tells the host how to start the reviewer (`start_conversation`), and on a
+    host with no manifest the command prints the runs for manual launch. The reviewer finishes with
+    `scripts/ateam review notify`, which notifies the implementer that the record landed without carrying its text; the
+    implementer runs `scripts/ateam state sync`, then `scripts/ateam state pickup`, and reads the record on the PR.
   - The reviewing session posts one PR comment in ATeam's commit-bound review record contract
     ([`contracts/reviewer.md`](contracts/reviewer.md) § Record; [review-pr](skills/review-pr/SKILL.md)):
     ```text

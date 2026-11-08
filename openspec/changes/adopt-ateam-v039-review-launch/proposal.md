@@ -13,7 +13,7 @@ Locally, SemTeams also lacks a repo-local `ateam` install target: hooks, MCP con
 ## What changes
 
 - Pin `ateam@v0.3.9` in `.github/workflows/ci.yml`, `.github/workflows/merge-check.yml`, `Taskfile.yml`, `scripts/doctor.sh`, `test/contract/workflow_gate_test.go`, `.agents/rules-index.md`, and `openspec/specs/repository-governance/spec.md`.
-- Add `task tools:ateam` installing `v0.3.9` into `<main-checkout>/.tools/bin/ateam` (gitignored under `.tools/`), add `scripts/ateam` (~3.5 ms POSIX shim, no `git` fork) wired into all 7 hook/MCP configs, and prepend `.tools/bin` when present in `Taskfile.yml`, `scripts/doctor.sh`, and `scripts/validate.sh` (keeping `validate.sh` read-only).
+- Add `task tools:ateam` installing `v0.3.9` into `<main-checkout>/.tools/bin/ateam` (gitignored under `.tools/`), add `scripts/ateam` (~3.5 ms POSIX shim, no `git` fork) wired into all 7 hook/MCP configs plus `Taskfile.yml` and `taskfiles/openspec.yml`, and prepend existing `.tools/bin` directories in `scripts/doctor.sh` and `scripts/validate.sh` (keeping `validate.sh` read-only).
 - Enable `"review_launch": "agent"` in `.agents/review-policy.json`, add `v0.3.9`'s canonical `.agents/hosts/enjoy.toml`, sync `v0.3.9`'s `handoff` and `review-pr` skills, and update `.agents/protocol.md` § Cross-agent review.
 
 ## Non-goals
@@ -24,7 +24,7 @@ Locally, SemTeams also lacks a repo-local `ateam` install target: hooks, MCP con
 
 ## Impact
 
-- Once merged to `main`, implementing sessions launch cross-provider reviewers directly via `ateam review request --return-to <conv-id>` and `.agents/hosts/enjoy.toml`.
+- Once merged to `main`, implementing sessions launch cross-provider reviewers directly via `scripts/ateam review request --return-to <conv-id>` and `.agents/hosts/enjoy.toml`.
 - `task tools:ateam` installs one repo-pinned `v0.3.9` binary shared by every linked `.worktrees/*` checkout without touching `/tmp` or global `PATH`.
 
 Closes #413 (claimed on `gemini/ateam-v039-review-launch`, PR #414; addresses #412).

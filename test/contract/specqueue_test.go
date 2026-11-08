@@ -19,9 +19,10 @@ import (
 
 const (
 	specValidateCmd   = `openspec validate --all --strict`
-	specAteamCheckCmd = `ateam state spec-check`
+	specAteamCheckCmd = `scripts/ateam state spec-check`
 )
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestSpecCheckWiring(t *testing.T) {
 	repoRoot, err := findRepoRoot()
 	if err != nil {
