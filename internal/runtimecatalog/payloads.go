@@ -5,19 +5,18 @@ import (
 	"fmt"
 
 	"github.com/c360studio/semstreams/agentic"
-	"github.com/c360studio/semstreams/governance"
 	"github.com/c360studio/semstreams/graph/inference"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/payloadregistry"
 	"github.com/c360studio/semstreams/pkg/lifecycle"
-	gateddagexec "github.com/c360studio/semstreams/processor/gated-dag"
 	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
-// RegisterPayloads preserves the seven framework payload owners at SemStreams
-// 8b99efe9c66a. Bootstrap layers product payloads on top. Internal lifecycle and
-// hierarchy births need registrations even when no configured port names them.
-// All owner errors are reported; callers must discard the registry on error.
+// RegisterPayloads registers the five framework payload owners required by
+// SemTeams's composed runtime. Bootstrap layers product payloads on top.
+// Internal lifecycle and hierarchy births need registrations even when no
+// configured port names them. All owner errors are reported; callers must
+// discard the registry on error.
 func RegisterPayloads(registry *payloadregistry.Registry) error {
 	if registry == nil {
 		return errors.New("register payloads: registry cannot be nil")
@@ -28,9 +27,7 @@ func RegisterPayloads(registry *payloadregistry.Registry) error {
 	}{
 		{"message", message.RegisterPayloads},
 		{"agentic", agentic.RegisterPayloads},
-		{"processor/gated-dag", gateddagexec.RegisterPayloads},
 		{"storage/objectstore", objectstore.RegisterPayloads},
-		{"governance", governance.RegisterPayloads},
 		{"pkg/lifecycle", lifecycle.RegisterPayloads},
 		{"graph/inference", inference.RegisterPayloads},
 	}

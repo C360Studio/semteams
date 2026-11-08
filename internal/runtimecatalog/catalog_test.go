@@ -3,70 +3,182 @@ package runtimecatalog_test
 import (
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
-	"github.com/c360studio/semstreams/payloadbuiltins"
+	"github.com/c360studio/semstreams/config"
+	graphgateway "github.com/c360studio/semstreams/gateway/graph-gateway"
+	"github.com/c360studio/semstreams/graph/inference"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/payloadregistry"
+	"github.com/c360studio/semstreams/pkg/lifecycle"
+	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
+	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
+	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
+	graphingest "github.com/c360studio/semstreams/processor/graph-ingest"
+	graphquery "github.com/c360studio/semstreams/processor/graph-query"
+	"github.com/c360studio/semstreams/processor/rule"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semteams/internal/runtimecatalog"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-// The aggregators are an independent test oracle from the frozen dependency,
-// never the product's runtime selection. Committed schema contract tests also
-// preserve the advertised artifact set independently of this comparison.
-func TestComponentsMatchFrozenCatalog(t *testing.T) {
-	want := component.NewRegistry()
-	if err := componentregistry.Register(want); err != nil {
-		t.Fatal(err)
+var expectedFactoryNames = []string{
+	"agentic-dispatch",
+	"agentic-loop",
+	"agentic-model",
+	"agentic-tools",
+	"graph-gateway",
+	"graph-ingest",
+	"graph-query",
+	"objectstore",
+	"rule-processor",
+}
+
+func registerReferenceComponents(t *testing.T) *component.Registry {
+	t.Helper()
+	reg := component.NewRegistry()
+	registrars := []func(*component.Registry) error{
+		graphingest.Register,
+		graphquery.Register,
+		rule.Register,
+		objectstore.Register,
+		agenticloop.Register,
+		func(r *component.Registry) error { return agenticmodel.Register(r) },
+		func(r *component.Registry) error { return agentictools.Register(r) },
+		agenticdispatch.Register,
+		graphgateway.Register,
 	}
+	for _, fn := range registrars {
+		if err := fn(reg); err != nil {
+			t.Fatalf("reference component registration failed: %v", err)
+		}
+	}
+	return reg
+}
+
+func registerReferencePayloads(t *testing.T) *payloadregistry.Registry {
+	t.Helper()
+	reg := payloadregistry.New()
+	registrars := []func(*payloadregistry.Registry) error{
+		message.RegisterPayloads,
+		agentic.RegisterPayloads,
+		objectstore.RegisterPayloads,
+		lifecycle.RegisterPayloads,
+		inference.RegisterPayloads,
+	}
+	for _, fn := range registrars {
+		if err := fn(reg); err != nil {
+			t.Fatalf("reference payload registration failed: %v", err)
+		}
+	}
+	return reg
+}
+
+// Package-owned Register functions are the independent test oracle, avoiding
+// the dropped SemStreams aggregator packages.
+//
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
+func TestComponentsMatchComposedCatalog(t *testing.T) {
+	want := registerReferenceComponents(t)
 	got := component.NewRegistry()
 	if err := runtimecatalog.RegisterComponents(got); err != nil {
 		t.Fatal(err)
 	}
 	expected, actual := want.ListFactories(), got.ListFactories()
-	if len(expected) != 27 {
-		t.Fatalf("frozen component catalog changed: got %d factories, want 27", len(expected))
+	if len(expected) != len(expectedFactoryNames) {
+		t.Fatalf("reference catalog count = %d, want %d", len(expected), len(expectedFactoryNames))
+	}
+	gotNames := make([]string, 0, len(actual))
+	for name := range actual {
+		gotNames = append(gotNames, name)
+	}
+	sort.Strings(gotNames)
+	if diff := cmp.Diff(expectedFactoryNames, gotNames); diff != "" {
+		t.Fatalf("registered factory set mismatch (-want +got):\n%s", diff)
 	}
 	if diff := cmp.Diff(expected, actual, cmpopts.IgnoreFields(component.Registration{}, "Factory", "Ports"), cmp.AllowUnexported(component.PortFieldInfo{})); diff != "" {
-		t.Fatalf("component metadata/schema/dependency drift (-frozen +product):\n%s", diff)
+		t.Fatalf("component metadata/schema/dependency drift (-reference +product):\n%s", diff)
 	}
 	for name, registration := range expected {
 		t.Run(name, func(t *testing.T) {
 			referenceFactory, _ := want.GetFactory(name)
 			productFactory, _ := got.GetFactory(name)
 			assertSameFunction(t, "factory", referenceFactory, productFactory)
-			// The exact pure declaration function is retained; shipped composition
-			// checks separately exercise it against both real bootstrap configs.
 			assertSameFunction(t, "port declaration", registration.Ports, actual[name].Ports)
 		})
 	}
 }
 
-func TestPayloadsMatchFrozenCatalog(t *testing.T) {
-	want := payloadregistry.New()
-	if err := payloadbuiltins.Register(want); err != nil {
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
+func TestComponentsMatchShippedBootstraps(t *testing.T) {
+	registry := component.NewRegistry()
+	if err := runtimecatalog.RegisterComponents(registry); err != nil {
 		t.Fatal(err)
 	}
+	registered := registry.ListFactories()
+
+	paths := []string{"../../configs/flow-bootstrap.json", "../../configs/e2e-flow-bootstrap.json"}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			assertBootstrapFactoryParity(t, path, registered)
+		})
+	}
+}
+
+func assertBootstrapFactoryParity(t *testing.T, path string, registered map[string]*component.Registration) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.NewLoader().LoadFromBytes(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	composed := make(map[string]bool)
+	for instance, cc := range cfg.Components {
+		if cc.Name == "" {
+			t.Fatalf("component %q in %s has empty factory name", instance, path)
+		}
+		if _, ok := registered[cc.Name]; !ok {
+			t.Errorf("component %q in %s references unregistered factory %q", instance, path, cc.Name)
+		}
+		if cc.Enabled {
+			composed[cc.Name] = true
+		}
+	}
+	for factory := range registered {
+		if !composed[factory] {
+			t.Errorf("registered factory %q is not composed by any enabled component in %s", factory, path)
+		}
+	}
+}
+
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
+func TestPayloadsMatchRetainedOwners(t *testing.T) {
+	want := registerReferencePayloads(t)
 	got := payloadregistry.New()
 	if err := runtimecatalog.RegisterPayloads(got); err != nil {
 		t.Fatal(err)
 	}
 	expected, actual := want.List(), got.List()
-	if len(expected) != 27 {
-		t.Fatalf("frozen payload catalog changed: got %d types, want 27", len(expected))
+	if len(expected) != 24 {
+		t.Fatalf("reference payload catalog count = %d, want 24", len(expected))
 	}
 	if diff := cmp.Diff(expected, actual); diff != "" {
-		t.Fatalf("payload metadata/profile/projection-contract drift (-frozen +product):\n%s", diff)
+		t.Fatalf("payload metadata/profile/projection-contract drift (-reference +product):\n%s", diff)
 	}
+	assertDroppedPayloadsAbsent(t, got, actual)
 	for name, registration := range expected {
 		t.Run(name, func(t *testing.T) {
-			// Payload registry metadata intentionally hides factory functions;
-			// exercise Create to compare the concrete decoding types instead.
 			reference := want.Create(registration.Domain, registration.Category, registration.Version)
 			product := got.Create(registration.Domain, registration.Category, registration.Version)
 			if reference == nil || reflect.TypeOf(reference) != reflect.TypeOf(product) {
@@ -76,18 +188,35 @@ func TestPayloadsMatchFrozenCatalog(t *testing.T) {
 	}
 }
 
-func assertSameFunction(t *testing.T, name string, want, got any) {
+func assertDroppedPayloadsAbsent(t *testing.T, got *payloadregistry.Registry, actual map[string]*payloadregistry.Registration) {
 	t.Helper()
-	if reflect.ValueOf(want).Pointer() != reflect.ValueOf(got).Pointer() {
-		t.Errorf("%s implementation differs from frozen catalog", name)
+	droppedDomains := map[string]bool{"gateddag": true, "gated-dag": true, "governance": true}
+	for key, reg := range actual {
+		if droppedDomains[reg.Domain] {
+			t.Errorf("uncomposed payload domain %q still registered under key %q", reg.Domain, key)
+		}
+	}
+	for _, tc := range []struct{ domain, category, version string }{
+		{"gateddag", "dispatch", "v1"},
+		{"gateddag", "stall", "v1"},
+		{"governance", "verdict", "v1"},
+	} {
+		if v := got.Create(tc.domain, tc.category, tc.version); v != nil {
+			t.Errorf("expected dropped payload %s.%s.%s to be unregistered, got %T", tc.domain, tc.category, tc.version, v)
+		}
 	}
 }
 
-func TestComponentCollisionNamesFactory(t *testing.T) {
-	baseline := component.NewRegistry()
-	if err := componentregistry.Register(baseline); err != nil {
-		t.Fatal(err)
+func assertSameFunction(t *testing.T, name string, want, got any) {
+	t.Helper()
+	if reflect.ValueOf(want).Pointer() != reflect.ValueOf(got).Pointer() {
+		t.Errorf("%s implementation differs from package-owned registration", name)
 	}
+}
+
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
+func TestComponentCollisionNamesFactory(t *testing.T) {
+	baseline := registerReferenceComponents(t)
 	for name, registration := range baseline.ListFactories() {
 		t.Run(name, func(t *testing.T) {
 			registry := component.NewRegistry()
@@ -104,6 +233,7 @@ func TestComponentCollisionNamesFactory(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
 func TestPayloadCollisionsNameEveryOwner(t *testing.T) {
 	registry := payloadregistry.New()
 	if err := runtimecatalog.RegisterPayloads(registry); err != nil {
@@ -117,7 +247,7 @@ func TestPayloadCollisionsNameEveryOwner(t *testing.T) {
 	if !ok {
 		t.Fatalf("want joined error implementing Unwrap() []error, got %T (%v)", err, err)
 	}
-	wantOwners := []string{"message", "agentic", "processor/gated-dag", "storage/objectstore", "governance", "pkg/lifecycle", "graph/inference"}
+	wantOwners := []string{"message", "agentic", "storage/objectstore", "pkg/lifecycle", "graph/inference"}
 	branches := joined.Unwrap()
 	if len(branches) != len(wantOwners) {
 		t.Fatalf("got %d joined owner errors, want %d: %v", len(branches), len(wantOwners), err)
@@ -133,6 +263,7 @@ func TestPayloadCollisionsNameEveryOwner(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
 func TestNilRegistriesReturnErrors(t *testing.T) {
 	if err := runtimecatalog.RegisterComponents(nil); err == nil {
 		t.Error("nil component registry accepted")

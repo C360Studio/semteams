@@ -67,8 +67,8 @@ import (
 // configs (no agentic config declares agent.failed) but means
 // portresolver-resolved subjects are operator-overrides only, not
 // "the live runtime port set." A future enhancement could fall back
-// to upstream defaults via a componentregistry.DefaultPorts(name)
-// lookup; tracked as a Phase 2 follow-up in fix-plan.md.
+// to defaults declared on the product component registry
+// (runtimecatalog.RegisterComponents); tracked as a Phase 2 follow-up in fix-plan.md.
 //
 // Port names are unique within a single component by convention; if
 // the same name appears in two directions the first match (Inputs >

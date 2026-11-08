@@ -7,13 +7,14 @@ SemStreams frozen at `8b99efe9c66a4faa4fa509f9f62cc6bad8392128`.
 
 ## Result and scope
 
-The product-owned catalog preserves the frozen framework's 27 factories and seven
-payload owner families. Runtime bootstrap, schema/OpenAPI generation and live
-contract tests use that catalog. Product payload overlays remain in bootstrap.
-Factory metadata, concrete implementations, port declarations and payload contracts
-are checked against the frozen aggregate registrars, which remain test oracles only.
-Registration failures identify the owner and abort bootstrap; callers discard partial
-registries. Service and vocabulary registration are unchanged.
+At qualification time (`#282`), the product-owned catalog preserved all 27 factories
+and seven payload owner families from the frozen framework (subsequently trimmed on
+`main` by `#399` to the 9 composed factories and five framework payload owners,
+dropping the `componentregistry` and `payloadbuiltins` test aggregators). Runtime
+bootstrap, schema/OpenAPI generation and live contract tests use that catalog. Product
+payload overlays remain in bootstrap. Registration failures identify the owner and
+abort bootstrap; callers discard partial registries. Service and vocabulary
+registration are unchanged.
 
 `go.mod`, `go.sum`, configs, fixtures, UI source, generated schemas and OpenAPI are
 identical to the parent. This qualifies a registration boundary, not an extracted

@@ -231,11 +231,11 @@ Verified at beta.160. None of this needs building.
 | Per-role model routing | `model_registry.capabilities.{coordinator,research,reviewing,general}` with `preferred`/`fallback` |
 | Host-side shell | `bash` runs via `os/exec` when `SANDBOX_URL` is unset (`executors/bash.go`) |
 | Web research | `web_search` (Brave, env-gated) and `http_request` builtins |
-| Outbound to the operator | `decide(respond_direct)` publishes on `user.response.>` (`configs/flow-bootstrap.json:659`); `output.httppost` is a registered component (`componentregistry/register.go:138`) |
+| Outbound to the operator | `decide(respond_direct)` publishes on `user.response.>` (`configs/flow-bootstrap.json:659`); `output.httppost` exists in frozen SemStreams (`output/httppost`, `componentregistry/register.go:138`, uncomposed and pruned from `internal/runtimecatalog` in `#399`) |
 | Doc/code ingestion | SemSource ingests `git`, `docs`, `url`, `code`, `video`, `audio` — into **its own** graph, as a separate service. See C5. |
 | Per-loop token facts | `agent.loop.tokens-in` / `tokens-out`, stamped on completion and failure (`processor/agentic-loop/graph_writer.go:567-580`, `:611-634`) |
 
-The D3 notification channel is therefore **config-only**: point an
+With `output.httppost` re-admitted to `internal/runtimecatalog` (or replaced on SemEngine), the D3 notification channel is config-driven: point an
 `output.httppost` at `user.response.>` and a webhook (ntfy, Pushover, Slack).
 
 ## Gaps
