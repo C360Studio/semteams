@@ -61,9 +61,16 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 - AND it runs `task openspec:validate`, which runs `openspec validate --all --strict` and then `ateam state spec-check`, so a missing `openspec` fails rather than skips
 - AND it runs `task test:spec` against the pull request base, or the previous `main` commit on a push (`ateam test-spec --base`)
 - AND it runs `task publish:verify-test`, which proves the publication evidence gate fails closed
-- AND ATeam is v0.3.5, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
+- AND ATeam is v0.3.9, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
 - AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
+
+#### Scenario: Local hooks and MCP resolve the repository-pinned ATeam install
+
+- GIVEN a primary checkout or linked `.worktrees/` checkout where `task tools:ateam` installed ATeam v0.3.9 into `<main-checkout>/.tools/bin/ateam`
+- WHEN `scripts/ateam` is invoked by an agent hook or MCP server registration
+- THEN it executes `<main-checkout>/.tools/bin/ateam` before any worktree-local `.tools/bin/ateam` or global `PATH` binary without forking `git`
+- AND when no `.tools/bin/ateam` or `PATH` binary exists it exits 127 naming `task tools:ateam`
 
 ### Requirement: Publication is image-only, tag-triggered, and gated on CI evidence
 
@@ -170,7 +177,7 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 - GIVEN a non-draft pull request targets `main`
 - WHEN `Merge check` runs
 - THEN it checks out the base commit, not the pull request head, without persisted credentials
-- AND it installs ATeam v0.3.5 and runs `scripts/merge-check.sh` with the pull request number and
+- AND it installs ATeam v0.3.9 and runs `scripts/merge-check.sh` with the pull request number and
   `ATEAM_REQUIRED_CHECKS: Required,Merge check`
 - AND its token permissions are read-only for contents, issues, and pull requests
 - AND the workflow file itself is read from the pull request, so a change to it is caught by review only
