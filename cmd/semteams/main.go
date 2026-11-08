@@ -791,9 +791,9 @@ func createServiceDependencies(
 }
 
 // buildPayloadRegistry constructs the shared payload registry from the product
-// catalog's framework owners (message, agentic, gated-dag, objectstore,
-// governance, lifecycle and inference), then layers SemTeams-local payloads on
-// top. It must exist before services are constructed because it is injected via
+// catalog's framework owners (message, agentic, objectstore, lifecycle, and
+// inference), then layers SemTeams-local payloads on top. It must exist before
+// services are constructed because it is injected via
 // component.Dependencies.PayloadRegistry.
 func buildPayloadRegistry() (*payloadregistry.Registry, error) {
 	reg := payloadregistry.New()

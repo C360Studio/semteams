@@ -36,22 +36,22 @@ go test ./test/contract/... -run TestSemEnginePortLedger
 
 The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is produced directly by `go run ./scripts/measure-semengine-port-ledger.go`.
 
-- **56** distinct `github.com/c360studio/semstreams/...` import paths appear in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message`, `payloadregistry`, and `agentic` in AST imports).
-- **2** additional `github.com/c360studio/semstreams*` strings appear only as string literals inside `scripts/` (`github.com/c360studio/semstreams` module root and synthetic test fixture `github.com/c360studio/semstreams/agentic-extra`), reconciling the **56** Go package imports with the **58** raw `git grep` path matches across the tree at baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa` (excluding synthetic fixture literals in `test/contract/semengine_port_ledger_test.go`).
+- At baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa`, **56** distinct `github.com/c360studio/semstreams/...` import paths appeared in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message`, `payloadregistry`, and `agentic` in AST imports). Trimming `internal/runtimecatalog` in `#399` pruned **21** Group 4 paths down to **35** active repository import paths below.
+- **2** additional `github.com/c360studio/semstreams*` strings appear only as string literals inside `scripts/` (`github.com/c360studio/semstreams` module root and synthetic test fixture `github.com/c360studio/semstreams/agentic-extra`), reconciling the **56** baseline Go package imports with the **58** raw `git grep` path matches across the tree at baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa` (excluding synthetic fixture literals in `test/contract/semengine_port_ledger_test.go`).
 
 <!-- BEGIN GENERATED CROSSWALK -->
 ### Summary counts
 
-- Active repository `.go` import paths (excluding `scripts/`): **56** of **56** baseline paths (**0** pruned)
+- Active repository `.go` import paths (excluding `scripts/`): **35** of **56** baseline paths (**21** pruned)
 - Distinct importing files: **56** non-test `.go`, **72** `_test.go`, **1** `scripts/*.go`
-- `scripts/` string-literal-only SemStreams paths: **2** (total string-matched paths across repo + `scripts/`: **58**)
+- `scripts/` string-literal-only SemStreams paths: **2** (total string-matched paths across repo + `scripts/`: **37**)
 
 | Group | Baseline paths | Active paths | Pruned paths | Non-test file imports | `_test.go` file imports | `scripts/` imports |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1. SemEngine main | 20 | 20 | 0 | 94 | 146 | 2 |
-| 2. SemEngine setup-04a-06 | 2 | 2 | 0 | 3 | 14 | 0 |
-| 3. SemTeams Milestone 2 absorb | 11 | 11 | 0 | 68 | 65 | 1 |
-| 4. Milestone 1 drop/decouple | 23 | 23 | 0 | 22 | 4 | 0 |
+| 1. SemEngine main | 20 | 20 | 0 | 94 | 153 | 2 |
+| 2. SemEngine setup-04a-06 | 2 | 2 | 0 | 3 | 15 | 0 |
+| 3. SemTeams Milestone 2 absorb | 11 | 11 | 0 | 68 | 71 | 1 |
+| 4. Milestone 1 drop/decouple | 23 | 2 | 21 | 2 | 0 | 0 |
 
 ### 1. SemEngine main
 
@@ -59,22 +59,22 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | --- | ---: | ---: | ---: | --- | --- | --- | --- |
 | `component` | 4 | 9 | 0 | `adapt` | `semengine/component` | ADR-108, ADR-113, semengine#29 | M2 (#404, #407): rewire imports; Registry.Register/ListFactories in catalog_test.go; types.PlatformMeta; Dependencies drops ToolRegistry/LifecycleManager |
 | `composition` | 0 | 2 | 0 | `repair-before-port` | `semengine/composition` | ADR-100 | M2 (#407): replace composition.AssertValid(t, registry, cfg) with composition.Validate(registry, cfg) (*Result, error) in test/contract/composition_contract_test.go |
-| `config` | 3 | 11 | 0 | `adapt` | `semengine/config` | ADR-104, ADR-113 | M2 (#407): Manager.Stop(ctx); SEMENGINE_ env prefix and semengine_config_<org>_<stem> bucket; strict unknown-key rejection |
+| `config` | 3 | 12 | 0 | `adapt` | `semengine/config` | ADR-104, ADR-113 | M2 (#407): Manager.Stop(ctx); SEMENGINE_ env prefix and semengine_config_<org>_<stem> bucket; strict unknown-key rejection |
 | `graph` | 2 | 8 | 0 | `adapt` | `semengine/graph` | ADR-109, ADR-110 | M2 (#406, #407): NewExactEntityReader returns (*ExactEntityReader, error); ExactEntity json kv_revision; EntityMutationResponse + ReconcilePredicatesRequest.Source (and per-triple Source/Timestamp) |
-| `graph/inference` | 1 | 1 | 0 | `adapt` | `semengine/graph/inference` | semengine#97 | M1 (#399) / M2 (#402, #406): hierarchy slice on main; anomaly/detector types stay out of trimmed SemTeams graph-gateway |
-| `message` | 22 | 35 | 1 | `adapt` | `semengine/message` | ADR-110 | M2 (#404, #407): rewire imports; stream-lane statements require Source and Timestamp |
+| `graph/inference` | 1 | 2 | 0 | `adapt` | `semengine/graph/inference` | semengine#97 | M1 (#399) / M2 (#402, #406): hierarchy slice on main; anomaly/detector types stay out of trimmed SemTeams graph-gateway |
+| `message` | 22 | 36 | 1 | `adapt` | `semengine/message` | ADR-110 | M2 (#404, #407): rewire imports; stream-lane statements require Source and Timestamp |
 | `metric` | 1 | 0 | 0 | `adapt` | `semengine/metric` | semengine#69 | M2 (#407): rewire cmd/semteams/main.go import; core metrics use semengine_ namespace |
 | `model` | 0 | 2 | 0 | `adapt` | `semengine/model` | semengine#155 | M2 (#404, #407): rewire test/runtime imports; track semengine#155 reader/endpoint refactor before pin |
 | `natsclient` | 12 | 14 | 0 | `adapt` | `semengine/natsclient` | ADR-110, ADR-112 | M1 (#400): replace NewTestClient/TestClient in 11 _test.go files with internal/natstest; M2 (#404, #407): use pkg/retry.Config and WaitConsumerHandlers |
 | `payloadregistry` | 6 | 7 | 1 | `adapt` | `semengine/payloadregistry` | semengine#219 | M2 (#404, #407): rewire imports; GetRegistration/IndexingProfileFor take pkg/types.Type where called |
 | `pkg/errs` | 6 | 6 | 0 | `adapt` | `semengine/pkg/errs` | ADR-112, semengine#146, semengine#167 | M2 (#404, #407): rewire imports; Classify defaults unknown errors to fatal and classifies by sentinel/type only |
-| `pkg/lifecycle` | 3 | 5 | 0 | `adapt` | `semengine/pkg/lifecycle` | ADR-110, ADR-111, semengine#24 | M2 (#404, #405, #407): rewire imports; bind lifecycle.Manager onto rule processor at host construction; align with semengine#24 |
+| `pkg/lifecycle` | 3 | 6 | 0 | `adapt` | `semengine/pkg/lifecycle` | ADR-110, ADR-111, semengine#24 | M2 (#404, #405, #407): rewire imports; bind lifecycle.Manager onto rule processor at host construction; align with semengine#24 |
 | `pkg/projection` | 2 | 2 | 0 | `repair-before-port` | `semengine/pkg/projection` | ADR-110, ADR-112 | M2 (#407): rewire imports; MutationError over ErrNoResponders carries transient Class field while errs.IsTransient stays false |
 | `pkg/types` | 1 | 2 | 0 | `adapt` | `semengine/pkg/types` | ADR-102, ADR-104 | M2 (#404, #407): rewire imports; 6-part entity ID and UTF-8 Type.Validate contract unchanged for SemTeams |
-| `processor/graph-ingest` | 1 | 0 | 0 | `repair-before-port` | `semengine/processor/graph-ingest` | ADR-108, ADR-109, ADR-110, ADR-113 | M2 (#407): rewire internal/runtimecatalog registration; enforces ADR-110 single write seam |
-| `processor/graph-query` | 1 | 0 | 0 | `adapt` | `semengine/processor/graph-query` | ADR-108, ADR-109, ADR-113, semengine#9 | M2 (#406, #407): rewire catalog; adopt MIGRATION.md 4-key QueryResponse envelope, kv_revision, and COMMUNITY_INDEX readiness behavior |
+| `processor/graph-ingest` | 1 | 1 | 0 | `repair-before-port` | `semengine/processor/graph-ingest` | ADR-108, ADR-109, ADR-110, ADR-113 | M2 (#407): rewire internal/runtimecatalog registration; enforces ADR-110 single write seam |
+| `processor/graph-query` | 1 | 1 | 0 | `adapt` | `semengine/processor/graph-query` | ADR-108, ADR-109, ADR-113, semengine#9 | M2 (#406, #407): rewire catalog; adopt MIGRATION.md 4-key QueryResponse envelope, kv_revision, and COMMUNITY_INDEX readiness behavior |
 | `service` | 5 | 8 | 0 | `adapt` | `semengine/service` | ADR-109, ADR-113, semengine#29, semengine#30, semengine#361 | M1 (#401): decouple LogForwarder; M2 (#404, #407): absorb MilestoneService, pass signalCtx to StartAll, update NewBaseServiceWithOptions/MaybeStartPProf/ComponentManager |
-| `storage/objectstore` | 2 | 1 | 0 | `adapt` | `semengine/storage/objectstore` | ADR-063, ADR-108, ADR-112, ADR-113 | M2 (#407): rewire internal/runtimecatalog and cmd/semteams imports |
+| `storage/objectstore` | 2 | 2 | 0 | `adapt` | `semengine/storage/objectstore` | ADR-063, ADR-108, ADR-112, ADR-113 | M2 (#407): rewire internal/runtimecatalog and cmd/semteams imports |
 | `types` | 21 | 33 | 0 | `adapt` | `semengine/types` | ADR-104 | M2 (#404, #407): rewire imports; ServiceConfigs named map type in Manager.ConfigureFromServices |
 | `vocabulary` | 1 | 0 | 0 | `adapt` | `semengine/vocabulary` | semengine#69, semengine#72, semengine#234 | M1 (#401) / M2 (#407): replace removed RegisterPredicate(meta) in cmd/semteams/vocab/vocab.go with vocabulary.Register / RegisterPack |
 
@@ -82,21 +82,21 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 
 | SemStreams subpath | Non-test | `_test.go` | `scripts/` | SemEngine disposition | Post-port home | Upstream refs | SemTeams action |
 | --- | ---: | ---: | ---: | --- | --- | --- | --- |
-| `processor/rule` | 3 | 11 | 0 | `unported (setup-04a-06)` | `semengine/processor/rule + semteams agent actions` | ADR-108, ADR-109, ADR-113, semengine#9, semengine#25, semengine#26, semengine#27, semengine#28 | M2 (#405, #407, #287): parked until setup-04a-06 lands after graph-clustering; register publish_agent action family via E1-E3 seam |
+| `processor/rule` | 3 | 12 | 0 | `unported (setup-04a-06)` | `semengine/processor/rule + semteams agent actions` | ADR-108, ADR-109, ADR-113, semengine#9, semengine#25, semengine#26, semengine#27, semengine#28 | M2 (#405, #407, #287): parked until setup-04a-06 lands after graph-clustering; register publish_agent action family via E1-E3 seam |
 | `processor/rule/expression` | 0 | 3 | 0 | `unported (setup-04a-06)` | `semengine/processor/rule/expression` | semengine#9, semengine#25 | M2 (#405, #407): rewire 3 rule-pack contract test files once setup-04a-06 lands |
 
 ### 3. SemTeams Milestone 2 absorb
 
 | SemStreams subpath | Non-test | `_test.go` | `scripts/` | SemEngine disposition | Post-port home | Upstream refs | SemTeams action |
 | --- | ---: | ---: | ---: | --- | --- | --- | --- |
-| `agentic` | 34 | 40 | 1 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404, #287): absorb contracts, payloads, and projection contracts from 8b99efe9 |
+| `agentic` | 34 | 41 | 1 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404, #287): absorb contracts, payloads, and projection contracts from 8b99efe9 |
 | `agentic/agentrun` | 1 | 3 | 0 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4), semengine#30 | M1 (#402) design; M2 (#404, #287): absorb run projection + MilestoneService from 8b99efe9 |
-| `gateway/graph-gateway` | 1 | 0 | 0 | `defer-exclude` | `semteams trimmed graph-gateway` | semengine#8 (03B D4), graph-query/MIGRATION.md | M1 (#402) design; M2 (#406): replace with trimmed SemTeams GraphQL gateway over graph.QueryVerbs() and kv_revision |
+| `gateway/graph-gateway` | 1 | 1 | 0 | `defer-exclude` | `semteams trimmed graph-gateway` | semengine#8 (03B D4), graph-query/MIGRATION.md | M1 (#402) design; M2 (#406): replace with trimmed SemTeams GraphQL gateway over graph.QueryVerbs() and kv_revision |
 | `persona` | 1 | 0 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404): absorb persona manager/fragments loader from 8b99efe9 |
-| `processor/agentic-dispatch` | 6 | 3 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb component + internal/deliverylane + model/wire; adopt ADR-112/113 + pkg/lifecyclecleanup |
-| `processor/agentic-loop` | 1 | 2 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-111, ADR-112, ADR-113, semengine#24, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb loop + internal/{looptoken,agentterminal}; align durability with semengine#24 |
-| `processor/agentic-model` | 1 | 0 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb model processor + model/wire; adopt pkg/lifecyclecleanup (#77) and ADR-113 |
-| `processor/agentic-tools` | 16 | 6 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#29, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb tool processor + ExecutorRegistry; inject registry directly instead of Dependencies.ToolRegistry |
+| `processor/agentic-dispatch` | 6 | 4 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb component + internal/deliverylane + model/wire; adopt ADR-112/113 + pkg/lifecyclecleanup |
+| `processor/agentic-loop` | 1 | 3 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-111, ADR-112, ADR-113, semengine#24, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb loop + internal/{looptoken,agentterminal}; align durability with semengine#24 |
+| `processor/agentic-model` | 1 | 1 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb model processor + model/wire; adopt pkg/lifecyclecleanup (#77) and ADR-113 |
+| `processor/agentic-tools` | 16 | 7 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#29, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb tool processor + ExecutorRegistry; inject registry directly instead of Dependencies.ToolRegistry |
 | `processor/agentic-tools/executors` | 2 | 2 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#29 | M1 (#402) design; M2 (#404): absorb builtin tool executors used by SemTeams |
 | `processor/agentic-tools/runner` | 2 | 2 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404): absorb sandbox/command runner used by SemTeams tools |
 | `vocabulary/agentic` | 3 | 7 | 0 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4), semengine#234 | M1 (#401, #402); M2 (#404): absorb agentic predicate constants and register via semengine/vocabulary |
@@ -105,28 +105,28 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 
 | SemStreams subpath | Non-test | `_test.go` | `scripts/` | SemEngine disposition | Post-port home | Upstream refs | SemTeams action |
 | --- | ---: | ---: | ---: | --- | --- | --- | --- |
-| `componentregistry` | 0 | 1 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): delete aggregator comparison in internal/runtimecatalog/catalog_test.go |
-| `gateway/http` | 1 | 0 | 0 | `defer-exclude` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `gateway/lifecycle-gateway` | 1 | 0 | 0 | `unported (gateway cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `governance` | 1 | 1 | 0 | `unported (governance cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4), semengine#28 | M1 (#399): drop unused payload registration from internal/runtimecatalog/payloads.go once gated-dag/agentic-governance leave |
-| `input/file` | 1 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `input/udp` | 1 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `input/websocket` | 1 | 0 | 0 | `unported (outside 04A)` | `dropped in M1 (#399)` | semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `output/file` | 1 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `output/httppost` | 1 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `output/websocket` | 1 | 0 | 0 | `unported (setup-04a-05)` | `dropped in M1 (#399)` | semengine#34 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `payloadbuiltins` | 0 | 1 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): delete aggregator comparison in internal/runtimecatalog/catalog_test.go |
+| `componentregistry` | 0 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): delete aggregator comparison in internal/runtimecatalog/catalog_test.go |
+| `gateway/http` | 0 | 0 | 0 | `defer-exclude` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `gateway/lifecycle-gateway` | 0 | 0 | 0 | `unported (gateway cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `governance` | 0 | 0 | 0 | `unported (governance cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4), semengine#28 | M1 (#399): drop unused payload registration from internal/runtimecatalog/payloads.go once gated-dag/agentic-governance leave |
+| `input/file` | 0 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `input/udp` | 0 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `input/websocket` | 0 | 0 | 0 | `unported (outside 04A)` | `dropped in M1 (#399)` | semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `output/file` | 0 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `output/httppost` | 0 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `output/websocket` | 0 | 0 | 0 | `unported (setup-04a-05)` | `dropped in M1 (#399)` | semengine#34 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `payloadbuiltins` | 0 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): delete aggregator comparison in internal/runtimecatalog/catalog_test.go |
 | `pkg/logging` | 1 | 0 | 0 | `unported (cut)` | `dropped in M1 (#401)` | semengine#8 (tier1-cross-check) | M1 (#401): decouple cmd/semteams/logging.go from NewNATSLogHandler / LogForwarder onto local slog/NATS policy |
-| `processor/agentic-governance` | 1 | 0 | 0 | `unported (agentic cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4), semengine#28 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `processor/gated-dag` | 2 | 1 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): drop uncomposed factory + payload registration from internal/runtimecatalog |
-| `processor/graph-clustering` | 1 | 0 | 0 | `unported (next before 04a-06)` | `dropped in M1 (#399)` | semengine#9 (2026-11-08 ruling) | M1 (#399): drop uncomposed factory from internal/runtimecatalog (re-add from SemEngine only if NLQ text search is composed) |
-| `processor/graph-embedding` | 1 | 0 | 0 | `unported (setup-04a-05)` | `dropped in M1 (#399)` | semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `processor/graph-index` | 1 | 0 | 0 | `adapt (on SemEngine main)` | `dropped in M1 (#399)` | ADR-108, ADR-109 | M1 (#399): drop uncomposed factory from internal/runtimecatalog (available in semengine/processor/graph-index if needed later) |
-| `processor/graph-index-spatial` | 1 | 0 | 0 | `unported (setup-04a-07)` | `dropped in M1 (#399)` | ADR-108, semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `processor/graph-index-temporal` | 1 | 0 | 0 | `unported (setup-04a-07)` | `dropped in M1 (#399)` | ADR-108, semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `processor/json_filter` | 1 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `processor/json_generic` | 1 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `processor/json_map` | 1 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `processor/agentic-governance` | 0 | 0 | 0 | `unported (agentic cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4), semengine#28 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `processor/gated-dag` | 0 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): drop uncomposed factory + payload registration from internal/runtimecatalog |
+| `processor/graph-clustering` | 0 | 0 | 0 | `unported (next before 04a-06)` | `dropped in M1 (#399)` | semengine#9 (2026-11-08 ruling) | M1 (#399): drop uncomposed factory from internal/runtimecatalog (re-add from SemEngine only if NLQ text search is composed) |
+| `processor/graph-embedding` | 0 | 0 | 0 | `unported (setup-04a-05)` | `dropped in M1 (#399)` | semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `processor/graph-index` | 0 | 0 | 0 | `adapt (on SemEngine main)` | `dropped in M1 (#399)` | ADR-108, ADR-109 | M1 (#399): drop uncomposed factory from internal/runtimecatalog (available in semengine/processor/graph-index if needed later) |
+| `processor/graph-index-spatial` | 0 | 0 | 0 | `unported (setup-04a-07)` | `dropped in M1 (#399)` | ADR-108, semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `processor/graph-index-temporal` | 0 | 0 | 0 | `unported (setup-04a-07)` | `dropped in M1 (#399)` | ADR-108, semengine#9 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `processor/json_filter` | 0 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `processor/json_generic` | 0 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
+| `processor/json_map` | 0 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
 | `vocabulary/builtins` | 1 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#401)` | semengine#3 (03B Q1), semengine#234 | M1 (#401): audit predicates used by SemTeams and replace builtins.Register() in cmd/semteams/main.go |
 
 ### `scripts/` string-literal-only occurrences
@@ -156,7 +156,7 @@ Comparing SemTeams's Group 1 symbol and wire usage against `C360Studio/semengine
 | Package | SemStreams `8b99efe9` usage in SemTeams | SemEngine `01567cc` contract | SemTeams call sites & target issue |
 | --- | --- | --- | --- |
 | `component` | `component.PlatformMeta` | Moved to `types.PlatformMeta`; `component.Dependencies` drops `ToolRegistry` (`semengine#29`) and `LifecycleManager` | `cmd/semteams/rule_hot_reload_integration_test.go:82`, `cmd/semteams/main.go:207,212` (`#404`, `#407`) |
-| `component` | `Registry.RegisterFactory` / `Registry.GetFactory` | Replaced by `Registry.Register(Registration)` and `Registry.ListFactories()` | `internal/runtimecatalog/catalog_test.go:40,41,94,95` (`#399` / `#407`) |
+| `component` | `Registry.RegisterFactory` / `Registry.GetFactory` | Replaced by `Registry.Register(Registration)` and `Registry.ListFactories()` | `internal/runtimecatalog/catalog_test.go:112,113,223,224` (`#407`) |
 | `composition` | `composition.AssertValid(t, registry, cfg)` | Replaced by `composition.Validate(catalog *component.Registry, cfg *config.Config) (*Result, error)` (`composition/validate.go:21`) | `test/contract/composition_contract_test.go:30` (`#407`) |
 | `config` | `(*config.Manager).Stop(5 * time.Second)` | `(*config.Manager).Stop(ctx context.Context) error` (ADR-113); `SEMENGINE_` env override prefix; `semengine_config_<org>_<stem>` KV bucket; case-insensitive unknown-key rejection | `cmd/semteams/main.go:149`, `cmd/semteams/loop_runtime_integration_test.go:53`, `cmd/semteams/loop_cost_stamp_integration_test.go:139` (`#407`) |
 | `graph` | `graph.NewExactEntityReader(requester, timeout)` returning interface | Returns concrete `(*graph.ExactEntityReader, error)` (`graph/exact_entity.go:38,46`) | `cmd/semteams/approvalpause/projection.go:49`, `cmd/semteams/loop_runtime_integration_test.go:95`, `cmd/semteams/loop_cost_stamp_integration_test.go:161` (`#407`) |

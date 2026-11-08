@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/service"
@@ -53,27 +54,9 @@ func main() {
 		log.Fatalf("Failed to create output directory: %v", err)
 	}
 
-	// Extract and write component configuration schemas
-	var componentSchemas []ComponentSchema
-	for name, registration := range factories {
-		schema := extractSchema(name, registration)
-
-		// Validate schema against meta-schema
-		if metaSchemaPath != "" {
-			if err := validateSchema(schema, metaSchemaPath); err != nil {
-				log.Fatalf("Schema validation failed for %s: %v", name, err)
-			}
-		}
-
-		componentSchemas = append(componentSchemas, schema)
-
-		// Write to versioned JSON file
-		outFile := filepath.Join(*outDir, fmt.Sprintf("%s.v1.json", name))
-		if err := writeJSONSchema(outFile, schema); err != nil {
-			log.Fatalf("Failed to write schema for %s: %v", name, err)
-		}
-
-		log.Printf("  ✓ Generated component schema: %s", outFile)
+	componentSchemas, err := writeAndPruneComponentSchemas(*outDir, metaSchemaPath, factories)
+	if err != nil {
+		log.Fatalf("%v", err)
 	}
 
 	// Note: Workflow definition schema generation removed - old workflow processor deprecated
@@ -275,4 +258,65 @@ func collectResponseTypes(specs map[string]*service.OpenAPISpec) []reflect.Type 
 	}
 
 	return types
+}
+
+func writeAndPruneComponentSchemas(
+	outDir string,
+	metaSchemaPath string,
+	factories map[string]*component.Registration,
+) ([]ComponentSchema, error) {
+	var componentSchemas []ComponentSchema
+	for name, registration := range factories {
+		schema := extractSchema(name, registration)
+		if metaSchemaPath != "" {
+			if err := validateSchema(schema, metaSchemaPath); err != nil {
+				return nil, fmt.Errorf("schema validation failed for %s: %w", name, err)
+			}
+		}
+		componentSchemas = append(componentSchemas, schema)
+		outFile := filepath.Join(outDir, fmt.Sprintf("%s.v1.json", name))
+		if err := writeJSONSchema(outFile, schema); err != nil {
+			return nil, fmt.Errorf("write schema for %s: %w", name, err)
+		}
+		log.Printf("  ✓ Generated component schema: %s", outFile)
+	}
+	pruned, err := pruneStaleSchemas(outDir, factories)
+	if err != nil {
+		return nil, fmt.Errorf("prune stale schemas: %w", err)
+	}
+	for _, path := range pruned {
+		log.Printf("  - Pruned uncomposed schema: %s", path)
+	}
+	return componentSchemas, nil
+}
+
+// pruneStaleSchemas removes *.v1.json files in outDir whose component stem is
+// not present in factories, leaving non-*.v1.json files untouched.
+func pruneStaleSchemas(outDir string, factories map[string]*component.Registration) ([]string, error) {
+	const suffix = ".v1.json"
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return nil, fmt.Errorf("read schema dir %s: %w", outDir, err)
+	}
+	var pruned []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, suffix) || len(name) <= len(suffix) {
+			continue
+		}
+		stem := strings.TrimSuffix(name, suffix)
+		if _, ok := factories[stem]; ok {
+			continue
+		}
+		stalePath := filepath.Join(outDir, name)
+		if err := os.Remove(stalePath); err != nil {
+			return nil, fmt.Errorf("remove stale schema %s: %w", stalePath, err)
+		}
+		pruned = append(pruned, stalePath)
+	}
+	sort.Strings(pruned)
+	return pruned, nil
 }

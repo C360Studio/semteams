@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semteams/internal/runtimecatalog"
 )
 
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
 func TestSetupRegistriesAndManagerRegistersProductCatalog(t *testing.T) {
 	cfg := &config.Config{}
 	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
@@ -30,8 +31,8 @@ func TestSetupRegistriesAndManagerRegistersProductCatalog(t *testing.T) {
 	}
 
 	got := componentRegistry.ListFactories()
-	if len(got) != 27 {
-		t.Fatalf("registered factory count = %d, want 27", len(got))
+	if len(got) != 9 {
+		t.Fatalf("registered factory count = %d, want 9", len(got))
 	}
 
 	wantRegistry := component.NewRegistry()

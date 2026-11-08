@@ -481,3 +481,50 @@ func TestResponseTypesInRegistry(t *testing.T) {
 func intPtr(i int) *int {
 	return &i
 }
+
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
+func TestPruneStaleSchemas(t *testing.T) {
+	schemasDir := t.TempDir()
+
+	seedFiles := []string{
+		"graph-ingest.v1.json",
+		"agentic-loop.v1.json",
+		"udp.v1.json",
+		"gated-dag.v1.json",
+		"README.md",
+	}
+	for _, name := range seedFiles {
+		if err := os.WriteFile(filepath.Join(schemasDir, name), []byte("{}"), 0o644); err != nil {
+			t.Fatalf("seed %s: %v", name, err)
+		}
+	}
+
+	factories := map[string]*component.Registration{
+		"graph-ingest": {},
+		"agentic-loop": {},
+	}
+
+	pruned, err := pruneStaleSchemas(schemasDir, factories)
+	if err != nil {
+		t.Fatalf("pruneStaleSchemas: %v", err)
+	}
+
+	wantPruned := []string{
+		filepath.Join(schemasDir, "gated-dag.v1.json"),
+		filepath.Join(schemasDir, "udp.v1.json"),
+	}
+	if !reflect.DeepEqual(pruned, wantPruned) {
+		t.Fatalf("pruned = %v, want %v", pruned, wantPruned)
+	}
+
+	for _, stale := range []string{"udp.v1.json", "gated-dag.v1.json"} {
+		if _, statErr := os.Stat(filepath.Join(schemasDir, stale)); !os.IsNotExist(statErr) {
+			t.Errorf("stale schema %s still exists (err=%v)", stale, statErr)
+		}
+	}
+	for _, retained := range []string{"graph-ingest.v1.json", "agentic-loop.v1.json", "README.md"} {
+		if _, statErr := os.Stat(filepath.Join(schemasDir, retained)); statErr != nil {
+			t.Errorf("retained file %s missing: %v", retained, statErr)
+		}
+	}
+}
