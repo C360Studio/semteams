@@ -25,4 +25,4 @@ Epic `#412` sequences SemTeams's migration off the frozen SemStreams pin (`v1.0.
 
 - Gives Milestones 1–3 (`#399`–`#408`) one regenerable source of truth aligned with `C360Studio/semsource#226` and the 2026-11-08 owner ruling on `C360Studio/semengine#9`.
 
-Closes #398; addresses #412 (claimed on branch `gemini/semengine-port-ledger`).
+Closes #398; addresses #412 (claimed on branch `gemini/semengine-port-ledger`, PR #415).
