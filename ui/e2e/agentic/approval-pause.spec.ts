@@ -13,8 +13,8 @@ const RUN_INFIX = ".chain.agent.execution.";
  *                                                            the recovery coordinator
  *                                                            (inherit anchor:
  *                                                             agent.run.entity-id)
- *   recovery coordinator      → tool_call(create_rule)      create_rule ∈
- *                                                            approval_required → the
+ *   recovery coordinator      → tool_call(bash)             bash ∈ research/06 tools
+ *                                                            ∩ approval_required → the
  *                                                            loop parks in
  *                                                            awaiting_approval, emits
  *                                                            agent.approval_pending.<id>;
@@ -38,7 +38,8 @@ const RUN_INFIX = ".chain.agent.execution.";
  * gated tool actually parks the loop and emits the event our subscriber consumes.
  *
  * Required fixture: test/fixtures/journeys/approval-pause.yaml
- * Required config: configs/e2e-flow-bootstrap.json (approval_required:[create_rule],
+ * Required config: configs/e2e-flow-bootstrap-approval-4c.gen.json (derived from
+ *   configs/e2e-flow-bootstrap.json with approval_required:[create_rule, bash],
  *   agent-run/12, the agent.approval_pending teams-loop output port)
  */
 
@@ -50,7 +51,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
 
   test.setTimeout(120_000);
 
-  test("recovery coordinator gated create_rule → run transitions executing→awaiting_approval", async ({
+  test("recovery coordinator gated bash → run transitions executing→awaiting_approval", async ({
     page,
     request,
   }, testInfo) => {
@@ -69,7 +70,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     // Step 2 — send a research prompt. The coordinator classifies it
     // research; researcher-research-plan escalates needs_clarification;
     // rule research/06 spawns the recovery coordinator, which calls the
-    // gated create_rule.
+    // gated bash tool.
     // -----------------------------------------------------------------
     await page.getByTestId("chat-input").fill(
       "Research MAVLink v2 HEARTBEAT frame staleness thresholds over UDP and summarize alerting defaults.",
@@ -100,7 +101,7 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
 
     expect(
       runPhases,
-      "agent.run.phase never reached a settled phase on the run entity (run stuck in dispatched/executing — the gated create_rule did not drive executing→awaiting_approval)",
+      "agent.run.phase never reached a settled phase on the run entity (run stuck in dispatched/executing — the gated bash call did not drive executing→awaiting_approval)",
     ).toBeTruthy();
     expect(
       runPhases,
@@ -227,7 +228,8 @@ test.describe("ADR-053 Phase 4c — in-run tool-gate pauses the run (executing�
     const report = await attachJourneyEvidenceReport({
       journeyName: "approval-pause",
       fixture: "approval-pause.yaml",
-      config: "e2e-flow-bootstrap.json",
+      config:
+        process.env.AGENTIC_CONFIG ?? "e2e-flow-bootstrap-approval-4c.gen.json",
       request,
       testInfo,
       runIds: [pausedRunId],

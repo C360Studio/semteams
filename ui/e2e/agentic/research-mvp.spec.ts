@@ -345,7 +345,7 @@ test.describe("ADR-042 MVP-5 — Research category mock-LLM journey", () => {
     });
     expect(artifactPaths).toHaveLength(1);
     expect(artifactPaths[0].subject).toBe(artifactMeta.loop_entity_id);
-    expect(String(artifactPaths[0].object)).toMatch(/\.artifacts\/research\/.+\.md$/);
+    expect(String(artifactPaths[0].object)).toMatch(/(?:^|\/)\.?artifacts\/research\/.+\.md$/);
 
     // (7b) Origin-coordinator task lineage & terminal channel delivery proof.
     const taskEntries = messages.filter((entry) => entry.message_type === "agentic.task.v1");

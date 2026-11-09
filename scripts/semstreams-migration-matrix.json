@@ -141,13 +141,13 @@
     "name": "approval-pause",
     "fixture": "approval-pause.yaml",
     "spec": "approval-pause.spec.ts",
-    "config": "e2e-flow-bootstrap.json"
+    "config": "e2e-flow-bootstrap-approval-4c.gen.json"
   },
   {
     "name": "approval-resume",
     "fixture": "approval-resume.yaml",
     "spec": "approval-resume.spec.ts",
-    "config": "e2e-flow-bootstrap.json"
+    "config": "e2e-flow-bootstrap-approval-4c.gen.json"
   },
   {
     "name": "clarification-resume-ui",

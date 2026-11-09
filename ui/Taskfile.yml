@@ -735,13 +735,15 @@ tasks:
     desc: Run the ADR-053 Phase 4c PR-1 tool-gate pause journey (in-run gated tool → awaiting_approval)
     summary: |
       The 4c tool-gate pause journey on the live research pack (re-pointed from
-      parked dev-via-test per #306): front-door coordinator decides research →
-      rule research/01 (run_scope=new) spawns researcher-research-plan →
-      researcher-research-plan escalates needs_clarification → rule research/06
-      spawns the recovery coordinator (inherit anchor agent.run.entity-id), which
-      calls create_rule — listed in e2e-flow-bootstrap.json's
-      agentic-tools.approval_required. The upstream ApprovalFilter rejects it and the
-      loop parks in awaiting_approval, emitting agent.approval_pending.<loopID>:
+      parked dev-via-test per #306 and repaired per #420): front-door coordinator
+      decides research → rule research/01 (run_scope=new) spawns
+      researcher-research-plan → researcher-research-plan escalates
+      needs_clarification → rule research/06 spawns the recovery coordinator
+      (inherit anchor agent.run.entity-id), which calls bash — advertised on
+      research/06 and added to agentic-tools.approval_required in the derived
+      e2e-flow-bootstrap-approval-4c.gen.json config. The upstream ApprovalFilter
+      rejects it and the loop parks in awaiting_approval, emitting
+      agent.approval_pending.<loopID>:
 
         approvalpause subscriber  → agent.run.approval-pending + approval-outstanding=1
         agent-run/12 (approval-outstanding > 0 + phase==executing) → executing→awaiting_approval
@@ -753,9 +755,11 @@ tasks:
       (the 4c-vs-4b-2 distinction). Sandbox = MockRunner (no sandbox requested).
     vars:
       FIXTURE: approval-pause.yaml
-      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+      AGENTIC_CONFIG: e2e-flow-bootstrap-approval-4c.gen.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
+      - defer: rm -f ../configs/e2e-flow-bootstrap-approval-4c.gen.json
+      - jq '.components["agentic-tools"].config.approval_required=["create_rule","bash"]' ../configs/e2e-flow-bootstrap.json > ../configs/e2e-flow-bootstrap-approval-4c.gen.json
       - task: test:e2e:agentic:stack:up
         vars:
           FIXTURE: "{{.FIXTURE}}"
@@ -767,14 +771,14 @@ tasks:
     summary: |
       The resume twin of approval-pause. Same pause half (research →
       researcher-research-plan needs_clarification → recovery coordinator gated
-      create_rule → run parks in awaiting_approval). Then the spec POSTs the
+      bash → run parks in awaiting_approval). Then the spec POSTs the
       operator's approval to the real dispatch endpoint:
 
         POST /teams-dispatch/loops/{loopId}/approval {"decision":"approve","execution_id":"..."}
 
       which publishes agent.approval_response.<loopId>. The teams-loop
       agent.approval_response input port un-parks the loop (ResolveApprovalIfPending;
-      create_rule re-dispatched with ApprovedBy → gate bypass), and the approvalpause
+      bash re-dispatched with ApprovedBy → gate bypass), and the approvalpause
       subscriber appends the matching [loopId, executionId] tuple to
       agent.run.approval-answered and updates agent.run.approval-outstanding=0 →
       agent-run/13 transitions awaiting_approval→executing. The resumed coordinator
@@ -786,9 +790,11 @@ tasks:
       completed/failed) + settle window confirms no bounce. Sandbox = MockRunner.
     vars:
       FIXTURE: approval-resume.yaml
-      AGENTIC_CONFIG: e2e-flow-bootstrap.json
+      AGENTIC_CONFIG: e2e-flow-bootstrap-approval-4c.gen.json
     cmds:
       - defer: { task: test:e2e:agentic:cleanup }
+      - defer: rm -f ../configs/e2e-flow-bootstrap-approval-4c.gen.json
+      - jq '.components["agentic-tools"].config.approval_required=["create_rule","bash"]' ../configs/e2e-flow-bootstrap.json > ../configs/e2e-flow-bootstrap-approval-4c.gen.json
       - task: test:e2e:agentic:stack:up
         vars:
           FIXTURE: "{{.FIXTURE}}"
@@ -1971,16 +1977,18 @@ tasks:
         echo "Waiting for stack at http://localhost:${PORT} ..."
         for i in $(seq 1 60); do
           if curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; then
-            echo "  Health OK after ${i}s, checking dispatch..."
-            # Wait for component HTTP handlers (register slightly after health)
-            for j in $(seq 1 10); do
-              if curl -sf "http://localhost:${PORT}/teams-dispatch/commands" > /dev/null 2>&1; then
-                echo "✅ Stack ready (health + dispatch) after ~$((i + j))s"
+            echo "  Health OK after ${i}s, checking dispatch + loop projection..."
+            # Wait for component HTTP handlers + graphview loop projection (#420:
+            # /teams-dispatch/loops returns fail-closed 503 while graphview catches up)
+            for j in $(seq 1 20); do
+              if curl -sf "http://localhost:${PORT}/teams-dispatch/commands" > /dev/null 2>&1 && \
+                 curl -sf "http://localhost:${PORT}/teams-dispatch/loops" > /dev/null 2>&1; then
+                echo "✅ Stack ready (health + dispatch + loops) after ~$((i + j))s"
                 exit 0
               fi
               sleep 1
             done
-            echo "⚠️  Health OK but dispatch not responding"
+            echo "⚠️  Health OK but dispatch/loops not responding"
           fi
           sleep 3
         done
