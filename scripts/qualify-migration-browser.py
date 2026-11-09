@@ -38,6 +38,44 @@ def tree_sha(snapshot, prefix=""):
     ).encode()).hexdigest()
 
 
+def derive_scenario_config(scenario, base_config, compose_config, env):
+    config = copy.deepcopy(base_config)
+    name = scenario["name"]
+    compose_config["services"]["mock-llm"]["environment"]["FIXTURE"] = scenario["fixture"]
+    compose_config["services"]["backend"]["environment"]["SEMSTREAMS_PERSONA_OVERLAY_PATH"] = ""
+    if name == "coordinator-routing-matrix":
+        config["components"]["rule"]["config"]["rules_files"] = [
+            "/app/configs/rules/coordinator/03b-respond-direct.json",
+            "/app/configs/rules/coordinator/03-ask-user.json"]
+        config["components"]["rule"]["config"]["inline_rules"] = []
+    elif name == "coordinator-team-spawn":
+        config["components"]["rule"]["config"]["rules_files"] = [
+            "/app/configs/rules/research/01-coordinator-research-spawn.json",
+            "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json"]
+        config["components"]["rule"]["config"]["inline_rules"] = []
+    elif name == "clarification-autonomous":
+        config["components"]["agentic-tools"]["config"]["restricted_decide_actions"] = ["ask_user"]
+        compose_config["services"]["backend"]["environment"]["SEMSTREAMS_PERSONA_OVERLAY_PATH"] = "configs/personas/fragments-autonomous"
+    if name == "run-approval-boundary":
+        config["components"]["agentic-tools"]["config"]["approval_required"] = ["emit_plan"]
+    elif name in ("approval-pause", "approval-resume"):
+        config["components"]["agentic-tools"]["config"]["approval_required"] = ["create_rule", "bash"]
+    env.pop("APPROVAL_BOUNDARY_ACTION", None)
+    if name.startswith("approval-boundary-"):
+        config["components"]["agentic-tools"]["config"]["approval_required"] = ["request_sandbox"]
+        env["APPROVAL_BOUNDARY_ACTION"] = scenario["action"]
+    return config
+
+
+def wait_for_dispatch_and_loops(read_http, attempts=30, sleep=time.sleep):
+    for _ in range(attempts):
+        if (read_http("/teams-dispatch/commands").get("status") == 200
+                and read_http("/teams-dispatch/loops").get("status") == 200):
+            return True
+        sleep(1)
+    return False
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for field in ("source", "compose", "project", "output", "names"):
@@ -91,29 +129,9 @@ def main():
         directory = output / scenario["name"]
         directory.mkdir(exist_ok=True)
         compose_config = copy.deepcopy(base)
-        compose_config["services"]["mock-llm"]["environment"]["FIXTURE"] = scenario["fixture"]
-        compose_config["services"]["backend"]["environment"]["SEMSTREAMS_PERSONA_OVERLAY_PATH"] = ""
-        config = json.loads((source / "configs/e2e-flow-bootstrap.json").read_text())
+        base_config = json.loads((source / "configs/e2e-flow-bootstrap.json").read_text())
         name = scenario["name"]
-        if name == "coordinator-routing-matrix":
-            config["components"]["rule"]["config"]["rules_files"] = [
-                "/app/configs/rules/coordinator/03b-respond-direct.json",
-                "/app/configs/rules/coordinator/03-ask-user.json"]
-            config["components"]["rule"]["config"]["inline_rules"] = []
-        elif name == "coordinator-team-spawn":
-            config["components"]["rule"]["config"]["rules_files"] = [
-                "/app/configs/rules/research/01-coordinator-research-spawn.json",
-                "/app/configs/rules/autoresearch/01-coordinator-autoresearch-spawn.json"]
-            config["components"]["rule"]["config"]["inline_rules"] = []
-        elif name == "clarification-autonomous":
-            config["components"]["agentic-tools"]["config"]["restricted_decide_actions"] = ["ask_user"]
-            compose_config["services"]["backend"]["environment"]["SEMSTREAMS_PERSONA_OVERLAY_PATH"] = "configs/personas/fragments-autonomous"
-        if name == "run-approval-boundary":
-            config["components"]["agentic-tools"]["config"]["approval_required"] = ["emit_plan"]
-        env.pop("APPROVAL_BOUNDARY_ACTION", None)
-        if name.startswith("approval-boundary-"):
-            config["components"]["agentic-tools"]["config"]["approval_required"] = ["request_sandbox"]
-            env["APPROVAL_BOUNDARY_ACTION"] = scenario["action"]
+        config = derive_scenario_config(scenario, base_config, compose_config, env)
         config_path = directory / "config.json"
         save(config_path, config)
         for volume in compose_config["services"]["backend"]["volumes"]:
@@ -185,12 +203,9 @@ def main():
             if not skipped:
                 result = run(compose + ["up", "-d", "--wait", "--wait-timeout", "120"], directory / "up.log", 150)
                 if result == 0:
-                    for _ in range(30):
-                        if read_http("/teams-dispatch/commands").get("status") == 200:
-                            break
-                        time.sleep(1)
+                    wait_for_dispatch_and_loops(read_http)
             if result == 0:
-                env.update(FIXTURE=scenario["fixture"], AGENTIC_CONFIG=scenario["config"])
+                env.update(FIXTURE=scenario["fixture"], AGENTIC_CONFIG=str(config_path))
                 result = run(["npx", "playwright", "test", "e2e/agentic/" + scenario["spec"],
                               "--retries=0", "--reporter=list,json", "--output=" + str(directory / "test-results")],
                              directory / "playwright.log", 260)

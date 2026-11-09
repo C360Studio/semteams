@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
  * approval-pause.
  *
  *   (pause half — identical to approval-pause)
- *   recovery coordinator → tool_call(create_rule)  loop parks in awaiting_approval;
+ *   recovery coordinator → tool_call(bash)          loop parks in awaiting_approval;
  *                                                   approvalpause stamps
  *                                                   agent.run.approval-pending +
  *                                                   agent.run.approval-outstanding=1;
@@ -33,7 +33,8 @@ import { test, expect } from "@playwright/test";
  * POST or a run that never resumes.
  *
  * Required fixture: test/fixtures/journeys/approval-resume.yaml
- * Required config: configs/e2e-flow-bootstrap.json (approval_required:[create_rule],
+ * Required config: configs/e2e-flow-bootstrap-approval-4c.gen.json (derived from
+ *   configs/e2e-flow-bootstrap.json with approval_required:[create_rule, bash],
  *   agent-run/12+13, the agent.approval_pending + agent.approval_response ports)
  */
 
@@ -47,7 +48,7 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
 
   test.setTimeout(120_000);
 
-  test("operator approves gated create_rule → run resumes awaiting_approval→executing", async ({
+  test("operator approves gated bash → run resumes awaiting_approval→executing", async ({
     page,
     request,
   }) => {
@@ -81,7 +82,7 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     }, { timeoutMs: 90_000 });
     expect(
       paused,
-      "run never reached awaiting_approval — the gated create_rule did not pause the run (PR-1). Cannot test resume.",
+      "run never reached awaiting_approval — the gated bash call did not pause the run (PR-1). Cannot test resume.",
     ).toBeTruthy();
 
     const pendingBefore = await runEntityTriples(request, "agent.run.approval-pending");
@@ -109,7 +110,7 @@ test.describe("ADR-053 Phase 4c — approval resumes the run (awaiting_approval�
     // -----------------------------------------------------------------
     // Step 5 — POST the operator's APPROVAL through the real dispatch endpoint.
     // This publishes agent.approval_response.<loopId>; the loop un-parks (re-dispatches
-    // create_rule with ApprovedBy → ApprovalFilter bypass) and the approvalpause
+    // bash with ApprovedBy → ApprovalFilter bypass) and the approvalpause
     // subscriber records the approval-answered receipt and updates approval-outstanding=0.
     // The dispatch consumes agent.approval_pending ASYNC, so retry on 409 ("loop not
     // awaiting approval") until it has registered the pending execution_id.

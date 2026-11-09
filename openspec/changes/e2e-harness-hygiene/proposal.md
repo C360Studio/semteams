@@ -19,7 +19,7 @@ Recording the post-`v0.3.0` Milestone 1 SemEngine port acceptance floor (`#403`,
 - Update `ui/e2e/agentic/research-mvp.spec.ts` to accept both container-absolute `/artifacts/research/<file>.md` and local-default `.artifacts/research/<file>.md` (`/(?:^|\/)\.?artifacts\/research\/.+\.md$/`).
 - Filter `listLoops` selection in `ui/e2e/agentic/task-story-trace.spec.ts` and `ui/e2e/agentic/task-title-aliases.spec.ts` to root dispatch tasks (`l.task_id?.startsWith("dispatch-")`) so `/activity` top-level `task-card` assertions never select a child loop UUID.
 - Derive a gitignored temporary `e2e-flow-bootstrap-approval-4c.gen.json` config (gating `bash`, advertised on `research/06`'s recovery coordinator) in `ui/Taskfile.yml` and `scripts/qualify-migration-browser.py` (`scripts/semstreams-migration-matrix.json`), and update `test/fixtures/journeys/approval-{pause,resume}.yaml` + `ui/e2e/agentic/approval-{pause,resume}.spec.ts` to exercise `bash` while keeping `configs/e2e-flow-bootstrap.json` and `configs/rules/research/06-needs-clarification-replan.json` untouched.
-- Add Go contract regression checks in `test/contract/e2e_harness_hygiene_test.go` (`// spec:` cited + `task mutate:check` verified) and a Python unit test in `scripts/test_qualify_migration_browser.py` covering the four invariants.
+- Add Go contract regression checks in `test/contract/e2e_harness_hygiene_test.go` (`// spec:` cited + `cp` + SHA-256 mutant-detection verified) and Python unit tests in `scripts/test_qualify_migration_browser.py` covering the four invariants.
 
 ## Non-goals
 

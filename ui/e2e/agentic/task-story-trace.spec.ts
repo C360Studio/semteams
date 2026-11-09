@@ -62,7 +62,7 @@ test.describe("Right-rail story + raw activity", () => {
 
     const loopId = await pollUntil(async () => {
       const fresh = (await listLoops(request)).find(
-        (l) => !initialIds.has(l.loop_id),
+        (l) => !initialIds.has(l.loop_id) && l.task_id?.startsWith("dispatch-"),
       );
       return fresh?.loop_id ?? null;
     }, { timeoutMs: 30_000 });
@@ -137,6 +137,7 @@ test.describe("Right-rail story + raw activity", () => {
 
 interface LoopSummary {
   loop_id: string;
+  task_id?: string;
   state?: string;
 }
 

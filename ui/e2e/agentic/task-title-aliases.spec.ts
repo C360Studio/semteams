@@ -70,7 +70,7 @@ test.describe("Editable titles + aliases", () => {
 
     const loopId = await pollUntil(async () => {
       const fresh = (await listLoops(request)).find(
-        (l) => !initialIds.has(l.loop_id),
+        (l) => !initialIds.has(l.loop_id) && l.task_id?.startsWith("dispatch-"),
       );
       return fresh?.loop_id ?? null;
     }, { timeoutMs: 30_000 });
@@ -145,6 +145,7 @@ test.describe("Editable titles + aliases", () => {
 
 interface LoopSummary {
   loop_id: string;
+  task_id?: string;
 }
 
 async function listLoops(
