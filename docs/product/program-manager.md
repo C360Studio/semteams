@@ -36,8 +36,9 @@ evidence need reconsideration. Human checkpoints should correspond to uncertaint
 
 The development pack preserves issue → OpenSpec → implementation → verification → PR. Harness-owned outcome facts
 and independent clean-room verification travel with SemDev's workflow. Absorption is separately qualified and does
-not expand the read-only pulse MVP. HumanLayer and Pi provide ideas to assess against this purpose; feature parity
-and an alternative freeform coding workflow are not goals.
+not expand the read-only pulse MVP. HumanLayer, Pi, and Delta (Zed's collaborative agent workspace, evaluated in
+[#349](https://github.com/C360Studio/semteams/issues/349) and [#350](https://github.com/C360Studio/semteams/issues/350))
+provide ideas to assess against this purpose; feature parity and an alternative freeform coding workflow are not goals.
 
 ## Operating model
 
