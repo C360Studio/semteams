@@ -1,10 +1,12 @@
 package contract
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -674,9 +676,8 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read ui/package.json: %v", err)
 	}
-	pkgText := string(pkgBytes)
-	if strings.Contains(pkgText, `"generate-types:check": "npm run generate-types`) {
-		t.Fatal("ui/package.json generate-types:check must not overwrite tracked src/lib/types/api.generated.ts via npm run generate-types")
+	if err := verifyGenerateTypesCheckScript(pkgBytes); err != nil {
+		t.Fatalf("ui/package.json generate-types:check contract: %v", err)
 	}
 
 	agentsBytes, err := os.ReadFile(filepath.Join(repoRoot, "AGENTS.md"))
@@ -695,5 +696,153 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 	}
 	if !strings.Contains(string(claudeBytes), "@AGENTS.md") {
 		t.Errorf("CLAUDE.md must import @AGENTS.md")
+	}
+}
+
+var (
+	generateTypesDelegateRe    = regexp.MustCompile(`(?:^|[;&|({]\s*|bash\s+-c\s+['"]\s*)(?:npm|pnpm|yarn|bun)\s+(?:--[^\s]+\s+)*(?:run\s+)?generate-types(?::from-url)?(?:\s|$|[;&|)'"])`)
+	trackedGeneratedRedirectRe = regexp.MustCompile(`(?:>{1,2}|\b(?:cp|mv|install|tee)\b[^;&|]*)\s*["']?(?:\./)?src/lib/types/api\.generated\.ts\b`)
+	mktempDirVarRe             = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*)=\$\(\s*mktemp\s+-d\b`)
+	outputFlagRe               = regexp.MustCompile(`(?:\s|^)(--output|-o)(?:=|\s+)(\\"[^\\"]*\\"|\\"[^"]*|"[^"]*"|'[^']*'|[^\s;"']+)`)
+)
+
+func verifyGenerateTypesCheckScript(pkgBytes []byte) error {
+	var pkg struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if err := json.Unmarshal(pkgBytes, &pkg); err != nil {
+		return fmt.Errorf("unmarshal ui/package.json: %w", err)
+	}
+	script := strings.TrimSpace(pkg.Scripts["generate-types:check"])
+	if script == "" {
+		return fmt.Errorf("missing or empty scripts[\"generate-types:check\"]")
+	}
+	if generateTypesDelegateRe.MatchString(script) {
+		return fmt.Errorf("must not delegate to mutating generate-types script")
+	}
+	if trackedGeneratedRedirectRe.MatchString(script) {
+		return fmt.Errorf("must not redirect or copy output to tracked src/lib/types/api.generated.ts")
+	}
+	return verifyGenerateTypesOutputTargets(script)
+}
+
+func verifyGenerateTypesOutputTargets(script string) error {
+	var tempVars []string
+	for _, m := range mktempDirVarRe.FindAllStringSubmatch(script, -1) {
+		tempVars = append(tempVars, m[1])
+	}
+	matches := outputFlagRe.FindAllStringSubmatch(script, -1)
+	hasLongOutput := false
+	for _, m := range matches {
+		flag, target := m[1], trimShellQuotes(m[2])
+		if flag == "--output" {
+			hasLongOutput = true
+		}
+		if strings.Contains(target, "src/lib/types/api.generated.ts") || strings.Contains(target, "..") {
+			return fmt.Errorf("%s target %q must not write tracked src/lib/types/api.generated.ts or traverse parent dirs", flag, target)
+		}
+		if !targetUsesTempDir(target, tempVars) {
+			if len(tempVars) == 0 {
+				return fmt.Errorf("%s target %q must write inside a mktemp -d directory", flag, target)
+			}
+			return fmt.Errorf("%s target %q must reference mktemp -d directory ($%s)", flag, target, strings.Join(tempVars, " or $"))
+		}
+	}
+	if len(tempVars) == 0 && !strings.Contains(script, "mktemp -d") {
+		return fmt.Errorf("must allocate a temporary directory via mktemp -d")
+	}
+	if !hasLongOutput {
+		return fmt.Errorf("must pass --output writing into the mktemp -d temporary directory")
+	}
+	return nil
+}
+
+func trimShellQuotes(s string) string {
+	s = strings.TrimPrefix(strings.TrimSuffix(s, `\"`), `\"`)
+	return strings.Trim(s, `"'`)
+}
+
+func targetUsesTempDir(target string, tempVars []string) bool {
+	if strings.HasPrefix(target, "$(mktemp -d") && strings.Contains(target, "/") {
+		return true
+	}
+	for _, v := range tempVars {
+		if strings.HasPrefix(target, "$"+v+"/") || strings.HasPrefix(target, "${"+v+"}/") {
+			return true
+		}
+	}
+	return false
+}
+
+func mutateGenerateTypesCheckJSON(t *testing.T, basePkgBytes []byte, script string, remove bool) []byte {
+	t.Helper()
+	var raw map[string]any
+	if err := json.Unmarshal(basePkgBytes, &raw); err != nil {
+		t.Fatalf("unmarshal ui/package.json: %v", err)
+	}
+	scripts, ok := raw["scripts"].(map[string]any)
+	if !ok {
+		t.Fatal("ui/package.json missing scripts object")
+	}
+	if remove {
+		delete(scripts, "generate-types:check")
+	} else {
+		scripts["generate-types:check"] = script
+	}
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal mutated package.json: %v", err)
+	}
+	return out
+}
+
+// spec: openspec/specs/repository-governance/spec.md#Requirement: task validate is the read-only local mirror of Repository CI
+func TestGenerateTypesCheckGuardSensitivity(t *testing.T) {
+	repoRoot, err := findRepoRoot()
+	if err != nil {
+		t.Fatalf("findRepoRoot: %v", err)
+	}
+	pkgBytes, err := os.ReadFile(filepath.Join(repoRoot, "ui", "package.json"))
+	if err != nil {
+		t.Fatalf("read ui/package.json: %v", err)
+	}
+	if err := verifyGenerateTypesCheckScript(pkgBytes); err != nil {
+		t.Fatalf("clean ui/package.json should pass: %v", err)
+	}
+
+	cases := []struct {
+		name, script, wantSub string
+		raw                   []byte
+		remove                bool
+	}{
+		{name: "invalid_json", raw: []byte("{not-json"), wantSub: "unmarshal"},
+		{name: "missing_script_entry", remove: true, wantSub: "generate-types:check"},
+		{name: "inline_overwrite_long_flag", script: "openapi-typescript ${OPENAPI_SPEC_PATH:-../specs/openapi.v3.yaml} --output src/lib/types/api.generated.ts", wantSub: "src/lib/types/api.generated.ts"},
+		{name: "inline_overwrite_equals_flag", script: "openapi-typescript ../specs/openapi.v3.yaml --output=./src/lib/types/api.generated.ts", wantSub: "src/lib/types/api.generated.ts"},
+		{name: "inline_overwrite_short_flag", script: "openapi-typescript ../specs/openapi.v3.yaml -o src/lib/types/api.generated.ts", wantSub: "src/lib/types/api.generated.ts"},
+		{name: "mktemp_present_but_second_output_overwrites", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; openapi-typescript ../specs/openapi.v3.yaml --output src/lib/types/api.generated.ts'`, wantSub: "src/lib/types/api.generated.ts"},
+		{name: "path_traversal_out_of_tmpdir", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/../src/lib/types/api.generated.ts"'`, wantSub: "src/lib/types/api.generated.ts"},
+		{name: "shell_redirect_overwrites_tracked_file", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; cat "$tmpdir/api.generated.ts" > src/lib/types/api.generated.ts'`, wantSub: "src/lib/types/api.generated.ts"},
+		{name: "cp_overwrites_tracked_file", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; cp "$tmpdir/api.generated.ts" src/lib/types/api.generated.ts'`, wantSub: "src/lib/types/api.generated.ts"},
+		{name: "delegates_to_npm_run_generate_types", script: "npm run generate-types && git diff --exit-code src/lib/types/api.generated.ts", wantSub: "generate-types"},
+		{name: "delegates_via_bash_c_npm_run_generate_types", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; npm --silent run generate-types'`, wantSub: "generate-types"},
+		{name: "wrapper_without_mktemp_or_output", script: "./scripts/custom-typegen.sh", wantSub: "mktemp"},
+		{name: "mktemp_without_output_flag", script: `bash -c 'tmpdir=$(mktemp -d); ./scripts/custom-typegen.sh "$tmpdir"'`, wantSub: "--output"},
+		{name: "output_not_in_mktemp_dir", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output /tmp/fixed-api.generated.ts'`, wantSub: "tmpdir"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			input := tc.raw
+			if input == nil {
+				input = mutateGenerateTypesCheckJSON(t, pkgBytes, tc.script, tc.remove)
+			}
+			err := verifyGenerateTypesCheckScript(input)
+			if err == nil {
+				t.Fatalf("expected verifyGenerateTypesCheckScript to fail for %s, got nil", tc.name)
+			}
+			if !strings.Contains(err.Error(), tc.wantSub) {
+				t.Fatalf("error %q missing expected substring %q", err.Error(), tc.wantSub)
+			}
+		})
 	}
 }
