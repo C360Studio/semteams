@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,8 +33,10 @@ import (
 // guard. Add a fuller bootstrap test if router/KV regressions surface.
 //
 // Build tag: `integration`. Run via `go test -tags integration ./cmd/semteams/chain/...`.
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestNATSEntityReader_LiveSubject(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

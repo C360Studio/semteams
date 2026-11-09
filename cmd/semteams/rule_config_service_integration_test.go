@@ -12,9 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360studio/semstreams/natsclient"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semteams/internal/natstest"
 )
 
 // serviceStopDeadlineUnderTest is the Stop bound exercised through the
@@ -47,8 +47,10 @@ func (h *heldApplyTarget) ApplyConfigUpdate(map[string]any) error {
 // completes. Review round 4 on #1188, MEDIUM-1.
 //
 // upstream spec: semstreams component-runtime-config / Config Manager delivers a registered key family to its owner
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestRuleConfigServiceStopIsBoundedAndReportsStoppedOnlyWhenJoined(t *testing.T) {
-	testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
+	testNATS := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -17,11 +17,11 @@ import (
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 )
@@ -31,10 +31,12 @@ const loopBoundaryFixtures = "../../test/fixtures/rule-family-consumer"
 // TestConfiguredLoopFirstRequestBoundary joins the product's registered loop
 // and graph owner over real NATS. It stops at the first AgentRequest: no rule
 // executor, tool-name resolution, model provider, continuation, or E3 claim.
+//
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Composed loop first-request qualification
 func TestConfiguredLoopFirstRequestBoundary(t *testing.T) {
 	for _, bootstrap := range []string{"flow-bootstrap.json", "e2e-flow-bootstrap.json"} {
 		t.Run(bootstrap, func(t *testing.T) {
-			testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+			testNATS := natstest.New(t)
 			// Owner Stop runs before this cancel, including failed assertions.
 			// t.Context alone would cancel Start authority before t.Cleanup.
 			ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 90*time.Second)

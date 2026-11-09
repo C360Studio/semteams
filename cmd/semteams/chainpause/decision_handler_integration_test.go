@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,8 +24,10 @@ import (
 // cause).
 //
 // Build tag `integration`. Run via `go test -tags integration ./cmd/semteams/chainpause/...`.
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -99,8 +101,10 @@ func TestNATSPauseDataReader_LiveSubject(t *testing.T) {
 // the migration this test would either time out (timeout class) or
 // fail decode (silent-corruption class) — both regressions from the
 // no-op semantics RequestClassified delivers.
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestNATSPauseDataReader_NotFoundReturnsEmpty(t *testing.T) {
-	tc := natsclient.NewTestClient(t)
+	tc := natstest.New(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

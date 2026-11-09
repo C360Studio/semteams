@@ -11,18 +11,20 @@ import (
 
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/projection"
 	"github.com/c360studio/semteams/cmd/semteams/vocab"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/stretchr/testify/require"
 )
 
 // Exercises the production constructor and frozen exact-reader over real NATS.
 // The graph owner is a typed protocol fixture; the browser run gate additionally
-// qualifies the actual graph-ingest owner. This new boundary pins NATS 2.14.4.
+// qualifies the actual graph-ingest owner against the digest-pinned NATS broker.
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestNATSProjectionLiveBoundary(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"))
+	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	vocab.Register()

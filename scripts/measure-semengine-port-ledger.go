@@ -119,7 +119,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "adapt",
 		PostPortHome:         "semengine/natsclient",
 		UpstreamRefs:         "ADR-110, ADR-112",
-		ConsumerAction:       "M1 (#400): replace NewTestClient/TestClient in 11 _test.go files with internal/natstest; M2 (#404, #407): use pkg/retry.Config and WaitConsumerHandlers",
+		ConsumerAction:       "M1 (#400, done): NewTestClient/TestClient replaced by internal/natstest; M2 (#404, #407): rewire imports (incl. internal/natstest), use pkg/retry.Config and WaitConsumerHandlers",
 	},
 	{
 		Subpath:              "payloadregistry",
