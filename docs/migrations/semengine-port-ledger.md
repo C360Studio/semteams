@@ -13,6 +13,7 @@ This document is the regenerable import crosswalk and consumer adaptation ledger
 | Audited SemEngine commit | `C360Studio/semengine@01567cc48d4d89ede05dfdf0aa1675a68bf9402b` (`main`, 2026-11-08) | Source for `docs/admission-ledger.yaml`, `ADR-108`..`ADR-113`, `processor/graph-query/MIGRATION.md`, and exported symbol checks |
 | Sibling consumer crosswalk | `C360Studio/semsource#226` | SemSource consumer crosswalk; `C360Studio/semengine#9` (`issuecomment-6724212898`, 2026-11-08) sequences `processor/graph-clustering` ahead of `setup-04a-06` (`processor/rule`) and cuts `v0.1.0-alpha.3` for SemSource first |
 | SemTeams ownership boundary | [ADR-061](../adr/061-agent-runtime-ownership-and-observable-work.md), [ADR-058](../adr/058-beta159-realignment-and-demo-lane-focus.md) | SemTeams absorbs the agent runtime layer (`agentic*`, `persona`, `vocabulary/agentic`, `MilestoneService`) in Milestone 2 while keeping SemDev packs unwired |
+| Absorbed source-to-destination manifest (`#402`) | [`semengine-port-manifest/README.md`](semengine-port-manifest/README.md), [`manifest.json`](semengine-port-manifest/manifest.json) | Machine-verified SHA-256 + MIT copyright provenance for all 21 absorbed units under `internal/...`, `ExecutorRegistry` DI, substrate seams, and trimmed `/graphql` contract |
 
 ## Regenerating and verifying this ledger
 
@@ -89,17 +90,17 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 
 | SemStreams subpath | Non-test | `_test.go` | `scripts/` | SemEngine disposition | Post-port home | Upstream refs | SemTeams action |
 | --- | ---: | ---: | ---: | --- | --- | --- | --- |
-| `agentic` | 34 | 41 | 1 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404, #287): absorb contracts, payloads, and projection contracts from 8b99efe9 |
-| `agentic/agentrun` | 1 | 3 | 0 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4), semengine#30 | M1 (#402) design; M2 (#404, #287): absorb run projection + MilestoneService from 8b99efe9 |
-| `gateway/graph-gateway` | 1 | 1 | 0 | `defer-exclude` | `semteams trimmed graph-gateway` | semengine#8 (03B D4), graph-query/MIGRATION.md | M1 (#402) design; M2 (#406): replace with trimmed SemTeams GraphQL gateway over graph.QueryVerbs() and kv_revision |
-| `persona` | 1 | 0 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404): absorb persona manager/fragments loader from 8b99efe9 |
-| `processor/agentic-dispatch` | 6 | 4 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb component + internal/deliverylane + model/wire; adopt ADR-112/113 + pkg/lifecyclecleanup |
-| `processor/agentic-loop` | 1 | 3 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-111, ADR-112, ADR-113, semengine#24, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb loop + internal/{looptoken,agentterminal}; align durability with semengine#24 |
-| `processor/agentic-model` | 1 | 1 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb model processor + model/wire; adopt pkg/lifecyclecleanup (#77) and ADR-113 |
-| `processor/agentic-tools` | 16 | 7 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#29, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb tool processor + ExecutorRegistry; inject registry directly instead of Dependencies.ToolRegistry |
-| `processor/agentic-tools/executors` | 2 | 2 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#29 | M1 (#402) design; M2 (#404): absorb builtin tool executors used by SemTeams |
-| `processor/agentic-tools/runner` | 2 | 2 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404): absorb sandbox/command runner used by SemTeams tools |
-| `vocabulary/agentic` | 4 | 7 | 0 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4), semengine#234 | M1 (#401, done): cmd/semteams/main.go calls agvocab.Register() directly; M1 (#402) design; M2 (#404): absorb agentic predicate constants and register via semengine/vocabulary |
+| `agentic` | 34 | 41 | 1 | `defer-exclude` | `internal/agentic` | semengine#8 (03B D4) | M1 (#402, done): manifest + blueprint; M2 (#404, #287): absorb contracts/payloads to internal/agentic (+ MIT LICENSE; exclude agentic/{identity,research}) |
+| `agentic/agentrun` | 1 | 3 | 0 | `defer-exclude` | `internal/agentic/agentrun (+ internal/agentic/milestone)` | semengine#8 (03B D4), semengine#30 | M1 (#402, done): manifest + blueprint; M2 (#404, #287): absorb run projection + service/milestone_* slice from 8b99efe9 |
+| `gateway/graph-gateway` | 1 | 1 | 0 | `defer-exclude` | `internal/gateway/graphgateway` | semengine#8 (03B D4), graph-query/MIGRATION.md | M1 (#402, done): trimmed /graphql blueprint; M2 (#406): serve trajectory/entitiesByPrefix/pathSearch/entity (kvRevision), drop globalSearch/mcp/inference/graph_index_queries |
+| `persona` | 1 | 0 | 0 | `unported (agentic cut)` | `internal/persona` | semengine#8 (03B D4) | M1 (#402, done): manifest + blueprint; M2 (#404): absorb persona manager/fragments loader from 8b99efe9 |
+| `processor/agentic-dispatch` | 6 | 4 | 0 | `unported (agentic cut)` | `internal/agentic/dispatch` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402, done): manifest + DI blueprint; M2 (#404, #287): absorb dispatch + internal/agentic/{deliverylane,modelwire}; RegisterWithToolRegistry + pkg/lifecyclecleanup |
+| `processor/agentic-loop` | 1 | 3 | 0 | `unported (agentic cut)` | `internal/agentic/loop` | ADR-108, ADR-111, ADR-112, ADR-113, semengine#24, semengine#77 | M1 (#402, done): manifest + seam blueprint; M2 (#404, #287): absorb loop + internal/agentic/{looptoken,agentterminal,graphmutation}; replace graph/llm with modelwire; align #24 |
+| `processor/agentic-model` | 1 | 1 | 0 | `unported (agentic cut)` | `internal/agentic/model` | ADR-108, ADR-112, ADR-113, semengine#77 | M1 (#402, done): manifest + blueprint; M2 (#404, #287): absorb model processor + internal/agentic/modelwire(/responses); adopt pkg/lifecyclecleanup (#77) and ADR-113 |
+| `processor/agentic-tools` | 16 | 7 | 0 | `unported (agentic cut)` | `internal/agentic/tools` | ADR-108, ADR-112, ADR-113, semengine#29, semengine#77 | M1 (#402, done): manifest + DI blueprint; M2 (#404, #287): absorb tools + ExecutorRegistry; inject via RegisterWithExecutorRegistry instead of Dependencies.ToolRegistry |
+| `processor/agentic-tools/executors` | 2 | 2 | 0 | `unported (agentic cut)` | `internal/agentic/tools/executors` | semengine#29 | M1 (#402, done): manifest + blueprint; M2 (#404): absorb builtin tool executors used by SemTeams |
+| `processor/agentic-tools/runner` | 2 | 2 | 0 | `unported (agentic cut)` | `internal/agentic/tools/runner` | semengine#8 (03B D4) | M1 (#402, done): manifest + blueprint; M2 (#404): absorb sandbox/command runner used by SemTeams tools |
+| `vocabulary/agentic` | 4 | 7 | 0 | `defer-exclude` | `internal/agentic/vocab` | semengine#8 (03B D4), semengine#234 | M1 (#401, done): cmd/semteams/main.go calls agvocab.Register() directly; M1 (#402, done): manifest + blueprint; M2 (#404): absorb to internal/agentic/vocab |
 
 ### 4. Milestone 1 drop/decouple
 
@@ -133,7 +134,7 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 
 | Literal string | `scripts/` files |
 | --- | --- |
-| `github.com/c360studio/semstreams` | `scripts/measure-agent-contract-family.go`, `scripts/measure-agent-contract-family_test.go`, `scripts/measure-framework-footprint.go`, `scripts/measure-semengine-port-ledger.go` |
+| `github.com/c360studio/semstreams` | `scripts/generate-semengine-port-manifest.go`, `scripts/measure-agent-contract-family.go`, `scripts/measure-agent-contract-family_test.go`, `scripts/measure-framework-footprint.go`, `scripts/measure-semengine-port-ledger.go` |
 | `github.com/c360studio/semstreams/agentic-extra` | `scripts/measure-agent-contract-family_test.go` |
 <!-- END GENERATED CROSSWALK -->
 
