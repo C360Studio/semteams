@@ -1,0 +1,518 @@
+{
+  "schema_version": 1,
+  "recorded_date": "2026-11-09",
+  "issue": "#403",
+  "epic": "#412",
+  "milestone": "semengine-port 1: ready before the pin",
+  "consumer_qualification_issue": "#408",
+  "preexisting_e2e_followup_issue": "#420",
+  "semteams_commit": "e6cd847005833733a53343741a30248c45b25acf",
+  "prior_october_snapshot_dir": "docs/migrations/semstreams-8b99efe",
+  "framework": {
+    "module": "github.com/c360studio/semstreams",
+    "version": "v1.0.0-beta.162.0.20260930150212-8b99efe9c66a",
+    "commit": "8b99efe9c66a4faa4fa509f9f62cc6bad8392128",
+    "sum": "h1:WAlGLMjE/3EnYyeoqounCfYnVyIB3igMlG+FLP1Iq+o=",
+    "has_local_replace": false
+  },
+  "recorded_input_sha256": {
+    "go.mod": "1ce49dd71acd1152b8fe5a714923a98d809376473e0b1f28d1905babf7b5964d",
+    "go.sum": "8cb9cd26889b1efdd0d03402581fbc26b354bde2b45f195efd71e90b93e51599",
+    "configs/flow-bootstrap.json": "448ae3a9f0625aa8dfcab77b4f7cf0b522e89bda3463a6da30e19b5981305953",
+    "configs/e2e-flow-bootstrap.json": "47fbedf7c6f83631a0eb314db74e8c12f4cdfb9189347dd99b286e8dc67c1d29",
+    "internal/natstest/nats-image": "06f02554c08f1195b487062fada7f2ffbf27643eddd11016fc1f5fd40866a14c",
+    "ui/package-lock.json": "28fd4403ce710547429496e98d4b7f3e941986eb67e6957316e298ffb2a144c4",
+    "scripts/semstreams-migration-matrix.json": "6cbebefa31505fd1f7cc4beeb92766e936aba301e30f9eae46b0e2cc4ec89136",
+    "source_tree": "7ef9b5ed7b239f95b8cefb9533da2cd4ab990a27e14226cdecb89588cb8308f8",
+    "ui_source_tree": "cc786bfc9ece1cac5989d9153653a0743da96b554f4db44d1cae5a74ff8020f7"
+  },
+  "nats": {
+    "go_natstest": {
+      "pinned_reference": "nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4",
+      "repo_digest": "nats@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4",
+      "image_id": "sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4",
+      "server_version": "nats-server: v2.15.0"
+    },
+    "ui_e2e_compose": {
+      "compose_reference": "nats:2.14.4-alpine",
+      "repo_digest": "nats@sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+      "image_id": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+      "server_version": "nats-server: v2.14.4"
+    }
+  },
+  "e2e_stack_image_digests": {
+    "caddy": "sha256:78bd35025c7ba85961dd149ae670315129954e77abe2383ac47c89106b35ade9",
+    "nats": "sha256:f2123f533c2b0cada0a5c5ec434fb2b8cfe1cf220215ef9d7517e1372917ad66",
+    "backend": "sha256:d4f77fa6408784c4ca4d9b5f0316b81bc7e32cd24390370ea9765242387a51c4",
+    "mock_llm": "sha256:a1486aefba2dd53922a691a52c3a80dbf51785d378301e5530a0780c3c6bffd0",
+    "sandbox": "sha256:f46301b74b3891f4fb7f02db94d264e9e19917ef878dad69cf97dcd7c4aef192",
+    "ui": "sha256:2bd875835b8a67f9bf847c38c8165d2deeb8aff2bd60dd031451eebe9c382df6"
+  },
+  "gates": {
+    "task_validate": {
+      "command": "task validate",
+      "passed": true,
+      "lane_timings_s": {
+        "go": 149,
+        "ui": 45,
+        "governance": 6
+      },
+      "gofmt_files": 258,
+      "svelte_check_errors": 0,
+      "svelte_check_warnings": 0,
+      "browser_runner_tests_passed": 1,
+      "openspec_strict_items_passed": 11,
+      "publish_verify_fixtures_passed": 39,
+      "publish_verify_fixtures_failed": 0
+    },
+    "go_unit_race": {
+      "command": "scripts/gopkgs.sh go test -race -count=1 -json ./...",
+      "packages_total": 42,
+      "packages_with_tests": 40,
+      "packages_without_tests": 2,
+      "top_level_tests": {
+        "pass": 756,
+        "skip": 2,
+        "fail": 0
+      },
+      "subtests": {
+        "pass": 750,
+        "skip": 26,
+        "fail": 0
+      }
+    },
+    "go_integration": {
+      "command": "TESTCONTAINERS_RYUK_DISABLED=true go test -race -count=1 -tags=integration -p 1 -json ./...",
+      "packages_total": 43,
+      "packages_with_tests": 41,
+      "packages_without_tests": 2,
+      "top_level_tests": {
+        "pass": 777,
+        "skip": 4,
+        "fail": 0
+      },
+      "subtests": {
+        "pass": 824,
+        "skip": 26,
+        "fail": 0
+      }
+    },
+    "ui_vitest": {
+      "command": "npm --prefix ui run test:unit -- --run",
+      "test_files_total": 202,
+      "test_files_passed": 201,
+      "test_files_skipped": 1,
+      "test_suites_passed": 1330,
+      "tests_total": 4209,
+      "tests_passed": 4197,
+      "tests_skipped": 12,
+      "tests_failed": 0
+    }
+  },
+  "runtime_boundary_suites": {
+    "issue_289_model_retry": [
+      "github.com/c360studio/semteams/cmd/semteams:TestConfiguredModelRetryBoundary/production",
+      "github.com/c360studio/semteams/cmd/semteams:TestConfiguredModelRetryBoundary/mock"
+    ],
+    "issue_293_rule_family_consumer": [
+      "github.com/c360studio/semteams/test/contract:TestRuleFamilyDecode",
+      "github.com/c360studio/semteams/test/contract:TestRuleFamilyEmission",
+      "github.com/c360studio/semteams/test/contract:TestRuleFamilyOracleRejectsDrift",
+      "github.com/c360studio/semteams/test/contract:TestRuleFamilyLiveSourceProjection"
+    ],
+    "issue_295_loop_first_request_and_budget": [
+      "github.com/c360studio/semteams/cmd/semteams:TestConfiguredLoopFirstRequestBoundary",
+      "github.com/c360studio/semteams/cmd/semteams:TestLoopCostStampingAcrossBootstraps",
+      "github.com/c360studio/semteams/cmd/semteams:TestStatefulToolsUseDeclaredLoopAuthorityBucket",
+      "github.com/c360studio/semteams/cmd/semteams:TestInfrastructureUsesMintedPlatformForRunAndLoopIDs",
+      "github.com/c360studio/semteams/cmd/semteams:TestResearchLoopBudgetTerminalBoundary"
+    ],
+    "issue_268_program_pulse_scheduled_cron": [
+      "github.com/c360studio/semteams/cmd/semteams:TestScheduledCronInflightAndCooldownContainment",
+      "github.com/c360studio/semteams/cmd/semteams:TestScheduledCronPatternBKillSwitch"
+    ]
+  },
+  "composition_ledger": {
+    "catalog_factory_count": 9,
+    "bootstrap_configs": [
+      "configs/flow-bootstrap.json",
+      "configs/e2e-flow-bootstrap.json"
+    ],
+    "status": "warnings",
+    "error_count": 0,
+    "warning_count": 9,
+    "live_boot_matches_offline_validate": true,
+    "warnings": [
+      {
+        "type": "disconnected_node",
+        "severity": "warning",
+        "component": "objectstore",
+        "port": "",
+        "message": "component has no connections"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "agentic-model",
+        "port": "agent.stream",
+        "message": "output port 'agent.stream' (stream): no_subscribers"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "agentic-tools",
+        "port": "tool.list",
+        "message": "input port 'tool.list' (request): optional_api_unused"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "graph-gateway",
+        "port": "graph_index_queries",
+        "message": "output port 'graph_index_queries' (request): optional_api_unused"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "objectstore",
+        "port": "events",
+        "message": "output port 'events' (stream): no_subscribers"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "objectstore",
+        "port": "stored",
+        "message": "output port 'stored' (stream): no_subscribers"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "objectstore",
+        "port": "write",
+        "message": "input port 'write' (stream): no_publishers"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "teams-dispatch",
+        "port": "user.response",
+        "message": "output port 'user.response' (stream): no_subscribers"
+      },
+      {
+        "type": "orphaned_port",
+        "severity": "warning",
+        "component": "teams-loop",
+        "port": "trajectories",
+        "message": "output port 'trajectories' (watch): optional_index_unwatched"
+      }
+    ]
+  },
+  "cold_start_loops_readiness": {
+    "endpoint": "/teams-dispatch/loops",
+    "backend_readyz_during_503": {
+      "status": 200,
+      "body": "READY"
+    },
+    "first_503_elapsed_ms": 822,
+    "dispatch_503_elapsed_ms": 895,
+    "dispatch_503_body": "{\"type\":\"error\",\"content\":\"loop state is not available right now; retry shortly\"}",
+    "backend_log_error": "Component.currentLoopSnapshot: loop projection not caught up failed: graphview: view not ready",
+    "first_200_elapsed_ms": 928,
+    "first_200_body": "[]"
+  },
+  "playwright_e2e": {
+    "taskfile_chain": {
+      "command": "task ui:test:e2e",
+      "subtasks_total": 23,
+      "subtasks_passed_under_stack_up": 9,
+      "subtasks_skipped": 5,
+      "subtasks_failed_under_stack_up": 9,
+      "subtasks_recovered_under_wait_gated_runner": 4,
+      "playwright_tests_passed_under_stack_up": 13,
+      "subtasks": [
+        {
+          "task": "ui:test:e2e:agentic:research-mvp",
+          "spec": "research-mvp.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "preexisting_spec_defect (#420: PR #328 /.artifacts/ regex vs /artifacts/research/ container path; all 6 loops complete)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:research-fanout",
+          "spec": "research-fanout.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 1,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass"
+        },
+        {
+          "task": "ui:test:e2e:agentic:coordinator-routing-matrix",
+          "spec": "coordinator-routing-matrix.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": "pass",
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "stack_up_cold_start_503_race (#420: passes under wait-gated qualify-migration-browser.py)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:coordinator-readiness-gate",
+          "spec": "coordinator-readiness-gate.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": "pass",
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "stack_up_cold_start_503_race (#420: passes under wait-gated qualify-migration-browser.py)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:coordinator-team-spawn",
+          "spec": "coordinator-team-spawn.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": "pass",
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "stack_up_cold_start_503_race (#420: passes under wait-gated qualify-migration-browser.py)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:sandbox-mvp",
+          "spec": "sandbox-mvp.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 1,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass"
+        },
+        {
+          "task": "ui:test:e2e:agentic:ops-agent",
+          "spec": "ops-run-terminal.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": "pass",
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "stack_up_cold_start_503_race (#420: passes under wait-gated qualify-migration-browser.py)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:real-time-activity-stream",
+          "spec": "real-time-activity-stream.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 1,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass"
+        },
+        {
+          "task": "ui:test:e2e:agentic:task-story-trace",
+          "spec": "task-story-trace.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": "fail",
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "preexisting_spec_defect (#420: listLoops().find() picks child UUID without !parent_loop_id filter; all 7 backend loops complete)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:action-chips",
+          "spec": "action-chips-personas.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 1,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass (/pulse)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:task-title-aliases",
+          "spec": "task-title-aliases.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": "fail",
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "preexisting_spec_defect (#420: listLoops().find() picks child UUID without !parent_loop_id filter; all 7 backend loops complete)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:admin-flows-inventory",
+          "spec": "admin-flows-inventory.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 2,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass (9-factory composition read-only UI)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:chain-drill-in",
+          "spec": "chain-drill-in.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 1,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass"
+        },
+        {
+          "task": "ui:test:e2e:agentic:work-board",
+          "spec": "work-board.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 4,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass (/work board)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:artifact-context-handoff",
+          "spec": "artifact-context-handoff.spec.ts",
+          "stack_up_outcome": "skip",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 1,
+          "tests_failed": 0,
+          "attribution": "explicit_skip (#261 evidence-body dereference held)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:run-failed",
+          "spec": "run-failed.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 1,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass"
+        },
+        {
+          "task": "ui:test:e2e:agentic:run-failed-coordinator",
+          "spec": "run-failed-coordinator.spec.ts",
+          "stack_up_outcome": "skip",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 1,
+          "tests_failed": 0,
+          "attribution": "explicit_skip (ADR-058 parked dev_via_test pack)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:run-failed-coordinator-inherit",
+          "spec": "run-failed-coordinator-inherit.spec.ts",
+          "stack_up_outcome": "skip",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 1,
+          "tests_failed": 0,
+          "attribution": "explicit_skip (ADR-058 parked dev_via_test pack)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:ask-user-pause",
+          "spec": "ask-user-pause.spec.ts",
+          "stack_up_outcome": "skip",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 1,
+          "tests_failed": 0,
+          "attribution": "explicit_skip (ADR-058 parked dev_via_test pack)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:clarification-resume",
+          "spec": "clarification-resume.spec.ts",
+          "stack_up_outcome": "skip",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 1,
+          "tests_failed": 0,
+          "attribution": "explicit_skip (ADR-058 parked dev_via_test pack)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:clarification-autonomous",
+          "spec": "clarification-autonomous.spec.ts",
+          "stack_up_outcome": "pass",
+          "wait_gated_outcome": null,
+          "tests_passed": 1,
+          "tests_skipped": 0,
+          "tests_failed": 0,
+          "attribution": "qualified_pass"
+        },
+        {
+          "task": "ui:test:e2e:agentic:approval-pause",
+          "spec": "approval-pause.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "preexisting_fixture_defect (#420: PR #330 calls unadvertised create_rule on research/06; runtime gate proven by run-approval-boundary)"
+        },
+        {
+          "task": "ui:test:e2e:agentic:approval-resume",
+          "spec": "approval-resume.spec.ts",
+          "stack_up_outcome": "fail",
+          "wait_gated_outcome": null,
+          "tests_passed": 0,
+          "tests_skipped": 0,
+          "tests_failed": 1,
+          "attribution": "preexisting_fixture_defect (#420: PR #330 calls unadvertised create_rule on research/06; runtime gate proven by run-approval-boundary)"
+        }
+      ]
+    },
+    "opt_in_autoresearch": {
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "scenarios": [
+        {
+          "task": "ui:test:e2e:agentic:autoresearch",
+          "spec": "autoresearch.spec.ts",
+          "passed": true
+        },
+        {
+          "task": "ui:test:e2e:agentic:autoresearch-guardrails",
+          "spec": "autoresearch-guardrails.spec.ts",
+          "passed": true
+        }
+      ]
+    },
+    "boundary_matrix": {
+      "runner": "scripts/qualify-migration-browser.py",
+      "matrix_file": "scripts/semstreams-migration-matrix.json",
+      "source_changed": false,
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "scenarios": [
+        "run-approval-boundary",
+        "approval-boundary-approve",
+        "approval-boundary-reject",
+        "approval-boundary-cancel",
+        "autoresearch-descended-clarification",
+        "autoresearch-propose-failed",
+        "autoresearch-descended-status"
+      ]
+    },
+    "parked_donor_scaffolds": {
+      "total": 2,
+      "passed": 0,
+      "failed": 2,
+      "scenarios": [
+        {
+          "name": "tool-approval-gate",
+          "spec": "tool-approval-gate.spec.ts",
+          "reason": "Un-repointed SemStreams donor scaffold calling unadvertised create_rule on front-door coordinator; superseded by approval-boundary-{approve,reject,cancel}"
+        },
+        {
+          "name": "clarification-resume-ui",
+          "spec": "clarification-resume-ui.spec.ts",
+          "reason": "Un-repointed scaffold dispatching parked dev_via_test category under ADR-058; superseded by clarification-autonomous"
+        }
+      ]
+    }
+  }
+}

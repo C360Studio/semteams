@@ -14,6 +14,7 @@ This document is the regenerable import crosswalk and consumer adaptation ledger
 | Sibling consumer crosswalk | `C360Studio/semsource#226` | SemSource consumer crosswalk; `C360Studio/semengine#9` (`issuecomment-6724212898`, 2026-11-08) sequences `processor/graph-clustering` ahead of `setup-04a-06` (`processor/rule`) and cuts `v0.1.0-alpha.3` for SemSource first |
 | SemTeams ownership boundary | [ADR-061](../adr/061-agent-runtime-ownership-and-observable-work.md), [ADR-058](../adr/058-beta159-realignment-and-demo-lane-focus.md) | SemTeams absorbs the agent runtime layer (`agentic*`, `persona`, `vocabulary/agentic`, `MilestoneService`) in Milestone 2 while keeping SemDev packs unwired |
 | Absorbed source-to-destination manifest (`#402`) | [`semengine-port-manifest/README.md`](semengine-port-manifest/README.md), [`manifest.json`](semengine-port-manifest/manifest.json) | Machine-verified SHA-256 + MIT copyright provenance for all 21 absorbed units under `internal/...`, `ExecutorRegistry` DI, substrate seams, and trimmed `/graphql` contract |
+| Post-`v0.3.0` acceptance floor (`#403`) | [`semengine-port-baseline/README.md`](semengine-port-baseline/README.md), [`baseline.json`](semengine-port-baseline/baseline.json) | Reproducible Milestone 3/4 (`#408`) non-regression floor measured on `main` at `e6cd847005833733a53343741a30248c45b25acf` (`task validate`, `-p 1` integration, NATS `2.15.0`/`2.14.4` digests, 9-warning composition ledger, cold-start `/loops` `503` window, and mock-LLM Playwright + boundary matrix; pre-existing E2E defects tracked in `#420`) |
 
 ## Regenerating and verifying this ledger
 
@@ -212,7 +213,7 @@ Under SemEngine ADR-113 ("Stop Is the Only Stop"), `Stop(ctx context.Context) er
 
 Per the 2026-11-08 owner ruling on `C360Studio/semengine#9` (`issuecomment-6724212898`), SemEngine ports `processor/graph-clustering` immediately after `setup-04a-05` (`graph-embedding`) and cuts `v0.1.0-alpha.3` for `C360Studio/semsource` before starting `setup-04a-06` (`processor/rule`). SemTeams Milestone 2 (`#404`–`#407`, `#287`) remains parked until:
 
-1. Milestone 1 (`#398`–`#403`, including the `#403` `8b99efe9` baseline floor under `docs/migrations/semengine-port-baseline/`) is complete;
+1. Milestone 1 (`#398`–`#403`, including the `#403` `8b99efe9` non-regression floor in [`semengine-port-baseline/README.md`](semengine-port-baseline/README.md) and [`baseline.json`](semengine-port-baseline/baseline.json)) is complete;
 2. SemEngine lands `setup-04a-06` (`processor/rule` + `E1`–`E4` action-family/trigger seams `#25`–`#28`); and
 3. SemEngine lands `semengine#24` (`ADR-111` execution durability) and `semengine#361` (`ADR-113` host `StartAll` caller audit).
 

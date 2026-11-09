@@ -4,9 +4,7 @@
 
 Define evidence-backed framework adoption and native autoresearch return contracts while keeping SemTeams
 qualification, SemSource readiness and a future SemEngine consumer decision independent.
-
 ## Requirements
-
 ### Requirement: Frozen framework adoption preserves qualified product behavior
 
 SemTeams SHALL pin the owner-selected SemStreams module and qualify its live product composition using
@@ -33,6 +31,13 @@ recorded baseline evidence and isolated infrastructure before asserting compatib
 - **WHEN** this SemStreams upgrade is reviewed
 - **THEN** dependency measurements inform SemEngine without automatically expanding its first release
 - **AND** SemSource-backed dogfooding stays held until SemSource is ready
+
+#### Scenario: Post-v0.3.0 SemEngine port acceptance floor
+
+- **GIVEN** `main` after Milestone 1 preparation (`#398`–`#402`) on frozen SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`)
+- **WHEN** the SemEngine port acceptance floor is recorded under `docs/migrations/semengine-port-baseline/` and referenced from `docs/migrations/semengine-port-ledger.md`
+- **THEN** exact commit SHAs, NATS broker versions and content-addressed image digests, Go unit/contract and `-p 1` integration counts (including `#289`, `#293`, and `#295`), UI Vitest counts, mock-LLM Playwright E2E and boundary outcomes, the 9-finding startup composition diagnostic ledger on the 9-factory catalog, and cold-start `/teams-dispatch/loops` `503` readiness behavior are recorded reproducibly
+- **AND** pre-existing E2E harness or spec defects on `main` (`#420`) and parked donor exclusions remain explicitly attributed rather than represented as passing or misattributed to SemEngine during Milestones 3 and 4
 
 ### Requirement: Autoresearch returns use the run's authoritative origin
 
@@ -65,3 +70,4 @@ SemStreams changes.
 - **THEN** it does not rearm the iteration driver or duplicate a persisted return action
 - **AND** configured caps above three remain governed by the run cap
 - **AND** no transactional publication guarantee is asserted across a publication/state-persistence crash
+
