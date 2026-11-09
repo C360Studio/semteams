@@ -183,7 +183,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "adapt",
 		PostPortHome:         "semengine/service",
 		UpstreamRefs:         "ADR-109, ADR-113, semengine#29, semengine#30, semengine#361",
-		ConsumerAction:       "M1 (#401): decouple LogForwarder; M2 (#404, #407): absorb MilestoneService, pass signalCtx to StartAll, update NewBaseServiceWithOptions/MaybeStartPProf/ComponentManager",
+		ConsumerAction:       "M1 (#401, done): logging.go log-forwarder exclude_sources kept product-local without pkg/logging; M2 (#404, #407): absorb MilestoneService, pass signalCtx to StartAll, update NewBaseServiceWithOptions/MaybeStartPProf/ComponentManager",
 	},
 	{
 		Subpath:              "storage/objectstore",
@@ -207,7 +207,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "adapt",
 		PostPortHome:         "semengine/vocabulary",
 		UpstreamRefs:         "semengine#69, semengine#72, semengine#234",
-		ConsumerAction:       "M1 (#401) / M2 (#407): replace removed RegisterPredicate(meta) in cmd/semteams/vocab/vocab.go with vocabulary.Register / RegisterPack",
+		ConsumerAction:       "M1 (#401, done): RegisterPredicate(meta) in cmd/semteams/vocab/vocab.go replaced with vocabulary.Register; M2 (#407): rewire imports to semengine/vocabulary",
 	},
 
 	// Group 2: SemEngine lands in setup-04a-06 (2 paths)
@@ -315,7 +315,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "defer-exclude",
 		PostPortHome:         "semteams agent runtime (ADR-061)",
 		UpstreamRefs:         "semengine#8 (03B D4), semengine#234",
-		ConsumerAction:       "M1 (#401, #402); M2 (#404): absorb agentic predicate constants and register via semengine/vocabulary",
+		ConsumerAction:       "M1 (#401, done): cmd/semteams/main.go calls agvocab.Register() directly; M1 (#402) design; M2 (#404): absorb agentic predicate constants and register via semengine/vocabulary",
 	},
 
 	// Group 4: Drop / decouple in Milestone 1 (23 paths: 18 uncomposed factories + 5 helpers/aggregators)
@@ -413,7 +413,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "unported (cut)",
 		PostPortHome:         "dropped in M1 (#401)",
 		UpstreamRefs:         "semengine#8 (tier1-cross-check)",
-		ConsumerAction:       "M1 (#401): decouple cmd/semteams/logging.go from NewNATSLogHandler / LogForwarder onto local slog/NATS policy",
+		ConsumerAction:       "M1 (#401, done): replaced pkg/logging in cmd/semteams/logging.go with stdlib slog.NewMultiHandler and product-owned natsLogHandler",
 	},
 	{
 		Subpath:              "processor/agentic-governance",
@@ -501,7 +501,7 @@ var ledgerCatalog = []catalogEntry{
 		SemEngineDisposition: "unported (aggregator cut)",
 		PostPortHome:         "dropped in M1 (#401)",
 		UpstreamRefs:         "semengine#3 (03B Q1), semengine#234",
-		ConsumerAction:       "M1 (#401): audit predicates used by SemTeams and replace builtins.Register() in cmd/semteams/main.go",
+		ConsumerAction:       "M1 (#401, done): audited wired predicates (0 rulepacks hits) and replaced builtins.Register() in cmd/semteams/main.go with agvocab.Register()",
 	},
 }
 

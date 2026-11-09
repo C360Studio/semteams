@@ -30,7 +30,7 @@ import (
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
-	vocabbuiltins "github.com/c360studio/semstreams/vocabulary/builtins"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 	"github.com/c360studio/semteams/cmd/semteams/approvalpause"
 	"github.com/c360studio/semteams/cmd/semteams/chain"
 	"github.com/c360studio/semteams/cmd/semteams/chainpause"
@@ -73,9 +73,10 @@ func run() error {
 	// beta.159 validates every authored predicate (rule fields/actions,
 	// projection contracts, ownership claims) against the vocabulary
 	// registry, and import side effects are not an authoring contract.
-	// Upstream first (mirrors cmd/semstreams/main.go run(), ADR-029), then
-	// the SemTeams-local vocabulary (cmd/semteams/vocab).
-	vocabbuiltins.Register()
+	// Register the agentic vocabulary directly (omitting unported
+	// vocabulary/builtins and unused vocabulary/rulepacks), then the
+	// SemTeams-local vocabulary (cmd/semteams/vocab).
+	agvocab.Register()
 	vocab.Register()
 
 	// 1. Print banner
