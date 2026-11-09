@@ -291,3 +291,8 @@ Mutant files were generated in host-local scratch `/tmp/semteams-mutate-401/` (o
    - `logStreamPublisher`, `newLogger`, and `natsLogHandler` (all unexported inside `cmd/semteams` `package main`) serve `setupLogger` called by `cmd/semteams/main.go:133`, backed by `openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary` and proved by `cmd/semteams/logging_test.go`, `cmd/semteams/vocab/vocab_test.go`, and `test/contract/predicate_contract_test.go`.
 4. **No test-only back doors in production code:**
    - `setupLogger` accepts the narrow `logStreamPublisher` interface satisfied directly by `*natsclient.Client` in `cmd/semteams/main.go` and delegates to `newLogger(os.Stdout, ...)`. No test-only hooks, global mutable variables, or private-state inspection shims were added.
+5. **Intentional logger hardening deltas vs. frozen `semstreams/pkg/logging` (zero wire-subject or entry-key break):**
+   - `slog.Value.Resolve()` is called in `applySourceAttr` and `buildLogEntry` so `slog.LogValuer` attributes serialize their resolved values rather than raw struct fields.
+   - `AddSource` keys on `logLevel == slog.LevelDebug` (`parseLogLevel`) rather than raw `level == "debug"`, so case variants such as `-log-level DEBUG` also include source metadata.
+   - Asynchronous `PublishToStream` uses a bounded `5s` `context.WithTimeout` deadline rather than unbounded `context.Background()`.
+

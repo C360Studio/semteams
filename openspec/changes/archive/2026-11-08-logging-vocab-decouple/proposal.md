@@ -12,7 +12,7 @@ In frozen SemStreams (`8b99efe9c66a`), `vocabbuiltins.Register()` calls only `ag
 
 ## What changes
 
-- Replace `semstreams/pkg/logging` in `cmd/semteams/logging.go` with Go stdlib `slog.NewMultiHandler` and a product-owned NATS JetStream `logs.<LEVEL>.<source>` handler preserving JSON/text stdout formatting, `AddSource` on debug, `source > component > service > "system"` precedence, and `log-forwarder` `exclude_sources` prefix filtering.
+- Replace `semstreams/pkg/logging` in `cmd/semteams/logging.go` with Go stdlib `slog.NewMultiHandler` and a product-owned NATS JetStream `logs.<LEVEL>.<source>` handler preserving JSON/text stdout formatting, `source > component > service > "system"` precedence, entry keys, and `log-forwarder` `exclude_sources` prefix filtering, with three intentional hardenings (`slog.LogValuer` `.Resolve()`, case-insensitive `AddSource` on parsed debug level, and a `5s` publish deadline).
 - Replace `vocabbuiltins.Register()` in `cmd/semteams/main.go` with direct `agvocab.Register()` (`semstreams/vocabulary/agentic`), and replace `vocabulary.RegisterPredicate(meta)` in `cmd/semteams/vocab/vocab.go` with `vocabulary.Register(name, vocabulary.WithDescription(...), vocabulary.WithDataType(...))`.
 - Document the exact predicate inventory across SemTeams's 49 bootstrap-wired rules and both flow configs' projection contracts (SemEngine `vocabulary` core vs. `agentic/agentrun` vs. `vocabulary/agentic` vs. `cmd/semteams/vocab`, and 0 hits on `vocabulary/rulepacks`) and add logger + `RequireDeclaredPredicate` contract tests with `task mutate:check` detections.
 - Update `scripts/measure-semengine-port-ledger.go` Milestone 1 status notes and regenerate `docs/migrations/semengine-port-ledger.md` (Group 4: `23` of `23` pruned).

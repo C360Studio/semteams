@@ -10,12 +10,13 @@ SemTeams SHALL explicitly register only the 9 composed component factories (`gra
 dropped framework aggregator or helper packages (`componentregistry`, `payloadbuiltins`, `vocabulary/builtins`,
 `pkg/logging`). Names, factory metadata, schemas, port declarations, registered payload type identities, concrete
 factory types, metadata, decoding behavior, declared boot predicates for all wired rules and projection contracts, and
-`log/slog` stdout + NATS `logs.<LEVEL>.<source>` handler behavior (including `log-forwarder` `exclude_sources` prefix
-filtering) SHALL be preserved. Uncomposed framework component factories, framework payload owners with no composed
-consumer (`processor/gated-dag`, `governance`), and unused reference rule-pack vocabularies (`vocabulary/rulepacks`)
-SHALL NOT be registered by the product composition root. Product bootstrap and generated component interfaces SHALL use
-the same 9-factory component catalog. Registration errors SHALL fail startup rather than leave a partial admitted
-catalog.
+`log/slog` stdout + NATS `logs.<LEVEL>.<source>` wire subject routing, entry keys, level filtering, and
+`log-forwarder` `exclude_sources` prefix filtering SHALL be preserved (resolving `slog.LogValuer` attributes, keying
+`AddSource` on parsed debug level, and bounding async NATS publish deadlines). Uncomposed framework component
+factories, framework payload owners with no composed consumer (`processor/gated-dag`, `governance`), and unused
+reference rule-pack vocabularies (`vocabulary/rulepacks`) SHALL NOT be registered by the product composition root.
+Product bootstrap and generated component interfaces SHALL use the same 9-factory component catalog. Registration
+errors SHALL fail startup rather than leave a partial admitted catalog.
 
 #### Scenario: Supported bootstrap admission
 
