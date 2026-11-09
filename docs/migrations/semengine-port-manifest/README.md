@@ -1,8 +1,8 @@
 # SemEngine Port Source-to-Destination Manifest and Adaptation Blueprint
 
-This directory contains the machine-verified SHA-256 provenance manifest (`manifest.json`) and Milestone 2 engineering blueprint (`#402`, Epic `#412`) for absorbing the agent runtime and trimmed GraphQL gateway from frozen SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`) into SemTeams under [ADR-061](../../adr/061-agent-runtime-ownership-and-observable-work.md) and [ADR-062](../../adr/062-semengine-cutover-and-frozen-semstreams-discipline.md).
+This directory contains the machine-verified SHA-256 provenance manifest (`manifest.json`) and Milestone 2 engineering blueprint (`#402`, Epic `#412`) for absorbing the agent runtime and trimmed GraphQL gateway from frozen SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`) into SemTeams under [ADR-061](../../adr/061-agent-runtime-ownership-and-observable-work.md) and [ADR-062](../../adr/062-agent-contract-extraction-boundary.md).
 
-> **Current runtime truth vs. Milestone 2 target:** On `main`, SemTeams runs against frozen SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`, with `research` and `autoresearch` live and dev category packs (`create-change`, `proof-readiness`, `dev-from-task`, `dev-via-test`) parked per [ADR-058](../../adr/058-beta159-realignment-and-demo-lane-focus.md). Nothing in `#402` copies runtime code or changes `go.mod`, bootstrap configs, schemas, OpenAPI, or UI behavior on `main`; Milestone 2 (`#404`–`#407`, `#287`) executes this blueprint on the qualification branch after `C360Studio/semengine` `setup-04a-06` (`#25`–`#28`), `#24`, and `#361` pin.
+> **Current runtime truth vs. Milestone 2 target:** On `main`, SemTeams runs against frozen SemStreams `v1.0.0-beta.162.0.20260930150212-8b99efe9c66a`, with `research` and `autoresearch` live and dev category packs (`create-change`, `proof-readiness`, `dev-from-task`, `dev-via-test`) parked per [ADR-058](../../adr/058-beta159-realignment-and-demo-lane-focus.md). Nothing in `#402` copies runtime code or changes `go.mod`, bootstrap configs, schemas, OpenAPI, or UI behavior on `main`; Milestone 2 (`#404`–`#407`, `#287`) executes this blueprint on the qualification branch after `C360Studio/semengine` `setup-04a-06` (`#25`–`#28`) and `#24` pin.
 
 ## Regenerating and verifying the manifest
 
@@ -24,6 +24,7 @@ go test ./test/contract/... -run TestSemEnginePortManifest
 ```
 
 <!-- BEGIN GENERATED MANIFEST SUMMARY -->
+
 ### Provenance summary
 
 - Frozen donor module: `github.com/c360studio/semstreams v1.0.0-beta.162.0.20260930150212-8b99efe9c66a` (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`, `h1:WAlGLMjE/3EnYyeoqounCfYnVyIB3igMlG+FLP1Iq+o=`)
@@ -40,22 +41,22 @@ go test ./test/contract/... -run TestSemEnginePortManifest
 | `agentic/agentrun` | `agentic/agentrun` | `internal/agentic/agentrun` | 3 | 10 | 0 | 185636 | `structural-adaptation` | `#404` |
 | `service/milestone_slice` | `service/milestone_*.go` | `internal/agentic/milestone` | 1 | 2 | 0 | 23115 | `structural-adaptation` | `#404` |
 | `vocabulary/agentic` | `vocabulary/agentic` | `internal/agentic/vocab` | 4 | 1 | 0 | 114999 | `verbatim-plus-import-rewrite` | `#404` |
-| `internal/looptoken` | `internal/looptoken` | `internal/agentic/looptoken` | 1 | 0 | 0 | 1980 | `verbatim-plus-import-rewrite` | `#404` |
-| `persona` | `persona` | `internal/persona` | 4 | 4 | 0 | 47775 | `verbatim-plus-import-rewrite` | `#404` |
+| `internal/looptoken` | `internal/looptoken` | `internal/agentic/looptoken` | 1 | 0 | 0 | 1980 | `verbatim-copy` | `#404` |
+| `persona` | `persona` | `internal/persona` | 4 | 4 | 0 | 47775 | `structural-adaptation` | `#404` |
 | `internal/deliverylane` | `internal/deliverylane` | `internal/agentic/deliverylane` | 1 | 2 | 0 | 33616 | `verbatim-plus-import-rewrite` | `#404` |
 | `internal/agentterminal` | `internal/agentterminal` | `internal/agentic/agentterminal` | 1 | 1 | 0 | 14398 | `verbatim-plus-import-rewrite` | `#404` |
-| `model/wire` | `model/wire` | `internal/agentic/modelwire` | 7 | 6 | 7 | 70942 | `verbatim-plus-import-rewrite` | `#404` |
+| `model/wire` | `model/wire` | `internal/agentic/modelwire` | 7 | 6 | 7 | 70942 | `verbatim-copy` | `#404` |
 | `model/wire/responses` | `model/wire/responses` | `internal/agentic/modelwire/responses` | 9 | 3 | 5 | 98708 | `verbatim-plus-import-rewrite` | `#404` |
 | `processor/agentic-loop` | `processor/agentic-loop` | `internal/agentic/loop` | 31 | 124 | 1 | 2456476 | `structural-adaptation` | `#404` |
-| `processor/agentic-loop/internal/loopbucket` | `processor/agentic-loop/internal/loopbucket` | `internal/agentic/loop/internal/loopbucket` | 1 | 1 | 0 | 7104 | `verbatim-plus-import-rewrite` | `#404` |
-| `processor/agentic-loop/internal/looprequest` | `processor/agentic-loop/internal/looprequest` | `internal/agentic/loop/internal/looprequest` | 1 | 2 | 0 | 13680 | `verbatim-plus-import-rewrite` | `#404` |
-| `processor/agentic-loop/lessonmatch` | `processor/agentic-loop/lessonmatch` | `internal/agentic/loop/lessonmatch` | 1 | 2 | 0 | 23950 | `verbatim-plus-import-rewrite` | `#404` |
-| `processor/agentic-loop/prompt` | `processor/agentic-loop/prompt` | `internal/agentic/loop/prompt` | 3 | 2 | 0 | 22251 | `verbatim-plus-import-rewrite` | `#404` |
+| `processor/agentic-loop/internal/loopbucket` | `processor/agentic-loop/internal/loopbucket` | `internal/agentic/loop/internal/loopbucket` | 1 | 1 | 0 | 7104 | `verbatim-copy` | `#404` |
+| `processor/agentic-loop/internal/looprequest` | `processor/agentic-loop/internal/looprequest` | `internal/agentic/loop/internal/looprequest` | 1 | 2 | 0 | 13680 | `verbatim-copy` | `#404` |
+| `processor/agentic-loop/lessonmatch` | `processor/agentic-loop/lessonmatch` | `internal/agentic/loop/lessonmatch` | 1 | 2 | 0 | 23950 | `verbatim-copy` | `#404` |
+| `processor/agentic-loop/prompt` | `processor/agentic-loop/prompt` | `internal/agentic/loop/prompt` | 3 | 2 | 0 | 22251 | `verbatim-copy` | `#404` |
 | `processor/agentic-dispatch` | `processor/agentic-dispatch` | `internal/agentic/dispatch` | 19 | 43 | 1 | 792128 | `structural-adaptation` | `#404` |
 | `processor/agentic-model` | `processor/agentic-model` | `internal/agentic/model` | 23 | 36 | 1 | 582127 | `structural-adaptation` | `#404` |
 | `processor/agentic-tools` | `processor/agentic-tools` | `internal/agentic/tools` | 20 | 47 | 1 | 703148 | `structural-adaptation` | `#404` |
 | `processor/agentic-tools/executors` | `processor/agentic-tools/executors` | `internal/agentic/tools/executors` | 24 | 17 | 0 | 382474 | `structural-adaptation` | `#404` |
-| `processor/agentic-tools/runner` | `processor/agentic-tools/runner` | `internal/agentic/tools/runner` | 1 | 1 | 0 | 14216 | `verbatim-plus-import-rewrite` | `#404` |
+| `processor/agentic-tools/runner` | `processor/agentic-tools/runner` | `internal/agentic/tools/runner` | 1 | 1 | 0 | 14216 | `verbatim-copy` | `#404` |
 | `gateway/graph-gateway` | `gateway/graph-gateway` | `internal/gateway/graphgateway` | 4 | 11 | 2 | 292297 | `replace-with-trimmed-implementation` | `#406` |
 
 ### Excluded donor subpackages under `agentic/` (zero-import verified)
@@ -111,6 +112,7 @@ go test ./test/contract/... -run TestSemEnginePortManifest
 | `types` | 7 | 20 | `semengine_main` | `github.com/c360studio/semengine/types` | `#404` |
 | `vocabulary` | 6 | 4 | `semengine_main` | `github.com/c360studio/semengine/vocabulary` | `#404` |
 | `vocabulary/builtins` | 0 | 3 | `test_only_rewire` | `github.com/c360studio/semteams/internal/agentic/vocab.Register()` | `#404` |
+
 <!-- END GENERATED MANIFEST SUMMARY -->
 
 ## Milestone 2 engineering blueprint (`D1`–`D4`)
@@ -149,13 +151,13 @@ All 21 absorbed units land under `internal/` so `github.com/c360studio/semteams`
 | `internal/agentic/loop` | Type-asserts `deps.ToolRegistry` (`processor/agentic-loop/component.go:393`) | `RegisterWithToolRegistry(reg *component.Registry, shared agentic.ToolRegistryReader) error` (`Register(reg)` delegates with `nil`) |
 | `internal/agentic/dispatch` | Type-asserts `deps.ToolRegistry` (`processor/agentic-dispatch/component.go:45,60`) | `RegisterWithToolRegistry(reg *component.Registry, shared agentic.ToolRegistryReader) error` (`Register(reg)` delegates with `nil`) |
 | `internal/runtimecatalog` | `RegisterComponents(reg *component.Registry) error` | `RegisterComponents(reg *component.Registry, tools *agentictools.ExecutorRegistry) error` plus `RegisterSchemaComponents(reg *component.Registry) error` (passes `nil` for `cmd/openapi-generator` and offline schema tests) |
-| `cmd/semteams/main.go` | Registers catalog first, then builds `toolRegistry` in `setupToolsAndPreprocessor` and mutates `svcDeps.ToolRegistry` (`main.go:190,207-214`) | Construct `*tools.ExecutorRegistry` before `runtimecatalog.RegisterComponents(componentRegistry, toolRegistry)` (or populate executors into the bound `*ExecutorRegistry` before `serviceManager.ConfigureFromServices`), deleting `svcDeps.ToolRegistry` |
+| `cmd/semteams/main.go` | Registers catalog first, then builds `toolRegistry` in `setupToolsAndPreprocessor` and mutates `svcDeps.ToolRegistry` (`main.go:190,207-214`) | Construct `toolRegistry := agentictools.NewExecutorRegistry()` before `runtimecatalog.RegisterComponents(componentRegistry, toolRegistry)`, then populate executors in `setupToolsAndPreprocessor` before `serviceManager.ConfigureFromServices` (`executors.RegisterBuiltins` captures `componentRegistry` by pointer lazily for `list_components`/composition tools, so both registries are populated before component factories execute); delete `svcDeps.ToolRegistry` |
 
 ### D3 — Substrate and transitive helper adaptations (`#404`, `#405`, `#287`)
 
-1. **Failed-start rollback (`semengine#77` / `#287`) & ADR-113 lifecycle (`semengine#361`):**
+1. **Failed-start rollback (`semengine#77` / `#287`) & ADR-113 lifecycle:**
    - Rewrite all 6 `internal/lifecyclecleanup` imports (`agentrun.go`, `dispatch/component.go`, `loop/component.go`, `loop/trajectory_reconciler.go`, `model/component.go`, `tools/component.go`) to `github.com/c360studio/semengine/pkg/lifecyclecleanup`. Note `semengine/pkg/lifecyclecleanup.RollbackFailedStart` returns an error when `rollback == nil`; always pass a non-nil rollback closure.
-   - Per ADR-113 (`semengine#361`), `Start(ctx)` treats `ctx` as startup-scoped only; long-lived component background loops and `internal/agentic/milestone.Service` derive internal run contexts cancelled exclusively by `Stop(ctx)`.
+   - Per SemEngine ADR-113 (already landed on `semengine` `main`; avoid the `WithoutCancel` host anti-pattern noted in SemSource follow-up `semengine#361`), `Start(ctx)` treats `ctx` as startup-scoped only while long-lived component background loops and `internal/agentic/milestone.Service` derive internal run contexts cancelled exclusively by `Stop(ctx)`.
    - In `internal/agentic/milestone/milestone_health_test.go` (from `service/milestone_health_test.go:42`), replace the intra-package `manager.handleSystemHealth` call with public `Service.Health()` and `/health` HTTP handler assertions.
 2. **Replacing `graph/llm` in `internal/agentic/loop` (`semengine#32`, `#484`):**
    - `semengine` excludes `graph/llm` at Tier 0. Rebind `LLMSummarizer` in `internal/agentic/loop/{component.go,summarizer.go}` onto `internal/agentic/modelwire.NewClient` + `semengine/model.NewHTTPClient` (the exact zero-`go-openai` pattern already proven in `processor/agentic-dispatch/intent_classifier.go:106-135`).

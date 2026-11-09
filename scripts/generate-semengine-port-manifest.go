@@ -74,7 +74,7 @@ type unitSpec struct {
 	AllowedChildSubdirs []string
 	ContainerChildDirs  map[string][]string
 	TargetIssue         string
-	UnitAdaptationClass string
+	ReplaceWithTrimmed  bool
 	Notes               string
 }
 
@@ -87,80 +87,72 @@ var absorbedUnitSpecs = []unitSpec{
 		Mode:                modeShallowDir,
 		AllowedChildSubdirs: []string{"agentrun", "identity", "research"},
 		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
 		Notes:               "20 agentic payload registrations, LoopExecutionContract, LessonContract, sentinels, and DispatchEnforcedMetadataKeys; excludes agentic/{identity,research}",
 	},
 	{
-		ID:                  "agentic/agentrun",
-		SourceSubpath:       "agentic/agentrun",
-		ImportSubpath:       "agentic/agentrun",
-		DestinationDir:      "internal/agentic/agentrun",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
-		Notes:               "MilestoneSubscriber, RunProjection, and settlement reconciliation; rewires lifecyclecleanup -> semengine/pkg/lifecyclecleanup and ADR-113 Stop(ctx)",
+		ID:             "agentic/agentrun",
+		SourceSubpath:  "agentic/agentrun",
+		ImportSubpath:  "agentic/agentrun",
+		DestinationDir: "internal/agentic/agentrun",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "MilestoneSubscriber, RunProjection, and settlement reconciliation; rewires lifecyclecleanup -> semengine/pkg/lifecyclecleanup and ADR-113 Stop(ctx)",
 	},
 	{
-		ID:                  "service/milestone_slice",
-		SourceSubpath:       "service",
-		ImportSubpath:       "",
-		DestinationDir:      "internal/agentic/milestone",
-		Mode:                modeFileSlice,
-		SliceFiles:          []string{"milestone_health_test.go", "milestone_service.go", "milestone_service_test.go"},
-		SliceGlobPrefix:     "milestone",
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
-		Notes:               "MilestoneService slice cut from semengine/service (semengine#30); renames package service -> milestone and tests public Health()/HTTP mux",
+		ID:              "service/milestone_slice",
+		SourceSubpath:   "service",
+		ImportSubpath:   "",
+		DestinationDir:  "internal/agentic/milestone",
+		Mode:            modeFileSlice,
+		SliceFiles:      []string{"milestone_health_test.go", "milestone_service.go", "milestone_service_test.go"},
+		SliceGlobPrefix: "milestone",
+		TargetIssue:     "#404",
+		Notes:           "MilestoneService slice cut from semengine/service (semengine#30); renames package service -> milestone and tests public Health()/HTTP mux",
 	},
 	{
-		ID:                  "vocabulary/agentic",
-		SourceSubpath:       "vocabulary/agentic",
-		ImportSubpath:       "vocabulary/agentic",
-		DestinationDir:      "internal/agentic/vocab",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Agentic predicate IRIs and Register() over semengine/vocabulary.Register",
+		ID:             "vocabulary/agentic",
+		SourceSubpath:  "vocabulary/agentic",
+		ImportSubpath:  "vocabulary/agentic",
+		DestinationDir: "internal/agentic/vocab",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Agentic predicate IRIs and Register() over semengine/vocabulary.Register",
 	},
 	{
-		ID:                  "internal/looptoken",
-		SourceSubpath:       "internal/looptoken",
-		ImportSubpath:       "internal/looptoken",
-		DestinationDir:      "internal/agentic/looptoken",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Loop capability token helper; adds required new internal/agentic/looptoken/token_test.go in #404",
+		ID:             "internal/looptoken",
+		SourceSubpath:  "internal/looptoken",
+		ImportSubpath:  "internal/looptoken",
+		DestinationDir: "internal/agentic/looptoken",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Loop capability token helper; adds required new internal/agentic/looptoken/token_test.go in #404",
 	},
 	{
-		ID:                  "persona",
-		SourceSubpath:       "persona",
-		ImportSubpath:       "persona",
-		DestinationDir:      "internal/persona",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Persona fragment loader and prompt assembler used by cmd/semteams and agentic-loop",
+		ID:             "persona",
+		SourceSubpath:  "persona",
+		ImportSubpath:  "persona",
+		DestinationDir: "internal/persona",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Persona fragment loader and prompt assembler used by cmd/semteams and agentic-loop; manager_integration_test.go rewires to internal/natstest",
 	},
 	{
-		ID:                  "internal/deliverylane",
-		SourceSubpath:       "internal/deliverylane",
-		ImportSubpath:       "internal/deliverylane",
-		DestinationDir:      "internal/agentic/deliverylane",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Channel delivery-lane helper shared by agentic-dispatch and agentic-loop",
+		ID:             "internal/deliverylane",
+		SourceSubpath:  "internal/deliverylane",
+		ImportSubpath:  "internal/deliverylane",
+		DestinationDir: "internal/agentic/deliverylane",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Channel delivery-lane helper shared by agentic-dispatch and agentic-loop",
 	},
 	{
-		ID:                  "internal/agentterminal",
-		SourceSubpath:       "internal/agentterminal",
-		ImportSubpath:       "internal/agentterminal",
-		DestinationDir:      "internal/agentic/agentterminal",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Terminal outcome classifier shared by agentic-loop and agentic-dispatch",
+		ID:             "internal/agentterminal",
+		SourceSubpath:  "internal/agentterminal",
+		ImportSubpath:  "internal/agentterminal",
+		DestinationDir: "internal/agentic/agentterminal",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Terminal outcome classifier shared by agentic-loop and agentic-dispatch",
 	},
 	{
 		ID:                  "model/wire",
@@ -170,7 +162,6 @@ var absorbedUnitSpecs = []unitSpec{
 		Mode:                modeShallowPlusTestdata,
 		AllowedChildSubdirs: []string{"responses", "testdata"},
 		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
 		Notes:               "Chat Completions + Anthropic wire adapter and golden fixtures; also backs loop LLMSummarizer after graph/llm removal",
 	},
 	{
@@ -181,7 +172,6 @@ var absorbedUnitSpecs = []unitSpec{
 		Mode:                modeShallowPlusTestdata,
 		AllowedChildSubdirs: []string{"testdata"},
 		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
 		Notes:               "OpenAI Responses wire adapter and golden fixtures",
 	},
 	{
@@ -194,69 +184,62 @@ var absorbedUnitSpecs = []unitSpec{
 		ContainerChildDirs: map[string][]string{
 			"internal": {"loopbucket", "looprequest"},
 		},
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
-		Notes:               "Agentic loop orchestrator; injects ToolRegistryReader via RegisterWithToolRegistry, replaces graph/llm with modelwire, rewires graph.mutation.> and RollbackFailedStart, aligns durability with semengine#24",
+		TargetIssue: "#404",
+		Notes:       "Agentic loop orchestrator; injects ToolRegistryReader via RegisterWithToolRegistry, replaces graph/llm with modelwire, rewires graph.mutation.> and RollbackFailedStart, aligns durability with semengine#24",
 	},
 	{
-		ID:                  "processor/agentic-loop/internal/loopbucket",
-		SourceSubpath:       "processor/agentic-loop/internal/loopbucket",
-		ImportSubpath:       "processor/agentic-loop/internal/loopbucket",
-		DestinationDir:      "internal/agentic/loop/internal/loopbucket",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Loop KV bucket naming/binding helper",
+		ID:             "processor/agentic-loop/internal/loopbucket",
+		SourceSubpath:  "processor/agentic-loop/internal/loopbucket",
+		ImportSubpath:  "processor/agentic-loop/internal/loopbucket",
+		DestinationDir: "internal/agentic/loop/internal/loopbucket",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Loop KV bucket naming/binding helper",
 	},
 	{
-		ID:                  "processor/agentic-loop/internal/looprequest",
-		SourceSubpath:       "processor/agentic-loop/internal/looprequest",
-		ImportSubpath:       "processor/agentic-loop/internal/looprequest",
-		DestinationDir:      "internal/agentic/loop/internal/looprequest",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Loop NATS request/reply envelope helper",
+		ID:             "processor/agentic-loop/internal/looprequest",
+		SourceSubpath:  "processor/agentic-loop/internal/looprequest",
+		ImportSubpath:  "processor/agentic-loop/internal/looprequest",
+		DestinationDir: "internal/agentic/loop/internal/looprequest",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Loop NATS request/reply envelope helper",
 	},
 	{
-		ID:                  "processor/agentic-loop/lessonmatch",
-		SourceSubpath:       "processor/agentic-loop/lessonmatch",
-		ImportSubpath:       "processor/agentic-loop/lessonmatch",
-		DestinationDir:      "internal/agentic/loop/lessonmatch",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Role-scoped lesson retrieval matcher",
+		ID:             "processor/agentic-loop/lessonmatch",
+		SourceSubpath:  "processor/agentic-loop/lessonmatch",
+		ImportSubpath:  "processor/agentic-loop/lessonmatch",
+		DestinationDir: "internal/agentic/loop/lessonmatch",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Role-scoped lesson retrieval matcher",
 	},
 	{
-		ID:                  "processor/agentic-loop/prompt",
-		SourceSubpath:       "processor/agentic-loop/prompt",
-		ImportSubpath:       "processor/agentic-loop/prompt",
-		DestinationDir:      "internal/agentic/loop/prompt",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "System prompt builder over internal/persona",
+		ID:             "processor/agentic-loop/prompt",
+		SourceSubpath:  "processor/agentic-loop/prompt",
+		ImportSubpath:  "processor/agentic-loop/prompt",
+		DestinationDir: "internal/agentic/loop/prompt",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Role/domain system prompt fragment registry and assembler",
 	},
 	{
-		ID:                  "processor/agentic-dispatch",
-		SourceSubpath:       "processor/agentic-dispatch",
-		ImportSubpath:       "processor/agentic-dispatch",
-		DestinationDir:      "internal/agentic/dispatch",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
-		Notes:               "User/channel message router; injects ToolRegistryReader via RegisterWithToolRegistry, rewires RollbackFailedStart and ADR-113 Stop(ctx)",
+		ID:             "processor/agentic-dispatch",
+		SourceSubpath:  "processor/agentic-dispatch",
+		ImportSubpath:  "processor/agentic-dispatch",
+		DestinationDir: "internal/agentic/dispatch",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "User/channel message router; injects ToolRegistryReader via RegisterWithToolRegistry, rewires RollbackFailedStart and ADR-113 Stop(ctx)",
 	},
 	{
-		ID:                  "processor/agentic-model",
-		SourceSubpath:       "processor/agentic-model",
-		ImportSubpath:       "processor/agentic-model",
-		DestinationDir:      "internal/agentic/model",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
-		Notes:               "LLM endpoint caller over internal/agentic/modelwire and semengine/model; rewires RollbackFailedStart and ADR-113 Stop(ctx)",
+		ID:             "processor/agentic-model",
+		SourceSubpath:  "processor/agentic-model",
+		ImportSubpath:  "processor/agentic-model",
+		DestinationDir: "internal/agentic/model",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "LLM endpoint caller over internal/agentic/modelwire and semengine/model; rewires RollbackFailedStart and ADR-113 Stop(ctx)",
 	},
 	{
 		ID:                  "processor/agentic-tools",
@@ -266,38 +249,35 @@ var absorbedUnitSpecs = []unitSpec{
 		Mode:                modeShallowDir,
 		AllowedChildSubdirs: []string{"executors", "runner"},
 		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
 		Notes:               "Tool execution processor + ExecutorRegistry; injects shared *ExecutorRegistry via RegisterWithExecutorRegistry, rewires graph.mutation.> and RollbackFailedStart",
 	},
 	{
-		ID:                  "processor/agentic-tools/executors",
-		SourceSubpath:       "processor/agentic-tools/executors",
-		ImportSubpath:       "processor/agentic-tools/executors",
-		DestinationDir:      "internal/agentic/tools/executors",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptStructural,
-		Notes:               "Built-in tool executors (BashExecutor, DecideExecutor, rules, composition, graph/web); rewires processor/rule once setup-04a-06 pins",
+		ID:             "processor/agentic-tools/executors",
+		SourceSubpath:  "processor/agentic-tools/executors",
+		ImportSubpath:  "processor/agentic-tools/executors",
+		DestinationDir: "internal/agentic/tools/executors",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Built-in tool executors (BashExecutor, DecideExecutor, rules, composition, graph/web); rewires processor/rule once setup-04a-06 pins",
 	},
 	{
-		ID:                  "processor/agentic-tools/runner",
-		SourceSubpath:       "processor/agentic-tools/runner",
-		ImportSubpath:       "processor/agentic-tools/runner",
-		DestinationDir:      "internal/agentic/tools/runner",
-		Mode:                modeFullDir,
-		TargetIssue:         "#404",
-		UnitAdaptationClass: adaptVerbatimImport,
-		Notes:               "Command/sandbox execution runner behind BashExecutor and product tools",
+		ID:             "processor/agentic-tools/runner",
+		SourceSubpath:  "processor/agentic-tools/runner",
+		ImportSubpath:  "processor/agentic-tools/runner",
+		DestinationDir: "internal/agentic/tools/runner",
+		Mode:           modeFullDir,
+		TargetIssue:    "#404",
+		Notes:          "Command/sandbox execution runner behind BashExecutor and product tools",
 	},
 	{
-		ID:                  "gateway/graph-gateway",
-		SourceSubpath:       "gateway/graph-gateway",
-		ImportSubpath:       "gateway/graph-gateway",
-		DestinationDir:      "internal/gateway/graphgateway",
-		Mode:                modeFullDir,
-		TargetIssue:         "#406",
-		UnitAdaptationClass: adaptReplaceTrimmed,
-		Notes:               "Replaced by trimmed POST /graphql gateway serving trajectory, entitiesByPrefix, pathSearch, and entity (kvRevision over kv_revision); drops globalSearch, /mcp, /inference/*, GRAPH_STATUS, graph_index_queries, and mcp_path",
+		ID:                 "gateway/graph-gateway",
+		SourceSubpath:      "gateway/graph-gateway",
+		ImportSubpath:      "gateway/graph-gateway",
+		DestinationDir:     "internal/gateway/graphgateway",
+		Mode:               modeFullDir,
+		TargetIssue:        "#406",
+		ReplaceWithTrimmed: true,
+		Notes:              "Replaced by trimmed POST /graphql gateway serving trajectory, entitiesByPrefix, pathSearch, and entity (kvRevision over kv_revision); drops globalSearch, /mcp, /inference/*, GRAPH_STATUS, graph_index_queries, and mcp_path",
 	},
 }
 
@@ -679,13 +659,16 @@ func buildManifest(repoRoot, modDir, modVer, modSum string) (*manifestDocument, 
 		}
 		sort.Strings(relPaths)
 
-		var uSum unitSummary
+		var (
+			uSum          unitSummary
+			hasStructural bool
+			hasImportRewr bool
+		)
 		uSum.ID = spec.ID
 		uSum.SourceSubpath = spec.SourceSubpath
 		uSum.DestinationDir = spec.DestinationDir
 		uSum.Mode = string(spec.Mode)
 		uSum.TargetIssue = spec.TargetIssue
-		uSum.UnitAdaptationClass = spec.UnitAdaptationClass
 		uSum.Notes = spec.Notes
 
 		for _, relSrc := range relPaths {
@@ -718,6 +701,7 @@ func buildManifest(repoRoot, modDir, modVer, modSum string) (*manifestDocument, 
 					return nil, fmt.Errorf("parse %s: %w", relSrc, parseErr)
 				}
 
+				hasSemStreamsImport := false
 				seenSubpathsInFile := make(map[string]bool)
 				for _, imp := range parsed.Imports {
 					impPath, unqErr := strconv.Unquote(imp.Path.Value)
@@ -725,12 +709,14 @@ func buildManifest(repoRoot, modDir, modVer, modSum string) (*manifestDocument, 
 						return nil, fmt.Errorf("unquote import in %s: %w", relSrc, unqErr)
 					}
 					if impPath == semstreamsModule {
+						hasSemStreamsImport = true
 						unclassifiedImports = append(unclassifiedImports, fmt.Sprintf("%s -> %s (root module import)", relSrc, impPath))
 						continue
 					}
 					if !strings.HasPrefix(impPath, semstreamsModule+"/") {
 						continue
 					}
+					hasSemStreamsImport = true
 					sub := strings.TrimPrefix(impPath, semstreamsModule+"/")
 					if reason, forbidden := forbiddenAbsorbedImports[sub]; forbidden {
 						forbiddenViolations = append(forbiddenViolations, fmt.Sprintf("%s imports forbidden %s/%s (%s)", relSrc, semstreamsModule, sub, reason))
@@ -766,11 +752,17 @@ func buildManifest(repoRoot, modDir, modVer, modSum string) (*manifestDocument, 
 					}
 				}
 
-				adaptClass, triggers = finalizeGoAdaptation(spec, relSrc, raw, isTest, triggers)
+				adaptClass, triggers = finalizeGoAdaptation(spec, relSrc, raw, isTest, hasSemStreamsImport, triggers)
+				switch adaptClass {
+				case adaptStructural:
+					hasStructural = true
+				case adaptVerbatimImport:
+					hasImportRewr = true
+				}
 			} else {
 				uSum.OtherFiles++
 				totalNonGo++
-				if spec.UnitAdaptationClass == adaptReplaceTrimmed {
+				if spec.ReplaceWithTrimmed {
 					adaptClass = adaptReplaceTrimmed
 				} else {
 					adaptClass = adaptVerbatimCopy
@@ -792,6 +784,17 @@ func buildManifest(repoRoot, modDir, modVer, modSum string) (*manifestDocument, 
 				TargetIssue:        spec.TargetIssue,
 				AdaptationTriggers: triggers,
 			})
+		}
+
+		switch {
+		case spec.ReplaceWithTrimmed:
+			uSum.UnitAdaptationClass = adaptReplaceTrimmed
+		case hasStructural:
+			uSum.UnitAdaptationClass = adaptStructural
+		case hasImportRewr:
+			uSum.UnitAdaptationClass = adaptVerbatimImport
+		default:
+			uSum.UnitAdaptationClass = adaptVerbatimCopy
 		}
 
 		units = append(units, uSum)
@@ -1102,8 +1105,8 @@ func triggerForExternalSubpath(sub string) string {
 	}
 }
 
-func finalizeGoAdaptation(spec unitSpec, relSrc string, raw []byte, isTest bool, triggers []string) (string, []string) {
-	if spec.UnitAdaptationClass == adaptReplaceTrimmed {
+func finalizeGoAdaptation(spec unitSpec, relSrc string, raw []byte, isTest, hasSemStreamsImport bool, triggers []string) (string, []string) {
+	if spec.ReplaceWithTrimmed {
 		return adaptReplaceTrimmed, nil
 	}
 	if spec.ID == "service/milestone_slice" {
@@ -1125,7 +1128,10 @@ func finalizeGoAdaptation(spec unitSpec, relSrc string, raw []byte, isTest bool,
 	if len(triggers) > 0 {
 		return adaptStructural, triggers
 	}
-	return adaptVerbatimImport, nil
+	if hasSemStreamsImport {
+		return adaptVerbatimImport, nil
+	}
+	return adaptVerbatimCopy, nil
 }
 
 func appendUnique(list []string, val string) []string {

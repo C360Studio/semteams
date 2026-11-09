@@ -116,7 +116,7 @@
       "destination_dir": "internal/agentic/looptoken",
       "scan_mode": "full_dir",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "verbatim-copy",
       "prod_go_files": 1,
       "test_go_files": 0,
       "other_files": 0,
@@ -130,13 +130,13 @@
       "destination_dir": "internal/persona",
       "scan_mode": "full_dir",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "structural-adaptation",
       "prod_go_files": 4,
       "test_go_files": 4,
       "other_files": 0,
       "total_files": 8,
       "total_bytes": 47775,
-      "notes": "Persona fragment loader and prompt assembler used by cmd/semteams and agentic-loop"
+      "notes": "Persona fragment loader and prompt assembler used by cmd/semteams and agentic-loop; manager_integration_test.go rewires to internal/natstest"
     },
     {
       "id": "internal/deliverylane",
@@ -172,7 +172,7 @@
       "destination_dir": "internal/agentic/modelwire",
       "scan_mode": "shallow_plus_testdata",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "verbatim-copy",
       "prod_go_files": 7,
       "test_go_files": 6,
       "other_files": 7,
@@ -214,7 +214,7 @@
       "destination_dir": "internal/agentic/loop/internal/loopbucket",
       "scan_mode": "full_dir",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "verbatim-copy",
       "prod_go_files": 1,
       "test_go_files": 1,
       "other_files": 0,
@@ -228,7 +228,7 @@
       "destination_dir": "internal/agentic/loop/internal/looprequest",
       "scan_mode": "full_dir",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "verbatim-copy",
       "prod_go_files": 1,
       "test_go_files": 2,
       "other_files": 0,
@@ -242,7 +242,7 @@
       "destination_dir": "internal/agentic/loop/lessonmatch",
       "scan_mode": "full_dir",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "verbatim-copy",
       "prod_go_files": 1,
       "test_go_files": 2,
       "other_files": 0,
@@ -256,13 +256,13 @@
       "destination_dir": "internal/agentic/loop/prompt",
       "scan_mode": "full_dir",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "verbatim-copy",
       "prod_go_files": 3,
       "test_go_files": 2,
       "other_files": 0,
       "total_files": 5,
       "total_bytes": 22251,
-      "notes": "System prompt builder over internal/persona"
+      "notes": "Role/domain system prompt fragment registry and assembler"
     },
     {
       "id": "processor/agentic-dispatch",
@@ -326,7 +326,7 @@
       "destination_dir": "internal/agentic/tools/runner",
       "scan_mode": "full_dir",
       "target_issue": "#404",
-      "unit_adaptation_class": "verbatim-plus-import-rewrite",
+      "unit_adaptation_class": "verbatim-copy",
       "prod_go_files": 1,
       "test_go_files": 1,
       "other_files": 0,
@@ -901,7 +901,7 @@
       "kind": "go_test",
       "bytes": 3173,
       "sha256": "dd99603c78d2f840bc916799d54090c268b7d3c1d3d6e388ab5f13a2414df6c8",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -1057,7 +1057,7 @@
       "kind": "go_prod",
       "bytes": 2666,
       "sha256": "5162b71e45e193c68c57095467cb23c948a6490949e64c9cb4b03ef5863936c5",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -1313,7 +1313,7 @@
       "kind": "go_prod",
       "bytes": 4994,
       "sha256": "899a1c8731f9e87b5a22281cc67265b109528009b515c2951325a9360f67a142",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -1396,7 +1396,7 @@
       "kind": "go_prod",
       "bytes": 3366,
       "sha256": "245842e69fd6ceddb7425fe85ae3ff49276cf55e293b43c4613700a9f989d81c",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -1406,7 +1406,7 @@
       "kind": "go_test",
       "bytes": 3572,
       "sha256": "fa156f373c14ace99d69f27e48afa81ad10c8c49ac89b490b1953c4ba1e67d9b",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -1788,7 +1788,7 @@
       "kind": "go_prod",
       "bytes": 10546,
       "sha256": "c3d1a1f449cd351f084ba872c12869990634c6c999323d31be6bf21343b62972",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -1861,7 +1861,7 @@
       "kind": "go_prod",
       "bytes": 8430,
       "sha256": "cfee5f955528eb543ea39a7f016345035f6814b788b685bb3e50336ad6c149fe",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -1871,7 +1871,7 @@
       "kind": "go_test",
       "bytes": 7335,
       "sha256": "027241a4207db05fe87543c66facd710d926d41d21fac583305221e126820379",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2074,7 +2074,7 @@
       "kind": "go_prod",
       "bytes": 516,
       "sha256": "2c846ad5e06abf13f2575e7bdedea75010104abbe3cb5fbdcf3a126f4c8f8b35",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2396,7 +2396,7 @@
       "kind": "go_prod",
       "bytes": 26060,
       "sha256": "3ad7ad0552feaa6f45a821b19778eaf5e32f6f0dc3e4a2b9dff923b743a12ec7",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2636,7 +2636,7 @@
       "kind": "go_prod",
       "bytes": 1866,
       "sha256": "0915e0457340f38bc6bfbc574313b48dcbecbf635b0fdf9dc064729dccb340cd",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2646,7 +2646,7 @@
       "kind": "go_test",
       "bytes": 5238,
       "sha256": "fcbbe6e45e9cf904c4353811983fd36a66ccc1b4903af6ae3282cdd4055112db",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2656,7 +2656,7 @@
       "kind": "go_prod",
       "bytes": 5738,
       "sha256": "d60d709994d73dfa2ff93d49102cd971cc967d3293ec86a6402e0efbec4a5406",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2666,7 +2666,7 @@
       "kind": "go_test",
       "bytes": 4628,
       "sha256": "d5aae64a9ee1c703de09d63cce1ae16c78a07089aa478c99412e5867d079760b",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2676,7 +2676,7 @@
       "kind": "go_test",
       "bytes": 3314,
       "sha256": "0e9b04c0235fb4b1996604553449c47cd5c18ee4e25c4b35080b94300d05a229",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2686,7 +2686,7 @@
       "kind": "go_prod",
       "bytes": 9650,
       "sha256": "396cc5be020e74cfe8779da24d922575b97898b90566261d6b7253258c1ac02c",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2696,7 +2696,7 @@
       "kind": "go_test",
       "bytes": 1178,
       "sha256": "296a05014acd80c34440c53eb2fcc2b54332c6bcb10ec0419c4cd0efb187a9c6",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2706,7 +2706,7 @@
       "kind": "go_test",
       "bytes": 13122,
       "sha256": "a3b0b4bd5738d91790853dcda4bb77cd9852f8fa04f49151a158702ff7cb9982",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2861,7 +2861,7 @@
       "kind": "go_test",
       "bytes": 2675,
       "sha256": "d313254122d630d20d438a01c46de9b9585180151c52fe6ba457340fb00af1d3",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -2945,7 +2945,7 @@
       "kind": "go_test",
       "bytes": 4572,
       "sha256": "fe979dbfbc0510ccc1ec899bdf1dbc1b50ca74f59873a277a34fbb0c64d72626",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3013,7 +3013,7 @@
       "kind": "go_prod",
       "bytes": 7325,
       "sha256": "c1ed64b2dc3dfd68082d14c477821bf9241695dd23d3464807ad7ef624317d4a",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3023,7 +3023,7 @@
       "kind": "go_test",
       "bytes": 5636,
       "sha256": "0df9e027ed6164dba7fbba036a884bda19633a003de96e7e6ac34575fa53b6a5",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3033,7 +3033,7 @@
       "kind": "go_prod",
       "bytes": 2454,
       "sha256": "d8210dd0f293dd93b54c746b5436429dff4a8b6cee08d17e798c16ecfd19efba",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3043,7 +3043,7 @@
       "kind": "go_test",
       "bytes": 4101,
       "sha256": "37073acc2b18299a47900100c7e4a4e9082f4c0cc9c67d90ccf88a0f148e2d47",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3053,7 +3053,7 @@
       "kind": "go_prod",
       "bytes": 2735,
       "sha256": "c40363987f19740f6028ea948586adfc28b0285c27cf86d387c25f514e4c273d",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3570,7 +3570,7 @@
       "kind": "go_prod",
       "bytes": 7435,
       "sha256": "9b5b2de6751ed3801359c24dfe32e776121e668ada5dd08b41fc4d74c1ca2dd1",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3723,7 +3723,7 @@
       "kind": "go_prod",
       "bytes": 1980,
       "sha256": "803786c5db3791afe3830905779d990ccc581a0b00d17e3900c78658eefcd2de",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -3824,7 +3824,7 @@
       "kind": "go_prod",
       "bytes": 1631,
       "sha256": "7dadbef7c5770c41d2e7d1b2fe840740bc41b566081c91330dbc802c6fc64d3a",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4007,7 +4007,7 @@
       "kind": "go_test",
       "bytes": 3582,
       "sha256": "9f74ceba74969a694ea068a88219d919fbd5780cdbab69b3b328212e40c1acef",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4027,7 +4027,7 @@
       "kind": "go_prod",
       "bytes": 9658,
       "sha256": "889d3ee28a78f67b67b1b538fd5fa7c3d4684ec6f72fdb127164cce237c63330",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4111,7 +4111,7 @@
       "kind": "go_prod",
       "bytes": 5143,
       "sha256": "83a518507539ed6cd26bc6d76cbdf27a930a36cd59dae7e261586c1009f3809f",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4261,7 +4261,7 @@
       "kind": "go_test",
       "bytes": 9554,
       "sha256": "e44a6fc90aadcbd068bd267efd4ea584c23881bd5568f214de7e685f6d43c1c1",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4291,7 +4291,7 @@
       "kind": "go_prod",
       "bytes": 4757,
       "sha256": "35b790c34842d4d16d32cb6a7cc8c52baae940bf8d49255f0a23509a9352ee6d",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4301,7 +4301,7 @@
       "kind": "go_test",
       "bytes": 9445,
       "sha256": "68cb090c0adddd03a39df07eb22b5a89987c1bccb5399bcd30790c9a7b3b8989",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4311,7 +4311,7 @@
       "kind": "go_prod",
       "bytes": 3033,
       "sha256": "44f36bef41d887c974a61901e0961e6df61cacf8bbaf91d9e1a956381d567e8c",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4411,7 +4411,7 @@
       "kind": "go_prod",
       "bytes": 7058,
       "sha256": "0c4a21cfb2fe0bde7b2f06d8177fa554d4c5c66a0265004c5876e247acb55e50",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4421,7 +4421,7 @@
       "kind": "go_test",
       "bytes": 4666,
       "sha256": "405ae1b346cb88196428240f65466edacdbe975f603c0d54deae5200d7eb0731",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4431,7 +4431,7 @@
       "kind": "go_prod",
       "bytes": 999,
       "sha256": "30c25b427bfaf722848287ebe25e7236a9aa564685d24eeafbcdb820d8525395",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4441,7 +4441,7 @@
       "kind": "go_prod",
       "bytes": 3271,
       "sha256": "a318975bd0d5c09a51e701e3837c3b5e3b31c7bc528fe5fd3bd15c3bfee52599",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4451,7 +4451,7 @@
       "kind": "go_test",
       "bytes": 2113,
       "sha256": "670c56aa8b84f5ca67c54544e7c6c0cfdd208f19f27dda07683677dccccdcc0e",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4461,7 +4461,7 @@
       "kind": "go_test",
       "bytes": 1718,
       "sha256": "a84ab1f705356a255455f44eb2f2ef7f571db8ef58a835f22b114940797f70e4",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4471,7 +4471,7 @@
       "kind": "go_prod",
       "bytes": 6002,
       "sha256": "a334174eb1ccefb7ce51ce77b9d4d5e54a22afb0854dc1efa82cc0dc78718088",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4491,7 +4491,7 @@
       "kind": "go_prod",
       "bytes": 1543,
       "sha256": "c1f15ab643961e72f10ff1c41c811c8e2d80c981a9c8856e966e4f4a44271981",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4511,7 +4511,7 @@
       "kind": "go_prod",
       "bytes": 11643,
       "sha256": "9ed7d312461490601d83b8637939dda8e4a532af48803fe37540cd50956eab3f",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4521,7 +4521,7 @@
       "kind": "go_prod",
       "bytes": 12015,
       "sha256": "9b2307d8d7deef5288548618ca74593871c674ab3f44ef3d2e25d62f2a86705c",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4591,7 +4591,7 @@
       "kind": "go_prod",
       "bytes": 6335,
       "sha256": "d3da2e5741a76a111bbc15c5f721f947d7f127890783165c3fdced4b8a063781",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4601,7 +4601,7 @@
       "kind": "go_prod",
       "bytes": 4847,
       "sha256": "74200676c6d18177ef1baf95fb608b1d1128fdb18150e741cfa4e1aefc01cbbc",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4611,7 +4611,7 @@
       "kind": "go_prod",
       "bytes": 5927,
       "sha256": "d9fd2d16dcbc0688edc62a60b82d5b77692009dd630ed805b148e1ee2b0254db",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4621,7 +4621,7 @@
       "kind": "go_prod",
       "bytes": 4004,
       "sha256": "ce2b9d136f60a7802a173d77207e7c48b81f8fc70a8315d66d7fe9df300c5eea",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4641,7 +4641,7 @@
       "kind": "go_prod",
       "bytes": 9592,
       "sha256": "8877051a8a5d520300699426d32d0e1ec8b6acde3daac22c6e3f55c0ee17e212",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4651,7 +4651,7 @@
       "kind": "go_test",
       "bytes": 10503,
       "sha256": "dbfb1bfd255cfb4247952fb3f5353983848106095cdde782605f22a124fd6d8c",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4731,7 +4731,7 @@
       "kind": "go_test",
       "bytes": 3410,
       "sha256": "d1989efd4015fe6a7d0aaab001a203479feeba77158398647aaac367905541f7",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4741,7 +4741,7 @@
       "kind": "go_prod",
       "bytes": 9963,
       "sha256": "cce62b8f169caa8f2fe948dc5c6747e3318acae3a9d24a73b315897cf05133f5",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4751,7 +4751,7 @@
       "kind": "go_prod",
       "bytes": 1850,
       "sha256": "8b0d79d08f2d12cd7868a05dbb990ac741f652e306aa90ebb0f5349cba7f06d1",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4761,7 +4761,7 @@
       "kind": "go_prod",
       "bytes": 5703,
       "sha256": "fc3632075cbd8eaba86117ce3a4fd0bbcb0dd7b23cbbdc561657fb600491d30e",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4771,7 +4771,7 @@
       "kind": "go_test",
       "bytes": 6236,
       "sha256": "0c2c25bb13ef293278f9e127276b1e593fc4edc32659917a5b1227cc91030e42",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4831,7 +4831,7 @@
       "kind": "go_prod",
       "bytes": 3193,
       "sha256": "215bc0b191f4589335e5e3c7a0d34d370f9b30f1e2fe48b5516eca4ae024f5be",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4884,7 +4884,7 @@
       "kind": "go_prod",
       "bytes": 25814,
       "sha256": "b67a6c57038e2e390fdcbe6ceabce882a633b7dd1ff9ebb0af972287f326d714",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -4917,7 +4917,7 @@
       "kind": "go_prod",
       "bytes": 16774,
       "sha256": "e91a58e1648226ab5b0025da2c61c18fe84c43ae7d27f026583d69ecaadfea5b",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -5020,7 +5020,7 @@
       "kind": "go_prod",
       "bytes": 2817,
       "sha256": "e9242818b30c69a29770e4bd8add16b043ba97dd3c6efd44469f113e2d4a3f81",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -5030,7 +5030,7 @@
       "kind": "go_test",
       "bytes": 3046,
       "sha256": "96229ac009ed2d9743d6ffa3142a7d63c1be05788ad0fc84743cddb17619c534",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -5177,7 +5177,7 @@
       "kind": "go_test",
       "bytes": 7907,
       "sha256": "186331eb2de09ef7b17f3310e8d430a96356b91b19153972997693356abab224",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -5775,7 +5775,7 @@
       "kind": "go_prod",
       "bytes": 1878,
       "sha256": "850208672a209760c0a76fada3ac06a1caf7b4f12e64351c2d3ae9ad9be7b9e5",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6011,7 +6011,7 @@
       "kind": "go_prod",
       "bytes": 11665,
       "sha256": "c50d1308d3173204e1fb8ce0ca0f524a07793dda2f44c65402cc91d6edac8346",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6021,7 +6021,7 @@
       "kind": "go_test",
       "bytes": 2551,
       "sha256": "a709820594bfb20e1c0cfe729f41a525b46882626c420e9230a47fae047d990e",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6204,7 +6204,7 @@
       "kind": "go_prod",
       "bytes": 4005,
       "sha256": "a2f6291408e0d3663a062c7a8617eb4682a444c637f0e1f071c0b5ec1fc30116",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6214,7 +6214,7 @@
       "kind": "go_prod",
       "bytes": 1510,
       "sha256": "759e4f7dfac4be595676506fa75bc7a76a7f2670f3822436d80b77f2b5d44a9a",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6224,7 +6224,7 @@
       "kind": "go_test",
       "bytes": 1172,
       "sha256": "8c7971a3c898612ecb3782f634a734fc26b9f7c2c9beb0ebdb0269eef9e3efac",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6254,7 +6254,7 @@
       "kind": "go_prod",
       "bytes": 3118,
       "sha256": "bd9dd89bf604edbb056970e701ce816896502feeea1a2e0151007fb432751cb5",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6264,7 +6264,7 @@
       "kind": "go_test",
       "bytes": 2211,
       "sha256": "846b84801b3dc1127d4b8c610cda3605e0a1f057bd552a02ac999b7cd6d3fede",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6304,7 +6304,7 @@
       "kind": "go_prod",
       "bytes": 3032,
       "sha256": "abd29a3c8b1d8a91c1e097e7c686e18c9b118bce6b8f22cc70739c64629ab434",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6314,7 +6314,7 @@
       "kind": "go_test",
       "bytes": 2511,
       "sha256": "0d62cc0514cf894b8afee853b6a27b98e45d22eee303cda80d8a58c5a75ef2e1",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6334,7 +6334,7 @@
       "kind": "go_test",
       "bytes": 31491,
       "sha256": "87744d12a11273ee8d108da3b54e8cf4d3e21948a2fcffd727c2b156e670cf74",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6354,7 +6354,7 @@
       "kind": "go_prod",
       "bytes": 3342,
       "sha256": "eba5ad4f8497a21e00fadf09709049075692a1eb77bf5d81f42ab5a224e9c230",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6364,7 +6364,7 @@
       "kind": "go_prod",
       "bytes": 7752,
       "sha256": "7efb8fbcbf78556c0d49e659535e2d1e25c078ced22c9f2503cc4426cf085bd7",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6374,7 +6374,7 @@
       "kind": "go_prod",
       "bytes": 49407,
       "sha256": "97494550eef1dea8df4109b0c8b630e52e06cad0ec41efc49a5da34f117c576c",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6584,7 +6584,7 @@
       "kind": "go_prod",
       "bytes": 6426,
       "sha256": "56a1968787313c7384d00cf47e240bce75be90f88d954155c1d247806e0b3cdf",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6594,7 +6594,7 @@
       "kind": "go_test",
       "bytes": 17628,
       "sha256": "0ccfdd89335d48a63974e9614c5e59c55792cf6979d1eebbc154100cbfb4a70a",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6647,7 +6647,7 @@
       "kind": "go_prod",
       "bytes": 2829,
       "sha256": "d943ff43f8e3cb3bd57cfd92d55494d8fb43e4c057e833900943f6d57219903f",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     },
     {
@@ -6657,7 +6657,7 @@
       "kind": "go_test",
       "bytes": 824,
       "sha256": "9970204a676ab7b1cf0c0c93c4d7da6afe123cb13894d3fdb1117b45f35b0743",
-      "adaptation_class": "verbatim-plus-import-rewrite",
+      "adaptation_class": "verbatim-copy",
       "target_issue": "#404"
     }
   ]

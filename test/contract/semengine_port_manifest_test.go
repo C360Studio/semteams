@@ -202,7 +202,7 @@ func copyFileAndSHA256(t *testing.T, src, dst string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// spec: openspec/changes/semengine-port-adaptation-design/specs/runtime-composition/spec.md#Requirement: Absorbed agent-runtime and gateway port blueprint
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Absorbed agent-runtime and gateway port blueprint
 func TestSemEnginePortManifest(t *testing.T) {
 	repoRoot, err := findRepoRoot()
 	if err != nil {
@@ -409,6 +409,23 @@ func TestSemEnginePortManifest(t *testing.T) {
 		out, code := runLedgerAnalyzer(genBin, "-root", cleanRepo, "-framework-dir", baseDonor, "-format=json")
 		if code != 0 {
 			t.Fatalf("baseline synthetic donor tree failed unexpectedly (exit %d):\n%s", code, out)
+		}
+		var baseDoc manifestDocJSON
+		if err := json.Unmarshal([]byte(out), &baseDoc); err != nil {
+			t.Fatalf("unmarshal synthetic baseline json: %v", err)
+		}
+		classBySrc := make(map[string]string, len(baseDoc.Files))
+		for _, f := range baseDoc.Files {
+			classBySrc[f.SourcePath] = f.AdaptationClass
+		}
+		if got := classBySrc["internal/looptoken/token.go"]; got != "verbatim-copy" {
+			t.Fatalf("zero-semstreams-import file internal/looptoken/token.go class = %q, want verbatim-copy", got)
+		}
+		if got := classBySrc["agentic/agentrun/agentrun.go"]; got != "verbatim-plus-import-rewrite" {
+			t.Fatalf("semstreams-importing file agentic/agentrun/agentrun.go class = %q, want verbatim-plus-import-rewrite", got)
+		}
+		if got := classBySrc["service/milestone_service.go"]; got != "structural-adaptation" {
+			t.Fatalf("milestone slice file service/milestone_service.go class = %q, want structural-adaptation", got)
 		}
 
 		t.Run("missing_mit_copyright_notice", func(t *testing.T) {

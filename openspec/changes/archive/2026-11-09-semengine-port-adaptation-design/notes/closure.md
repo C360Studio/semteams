@@ -12,7 +12,7 @@
   - Across `ui/src/**` and `ui/e2e/**`, live `.svelte`/route callers execute `trajectory`, `entitiesByPrefix`, and `pathSearch` (`graphApi.getEntity` adds unit-tested `entity` selecting `kvRevision` over `ExactEntity.KVRevision` JSON `kv_revision`), whereas `graphApi.globalSearch` (`maxCommunities`), `ui/src/lib/server/ai/toolExecutors.ts`, and `ui/src/lib/server/graphql/client.ts` have `0` non-test callers (`git log -S` verified). Both bootstrap configs (`configs/flow-bootstrap.json:746,768`, `configs/e2e-flow-bootstrap.json:724,746`) still carry `graph_index_queries` and `mcp_path` for `#406` removal.
 
 ## 3. Who is it for?
-- `scripts/generate-semengine-port-manifest.go`, `docs/migrations/semengine-port-manifest/{manifest.json,README.md}`, and `test/contract/semengine_port_manifest_test.go` serve Milestone 2 issues `#404`–`#407` and `#287` under `openspec/changes/semengine-port-adaptation-design/specs/runtime-composition/spec.md#Requirement: Absorbed agent-runtime and gateway port blueprint`.
+- `scripts/generate-semengine-port-manifest.go`, `docs/migrations/semengine-port-manifest/{manifest.json,README.md}`, and `test/contract/semengine_port_manifest_test.go` serve Milestone 2 issues `#404`–`#407` and `#287` under `openspec/specs/runtime-composition/spec.md#Requirement: Absorbed agent-runtime and gateway port blueprint`.
 
 ## 4. No test-only back doors in production code
 - Zero production runtime packages were modified. `scripts/generate-semengine-port-manifest.go` is a standalone `//go:build ignore` CLI tool whose `-framework-dir` flag is standard CLI input parameterization (analogous to `-root` in `scripts/measure-semengine-port-ledger.go`).
