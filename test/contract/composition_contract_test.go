@@ -31,3 +31,33 @@ func TestShippedBootstrapCompositions(t *testing.T) {
 		})
 	}
 }
+
+func inspectBootstrapComposition(configPath string) (string, int, []baselineCompositionWarning, int, error) {
+	registry := component.NewRegistry()
+	if err := runtimecatalog.RegisterComponents(registry); err != nil {
+		return "", 0, nil, 0, err
+	}
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return "", 0, nil, 0, err
+	}
+	cfg, err := config.NewLoader().LoadFromBytes(data)
+	if err != nil {
+		return "", 0, nil, 0, err
+	}
+	res, err := composition.Validate(registry, cfg)
+	if err != nil {
+		return "", 0, nil, 0, err
+	}
+	warnings := make([]baselineCompositionWarning, 0, len(res.Warnings))
+	for _, w := range res.Warnings {
+		warnings = append(warnings, baselineCompositionWarning{
+			Type:      w.Type,
+			Severity:  w.Severity,
+			Component: w.Component,
+			Port:      w.Port,
+			Message:   w.Message,
+		})
+	}
+	return res.Status, len(res.Errors), warnings, len(composition.Catalog(registry)), nil
+}
