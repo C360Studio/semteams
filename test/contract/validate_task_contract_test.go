@@ -699,11 +699,14 @@ func TestValidateTaskAndDocsContract(t *testing.T) {
 	}
 }
 
+const trackedGeneratedTypesPath = "src/lib/types/api.generated.ts"
+
 var (
-	generateTypesDelegateRe    = regexp.MustCompile(`(?:^|[;&|({]\s*|bash\s+-c\s+['"]\s*)(?:npm|pnpm|yarn|bun)\s+(?:--[^\s]+\s+)*(?:run\s+)?generate-types(?::from-url)?(?:\s|$|[;&|)'"])`)
-	trackedGeneratedRedirectRe = regexp.MustCompile(`(?:>{1,2}|\b(?:cp|mv|install|tee)\b[^;&|]*)\s*["']?(?:\./)?src/lib/types/api\.generated\.ts\b`)
-	mktempDirVarRe             = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*)=\$\(\s*mktemp\s+-d\b`)
-	outputFlagRe               = regexp.MustCompile(`(?:\s|^)(--output|-o)(?:=|\s+)(\\"[^\\"]*\\"|\\"[^"]*|"[^"]*"|'[^']*'|[^\s;"']+)`)
+	generateTypesDelegateRe = regexp.MustCompile(`(?:^|[;&|({]\s*|(?:ba)?sh\s+-c\s+['"]\s*)(?:npm|pnpm|yarn|bun)\b[^;&|)'"]*\bgenerate-types(?::from-url)?\b`)
+	diffTrackedTypesRe      = regexp.MustCompile(`(?:^|[;&|({]\s*|!\s*)diff(?:\s+-[A-Za-z0-9-]+)*\s+(?:\\"|["'])?(?:\./)?src/lib/types/api\.generated\.ts(?:\\"|["'])?\s+(?:\\"|["'])?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/`)
+	mktempDirVarRe          = regexp.MustCompile(`([A-Za-z_][A-Za-z0-9_]*)=\$\(\s*mktemp\s+-d\b`)
+	shellSetOptionRe        = regexp.MustCompile(`(?:^|[;&|({]|(?:ba)?sh\s+-c\s+['"])\s*set(?:\s+[-+][A-Za-np-z]*o\s+[A-Za-z_][A-Za-z0-9_-]*|\s+[-+][A-Za-np-z]+)+`)
+	outputFlagRe            = regexp.MustCompile(`(?:\s|^)(--output|-o)(?:=|\s+)(\\"[^\\"]*\\"|\\"[^"]*|"[^"]*"|'[^']*'|[^\s;"']+)`)
 )
 
 func verifyGenerateTypesCheckScript(pkgBytes []byte) error {
@@ -720,8 +723,8 @@ func verifyGenerateTypesCheckScript(pkgBytes []byte) error {
 	if generateTypesDelegateRe.MatchString(script) {
 		return fmt.Errorf("must not delegate to mutating generate-types script")
 	}
-	if trackedGeneratedRedirectRe.MatchString(script) {
-		return fmt.Errorf("must not redirect or copy output to tracked src/lib/types/api.generated.ts")
+	if strings.Count(script, trackedGeneratedTypesPath) != 1 || !diffTrackedTypesRe.MatchString(script) {
+		return fmt.Errorf("%s must appear exactly once and only as the first operand of diff", trackedGeneratedTypesPath)
 	}
 	return verifyGenerateTypesOutputTargets(script)
 }
@@ -731,41 +734,21 @@ func verifyGenerateTypesOutputTargets(script string) error {
 	for _, m := range mktempDirVarRe.FindAllStringSubmatch(script, -1) {
 		tempVars = append(tempVars, m[1])
 	}
-	matches := outputFlagRe.FindAllStringSubmatch(script, -1)
-	hasLongOutput := false
+	sanitized := shellSetOptionRe.ReplaceAllString(script, " ")
+	matches := outputFlagRe.FindAllStringSubmatch(sanitized, -1)
+	if len(matches) == 0 {
+		return fmt.Errorf("must allocate mktemp -d and pass --output writing into it")
+	}
 	for _, m := range matches {
-		flag, target := m[1], trimShellQuotes(m[2])
-		if flag == "--output" {
-			hasLongOutput = true
+		flag, target := m[1], strings.Trim(m[2], `"'`+"\\")
+		if strings.Contains(target, "..") || !targetUsesTempDir(target, tempVars) {
+			return fmt.Errorf("%s target %q must write inside mktemp -d directory without '..' traversal", flag, target)
 		}
-		if strings.Contains(target, "src/lib/types/api.generated.ts") || strings.Contains(target, "..") {
-			return fmt.Errorf("%s target %q must not write tracked src/lib/types/api.generated.ts or traverse parent dirs", flag, target)
-		}
-		if !targetUsesTempDir(target, tempVars) {
-			if len(tempVars) == 0 {
-				return fmt.Errorf("%s target %q must write inside a mktemp -d directory", flag, target)
-			}
-			return fmt.Errorf("%s target %q must reference mktemp -d directory ($%s)", flag, target, strings.Join(tempVars, " or $"))
-		}
-	}
-	if len(tempVars) == 0 && !strings.Contains(script, "mktemp -d") {
-		return fmt.Errorf("must allocate a temporary directory via mktemp -d")
-	}
-	if !hasLongOutput {
-		return fmt.Errorf("must pass --output writing into the mktemp -d temporary directory")
 	}
 	return nil
 }
 
-func trimShellQuotes(s string) string {
-	s = strings.TrimPrefix(strings.TrimSuffix(s, `\"`), `\"`)
-	return strings.Trim(s, `"'`)
-}
-
 func targetUsesTempDir(target string, tempVars []string) bool {
-	if strings.HasPrefix(target, "$(mktemp -d") && strings.Contains(target, "/") {
-		return true
-	}
 	for _, v := range tempVars {
 		if strings.HasPrefix(target, "$"+v+"/") || strings.HasPrefix(target, "${"+v+"}/") {
 			return true
@@ -810,6 +793,26 @@ func TestGenerateTypesCheckGuardSensitivity(t *testing.T) {
 		t.Fatalf("clean ui/package.json should pass: %v", err)
 	}
 
+	for _, valid := range []struct {
+		name, script string
+	}{
+		{
+			name:   "set_e_o_pipefail",
+			script: `bash -c 'set -e -o pipefail; tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`,
+		},
+		{
+			name:   "multiple_set_o_options_and_braced_tmpdir",
+			script: `bash -c 'set -o errexit -o nounset -o pipefail; tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "${tmpdir}/api.generated.ts"; diff -u ./src/lib/types/api.generated.ts "${tmpdir}/api.generated.ts"'`,
+		},
+	} {
+		t.Run("valid_"+valid.name, func(t *testing.T) {
+			input := mutateGenerateTypesCheckJSON(t, pkgBytes, valid.script, false)
+			if err := verifyGenerateTypesCheckScript(input); err != nil {
+				t.Fatalf("expected valid script %s to pass, got: %v", valid.name, err)
+			}
+		})
+	}
+
 	cases := []struct {
 		name, script, wantSub string
 		raw                   []byte
@@ -819,16 +822,17 @@ func TestGenerateTypesCheckGuardSensitivity(t *testing.T) {
 		{name: "missing_script_entry", remove: true, wantSub: "generate-types:check"},
 		{name: "inline_overwrite_long_flag", script: "openapi-typescript ${OPENAPI_SPEC_PATH:-../specs/openapi.v3.yaml} --output src/lib/types/api.generated.ts", wantSub: "src/lib/types/api.generated.ts"},
 		{name: "inline_overwrite_equals_flag", script: "openapi-typescript ../specs/openapi.v3.yaml --output=./src/lib/types/api.generated.ts", wantSub: "src/lib/types/api.generated.ts"},
-		{name: "inline_overwrite_short_flag", script: "openapi-typescript ../specs/openapi.v3.yaml -o src/lib/types/api.generated.ts", wantSub: "src/lib/types/api.generated.ts"},
-		{name: "mktemp_present_but_second_output_overwrites", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; openapi-typescript ../specs/openapi.v3.yaml --output src/lib/types/api.generated.ts'`, wantSub: "src/lib/types/api.generated.ts"},
-		{name: "path_traversal_out_of_tmpdir", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/../src/lib/types/api.generated.ts"'`, wantSub: "src/lib/types/api.generated.ts"},
-		{name: "shell_redirect_overwrites_tracked_file", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; cat "$tmpdir/api.generated.ts" > src/lib/types/api.generated.ts'`, wantSub: "src/lib/types/api.generated.ts"},
-		{name: "cp_overwrites_tracked_file", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; cp "$tmpdir/api.generated.ts" src/lib/types/api.generated.ts'`, wantSub: "src/lib/types/api.generated.ts"},
-		{name: "delegates_to_npm_run_generate_types", script: "npm run generate-types && git diff --exit-code src/lib/types/api.generated.ts", wantSub: "generate-types"},
-		{name: "delegates_via_bash_c_npm_run_generate_types", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; npm --silent run generate-types'`, wantSub: "generate-types"},
-		{name: "wrapper_without_mktemp_or_output", script: "./scripts/custom-typegen.sh", wantSub: "mktemp"},
-		{name: "mktemp_without_output_flag", script: `bash -c 'tmpdir=$(mktemp -d); ./scripts/custom-typegen.sh "$tmpdir"'`, wantSub: "--output"},
-		{name: "output_not_in_mktemp_dir", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output /tmp/fixed-api.generated.ts'`, wantSub: "tmpdir"},
+		{name: "inline_overwrite_short_flag", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml -o /tmp/fixed.ts; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`, wantSub: "-o"},
+		{name: "mktemp_present_but_second_output_overwrites", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; openapi-typescript ../specs/openapi.v3.yaml --output /tmp/second.ts; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`, wantSub: "--output"},
+		{name: "path_traversal_out_of_tmpdir", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/../escaped.ts"; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`, wantSub: ".."},
+		{name: "pwd_redirect_after_diff_overwrites_tracked_file", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts" || cat "$tmpdir/api.generated.ts" > "$PWD/src/lib/types/api.generated.ts"'`, wantSub: "src/lib/types/api.generated.ts"},
+		{name: "rsync_overwrites_tracked_file_without_diff", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; rsync "$tmpdir/api.generated.ts" src/lib/types/api.generated.ts'`, wantSub: "diff"},
+		{name: "git_diff_instead_of_diff_comparison", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; git diff --exit-code src/lib/types/api.generated.ts'`, wantSub: "diff"},
+		{name: "delegates_to_npm_run_generate_types", script: "npm run generate-types && diff -u src/lib/types/api.generated.ts /tmp/a.ts", wantSub: "generate-types"},
+		{name: "delegates_via_npm_run_script_generate_types", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output "$tmpdir/api.generated.ts"; npm run-script generate-types; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`, wantSub: "generate-types"},
+		{name: "wrapper_without_mktemp_or_output", script: `bash -c './scripts/custom-typegen.sh && diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`, wantSub: "--output"},
+		{name: "mktemp_without_output_flag", script: `bash -c 'tmpdir=$(mktemp -d); ./scripts/custom-typegen.sh "$tmpdir"; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`, wantSub: "--output"},
+		{name: "output_not_in_mktemp_dir", script: `bash -c 'tmpdir=$(mktemp -d); openapi-typescript ../specs/openapi.v3.yaml --output /tmp/fixed-api.generated.ts; diff -u src/lib/types/api.generated.ts "$tmpdir/api.generated.ts"'`, wantSub: "mktemp -d"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
