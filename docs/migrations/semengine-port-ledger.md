@@ -36,22 +36,22 @@ go test ./test/contract/... -run TestSemEnginePortLedger
 
 The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is produced directly by `go run ./scripts/measure-semengine-port-ledger.go`.
 
-- At baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa`, **56** distinct `github.com/c360studio/semstreams/...` import paths appeared in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message`, `payloadregistry`, and `agentic` in AST imports). Trimming `internal/runtimecatalog` in `#399` pruned **21** Group 4 paths down to **35** active repository import paths below, and `#400` replaced `natsclient.NewTestClient` / `TestClient` across 11 `_test.go` files with `internal/natstest` (`57` distinct non-test `.go` files and `71` distinct `_test.go` files).
+- At baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa`, **56** distinct `github.com/c360studio/semstreams/...` import paths appeared in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message`, `payloadregistry`, and `agentic` in AST imports). Trimming `internal/runtimecatalog` in `#399` pruned **21** Group 4 paths, `#400` replaced `natsclient.NewTestClient` / `TestClient` across 11 `_test.go` files with `internal/natstest`, and `#401` decoupled `pkg/logging` and `vocabulary/builtins` (**23** of **23** Group 4 paths pruned), leaving **33** active repository import paths across `57` distinct non-test `.go` files and `73` distinct `_test.go` files below.
 - **2** additional `github.com/c360studio/semstreams*` strings appear only as string literals inside `scripts/` (`github.com/c360studio/semstreams` module root and synthetic test fixture `github.com/c360studio/semstreams/agentic-extra`), reconciling the **56** baseline Go package imports with the **58** raw `git grep` path matches across the tree at baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa` (excluding synthetic fixture literals in `test/contract/semengine_port_ledger_test.go`).
 
 <!-- BEGIN GENERATED CROSSWALK -->
 ### Summary counts
 
-- Active repository `.go` import paths (excluding `scripts/`): **35** of **56** baseline paths (**21** pruned)
-- Distinct importing files: **57** non-test `.go`, **71** `_test.go`, **1** `scripts/*.go`
-- `scripts/` string-literal-only SemStreams paths: **2** (total string-matched paths across repo + `scripts/`: **37**)
+- Active repository `.go` import paths (excluding `scripts/`): **33** of **56** baseline paths (**23** pruned)
+- Distinct importing files: **57** non-test `.go`, **73** `_test.go`, **1** `scripts/*.go`
+- `scripts/` string-literal-only SemStreams paths: **2** (total string-matched paths across repo + `scripts/`: **35**)
 
 | Group | Baseline paths | Active paths | Pruned paths | Non-test file imports | `_test.go` file imports | `scripts/` imports |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1. SemEngine main | 20 | 20 | 0 | 95 | 143 | 2 |
+| 1. SemEngine main | 20 | 20 | 0 | 94 | 147 | 2 |
 | 2. SemEngine setup-04a-06 | 2 | 2 | 0 | 3 | 15 | 0 |
-| 3. SemTeams Milestone 2 absorb | 11 | 11 | 0 | 68 | 71 | 1 |
-| 4. Milestone 1 drop/decouple | 23 | 2 | 21 | 2 | 0 | 0 |
+| 3. SemTeams Milestone 2 absorb | 11 | 11 | 0 | 69 | 71 | 1 |
+| 4. Milestone 1 drop/decouple | 23 | 0 | 23 | 0 | 0 | 0 |
 
 ### 1. SemEngine main
 
@@ -59,13 +59,13 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | --- | ---: | ---: | ---: | --- | --- | --- | --- |
 | `component` | 4 | 9 | 0 | `adapt` | `semengine/component` | ADR-108, ADR-113, semengine#29 | M2 (#404, #407): rewire imports; Registry.Register/ListFactories in catalog_test.go; types.PlatformMeta; Dependencies drops ToolRegistry/LifecycleManager |
 | `composition` | 0 | 2 | 0 | `repair-before-port` | `semengine/composition` | ADR-100 | M2 (#407): replace composition.AssertValid(t, registry, cfg) with composition.Validate(registry, cfg) (*Result, error) in test/contract/composition_contract_test.go |
-| `config` | 3 | 12 | 0 | `adapt` | `semengine/config` | ADR-104, ADR-113 | M2 (#407): Manager.Stop(ctx); SEMENGINE_ env prefix and semengine_config_<org>_<stem> bucket; strict unknown-key rejection |
+| `config` | 3 | 13 | 0 | `adapt` | `semengine/config` | ADR-104, ADR-113 | M2 (#407): Manager.Stop(ctx); SEMENGINE_ env prefix and semengine_config_<org>_<stem> bucket; strict unknown-key rejection |
 | `graph` | 2 | 8 | 0 | `adapt` | `semengine/graph` | ADR-109, ADR-110 | M2 (#406, #407): NewExactEntityReader returns (*ExactEntityReader, error); ExactEntity json kv_revision; EntityMutationResponse + ReconcilePredicatesRequest.Source (and per-triple Source/Timestamp) |
 | `graph/inference` | 1 | 2 | 0 | `adapt` | `semengine/graph/inference` | semengine#97 | M1 (#399) / M2 (#402, #406): hierarchy slice on main; anomaly/detector types stay out of trimmed SemTeams graph-gateway |
 | `message` | 22 | 36 | 1 | `adapt` | `semengine/message` | ADR-110 | M2 (#404, #407): rewire imports; stream-lane statements require Source and Timestamp |
 | `metric` | 1 | 0 | 0 | `adapt` | `semengine/metric` | semengine#69 | M2 (#407): rewire cmd/semteams/main.go import; core metrics use semengine_ namespace |
 | `model` | 0 | 2 | 0 | `adapt` | `semengine/model` | semengine#155 | M2 (#404, #407): rewire test/runtime imports; track semengine#155 reader/endpoint refactor before pin |
-| `natsclient` | 13 | 4 | 0 | `adapt` | `semengine/natsclient` | ADR-110, ADR-112 | M1 (#400, done): NewTestClient/TestClient replaced by internal/natstest; M2 (#404, #407): rewire imports (incl. internal/natstest), use pkg/retry.Config and WaitConsumerHandlers |
+| `natsclient` | 12 | 4 | 0 | `adapt` | `semengine/natsclient` | ADR-110, ADR-112 | M1 (#400, done): NewTestClient/TestClient replaced by internal/natstest; M2 (#404, #407): rewire imports (incl. internal/natstest), use pkg/retry.Config and WaitConsumerHandlers |
 | `payloadregistry` | 6 | 7 | 1 | `adapt` | `semengine/payloadregistry` | semengine#219 | M2 (#404, #407): rewire imports; GetRegistration/IndexingProfileFor take pkg/types.Type where called |
 | `pkg/errs` | 6 | 6 | 0 | `adapt` | `semengine/pkg/errs` | ADR-112, semengine#146, semengine#167 | M2 (#404, #407): rewire imports; Classify defaults unknown errors to fatal and classifies by sentinel/type only |
 | `pkg/lifecycle` | 3 | 6 | 0 | `adapt` | `semengine/pkg/lifecycle` | ADR-110, ADR-111, semengine#24 | M2 (#404, #405, #407): rewire imports; bind lifecycle.Manager onto rule processor at host construction; align with semengine#24 |
@@ -73,10 +73,10 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | `pkg/types` | 1 | 2 | 0 | `adapt` | `semengine/pkg/types` | ADR-102, ADR-104 | M2 (#404, #407): rewire imports; 6-part entity ID and UTF-8 Type.Validate contract unchanged for SemTeams |
 | `processor/graph-ingest` | 1 | 1 | 0 | `repair-before-port` | `semengine/processor/graph-ingest` | ADR-108, ADR-109, ADR-110, ADR-113 | M2 (#407): rewire internal/runtimecatalog registration; enforces ADR-110 single write seam |
 | `processor/graph-query` | 1 | 1 | 0 | `adapt` | `semengine/processor/graph-query` | ADR-108, ADR-109, ADR-113, semengine#9 | M2 (#406, #407): rewire catalog; adopt MIGRATION.md 4-key QueryResponse envelope, kv_revision, and COMMUNITY_INDEX readiness behavior |
-| `service` | 5 | 8 | 0 | `adapt` | `semengine/service` | ADR-109, ADR-113, semengine#29, semengine#30, semengine#361 | M1 (#401): decouple LogForwarder; M2 (#404, #407): absorb MilestoneService, pass signalCtx to StartAll, update NewBaseServiceWithOptions/MaybeStartPProf/ComponentManager |
+| `service` | 5 | 8 | 0 | `adapt` | `semengine/service` | ADR-109, ADR-113, semengine#29, semengine#30, semengine#361 | M1 (#401, done): logging.go log-forwarder exclude_sources kept product-local without pkg/logging; M2 (#404, #407): absorb MilestoneService, pass signalCtx to StartAll, update NewBaseServiceWithOptions/MaybeStartPProf/ComponentManager |
 | `storage/objectstore` | 2 | 2 | 0 | `adapt` | `semengine/storage/objectstore` | ADR-063, ADR-108, ADR-112, ADR-113 | M2 (#407): rewire internal/runtimecatalog and cmd/semteams imports |
-| `types` | 21 | 33 | 0 | `adapt` | `semengine/types` | ADR-104 | M2 (#404, #407): rewire imports; ServiceConfigs named map type in Manager.ConfigureFromServices |
-| `vocabulary` | 1 | 0 | 0 | `adapt` | `semengine/vocabulary` | semengine#69, semengine#72, semengine#234 | M1 (#401) / M2 (#407): replace removed RegisterPredicate(meta) in cmd/semteams/vocab/vocab.go with vocabulary.Register / RegisterPack |
+| `types` | 21 | 34 | 0 | `adapt` | `semengine/types` | ADR-104 | M2 (#404, #407): rewire imports; ServiceConfigs named map type in Manager.ConfigureFromServices |
+| `vocabulary` | 1 | 2 | 0 | `adapt` | `semengine/vocabulary` | semengine#69, semengine#72, semengine#234 | M1 (#401, done): RegisterPredicate(meta) in cmd/semteams/vocab/vocab.go replaced with vocabulary.Register; M2 (#407): rewire imports to semengine/vocabulary |
 
 ### 2. SemEngine setup-04a-06
 
@@ -99,7 +99,7 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | `processor/agentic-tools` | 16 | 7 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | ADR-108, ADR-112, ADR-113, semengine#29, semengine#77 | M1 (#402) design; M2 (#404, #287): absorb tool processor + ExecutorRegistry; inject registry directly instead of Dependencies.ToolRegistry |
 | `processor/agentic-tools/executors` | 2 | 2 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#29 | M1 (#402) design; M2 (#404): absorb builtin tool executors used by SemTeams |
 | `processor/agentic-tools/runner` | 2 | 2 | 0 | `unported (agentic cut)` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4) | M1 (#402) design; M2 (#404): absorb sandbox/command runner used by SemTeams tools |
-| `vocabulary/agentic` | 3 | 7 | 0 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4), semengine#234 | M1 (#401, #402); M2 (#404): absorb agentic predicate constants and register via semengine/vocabulary |
+| `vocabulary/agentic` | 4 | 7 | 0 | `defer-exclude` | `semteams agent runtime (ADR-061)` | semengine#8 (03B D4), semengine#234 | M1 (#401, done): cmd/semteams/main.go calls agvocab.Register() directly; M1 (#402) design; M2 (#404): absorb agentic predicate constants and register via semengine/vocabulary |
 
 ### 4. Milestone 1 drop/decouple
 
@@ -116,7 +116,7 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | `output/httppost` | 0 | 0 | 0 | `unported (I/O cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
 | `output/websocket` | 0 | 0 | 0 | `unported (setup-04a-05)` | `dropped in M1 (#399)` | semengine#34 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
 | `payloadbuiltins` | 0 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): delete aggregator comparison in internal/runtimecatalog/catalog_test.go |
-| `pkg/logging` | 1 | 0 | 0 | `unported (cut)` | `dropped in M1 (#401)` | semengine#8 (tier1-cross-check) | M1 (#401): decouple cmd/semteams/logging.go from NewNATSLogHandler / LogForwarder onto local slog/NATS policy |
+| `pkg/logging` | 0 | 0 | 0 | `unported (cut)` | `dropped in M1 (#401)` | semengine#8 (tier1-cross-check) | M1 (#401, done): replaced pkg/logging in cmd/semteams/logging.go with stdlib slog.NewMultiHandler and product-owned natsLogHandler |
 | `processor/agentic-governance` | 0 | 0 | 0 | `unported (agentic cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4), semengine#28 | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
 | `processor/gated-dag` | 0 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#399)` | semengine#3 (03B Q1) | M1 (#399): drop uncomposed factory + payload registration from internal/runtimecatalog |
 | `processor/graph-clustering` | 0 | 0 | 0 | `unported (next before 04a-06)` | `dropped in M1 (#399)` | semengine#9 (2026-11-08 ruling) | M1 (#399): drop uncomposed factory from internal/runtimecatalog (re-add from SemEngine only if NLQ text search is composed) |
@@ -127,7 +127,7 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | `processor/json_filter` | 0 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
 | `processor/json_generic` | 0 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
 | `processor/json_map` | 0 | 0 | 0 | `unported (JSON cut)` | `dropped in M1 (#399)` | semengine#8 (03B D4) | M1 (#399): drop uncomposed factory from internal/runtimecatalog and regenerate schemas |
-| `vocabulary/builtins` | 1 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#401)` | semengine#3 (03B Q1), semengine#234 | M1 (#401): audit predicates used by SemTeams and replace builtins.Register() in cmd/semteams/main.go |
+| `vocabulary/builtins` | 0 | 0 | 0 | `unported (aggregator cut)` | `dropped in M1 (#401)` | semengine#3 (03B Q1), semengine#234 | M1 (#401, done): audited wired predicates (0 rulepacks hits) and replaced builtins.Register() in cmd/semteams/main.go with agvocab.Register() |
 
 ### `scripts/` string-literal-only occurrences
 
@@ -170,7 +170,7 @@ Comparing SemTeams's Group 1 symbol and wire usage against `C360Studio/semengine
 | `service` | `service.MaybeStartPProf(debug, port)` | `service.MaybeStartPProf(debug, port, logger)` returning `*service.PProfServer` (`Shutdown(ctx)`) | `cmd/semteams/main.go:93` (`#407`) |
 | `service` | `Manager.ConfigureFromServices(map[string]types.ServiceConfig, ...)` | Takes named `types.ServiceConfigs` | `cmd/semteams/main.go`, integration tests (`#407`) |
 | `service` | `service.NewMilestoneService` | Excluded from SemEngine (`semengine#30` CLOSED) | `cmd/semteams/main.go:858` → absorb alongside `agentic/agentrun` (`#404`) |
-| `vocabulary` | `vocabulary.RegisterPredicate(PredicateMetadata{...})` | Removed (`semengine#72` CLOSED); replaced by `vocabulary.Register(iri, opts...)` and `vocabulary.RegisterPack` | `cmd/semteams/vocab/vocab.go:31` (`#401` / `#407`) |
+| `vocabulary` | `vocabulary.RegisterPredicate(PredicateMetadata{...})` | Removed (`semengine#72` CLOSED); replaced by `vocabulary.Register(iri, opts...)` and `vocabulary.RegisterPack` | `cmd/semteams/vocab/vocab.go` → migrated to `vocabulary.Register` (`#401`, done; `#407` swaps import path to `semengine/vocabulary`) |
 | `processor/graph-query` | Legacy query reply fields & `globalSearch.max_communities` | 4-key `graph.QueryResponse` envelope (`data`, `indexed_revision`, `producer`, `timestamp`), `kv_revision`, `max_communities` rejected as `invalid_request`, and text-tier `globalSearch`/`searchGraph` returning transient `index_not_ready` unless `COMMUNITY_INDEX` has a writer (`processor/graph-query/MIGRATION.md`) | `ui/src/lib/services/graphApi.ts:294` (`maxCommunities`), trimmed SemTeams `graph-gateway` (`#402`, `#406`) |
 
 ## Consumer-facing SemEngine ADRs (`ADR-108`–`ADR-113`) and Milestone 2 gate

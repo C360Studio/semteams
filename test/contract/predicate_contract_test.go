@@ -3,14 +3,21 @@ package contract
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic/agentrun"
+	"github.com/c360studio/semstreams/vocabulary"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
+	"github.com/c360studio/semteams/cmd/semteams/vocab"
 )
 
 // Canonical predicate contract audit (upstream ADR-074, enforced fail-closed
@@ -645,4 +652,266 @@ func anyWatchPatternReaches(watchPatterns []string, rulePattern string) bool {
 		}
 	}
 	return false
+}
+
+var unportedRulepacksOnlyPredicates = []string{
+	"agentic.checkpoint.completed",
+	"agentic.checkpoint.iteration",
+	"agentic.checkpoint.started",
+	"agentic.decision.detected",
+	"agentic.file.modified",
+	"agentic.tool.file-operation",
+	"agentic.tool.used",
+	"entity.identity.type",
+	"gather.child.completed",
+	"workflow.review.rejections",
+	"workflow.state.phase",
+	"workflow.state.status",
+	"workflow.tokens.total",
+}
+
+func assertDeclaredRulePredicates(t *testing.T, path string, conds *int, acts *int) {
+	t.Helper()
+	raw, err := os.ReadFile(path) //nolint:gosec // test-controlled config path
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	var doc struct {
+		Conditions []struct {
+			Field string `json:"field"`
+		} `json:"conditions"`
+		OnEnter    []ownershipActionJSON `json:"on_enter"`
+		OnExit     []ownershipActionJSON `json:"on_exit"`
+		WhileTrue  []ownershipActionJSON `json:"while_true"`
+		OnRecovery []ownershipActionJSON `json:"on_recovery"`
+		Actions    []ownershipActionJSON `json:"actions"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal %s: %v", path, err)
+	}
+	for i, c := range doc.Conditions {
+		if c.Field == "" || strings.HasPrefix(c.Field, "$") {
+			continue
+		}
+		*conds++
+		if err := vocabulary.RequireDeclaredPredicate(c.Field); err != nil {
+			t.Errorf("%s condition[%d] field %q: %v", path, i, c.Field, err)
+		}
+	}
+	for _, list := range [][]ownershipActionJSON{doc.OnEnter, doc.OnExit, doc.WhileTrue, doc.OnRecovery, doc.Actions} {
+		for i, a := range list {
+			if a.Predicate == "" {
+				continue
+			}
+			*acts++
+			if err := vocabulary.RequireDeclaredPredicate(a.Predicate); err != nil {
+				t.Errorf("%s action[%d] (%s) predicate %q: %v", path, i, a.Type, a.Predicate, err)
+			}
+		}
+	}
+}
+
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
+func TestWiredPredicatesDeclaredWithoutBuiltinsAggregator(t *testing.T) {
+	restore := vocabulary.SnapshotRegistry()
+	defer restore()
+
+	agvocab.Register()
+	vocab.Register()
+
+	rules := bootstrapLoadedRules(t)
+	if len(rules) != 49 {
+		t.Fatalf("bootstrapLoadedRules count = %d, want 49", len(rules))
+	}
+
+	var condCount, actCount, projCount int
+	for _, path := range rules {
+		assertDeclaredRulePredicates(t, path, &condCount, &actCount)
+	}
+	for _, flowPath := range []string{flowBootstrapPath, e2eFlowBootstrapPath} {
+		cfg := loadRuleProcessorOwnership(t, flowPath)
+		for _, c := range cfg.ProjectionContracts {
+			for _, g := range c.Groups {
+				for _, p := range g.Predicates {
+					projCount++
+					if err := vocabulary.RequireDeclaredPredicate(p); err != nil {
+						t.Errorf("%s contract %q group %q predicate %q: %v", flowPath, c.Name, g.Name, p, err)
+					}
+				}
+			}
+		}
+	}
+	if condCount == 0 || actCount == 0 || projCount == 0 {
+		t.Fatalf("expected non-zero checked surfaces, got cond=%d act=%d proj=%d", condCount, actCount, projCount)
+	}
+
+	for _, legacyPred := range unportedRulepacksOnlyPredicates {
+		if err := vocabulary.RequireDeclaredPredicate(legacyPred); err == nil {
+			t.Errorf("rulepacks-only predicate %q is unexpectedly registered without vocabulary/builtins or vocabulary/rulepacks", legacyPred)
+		}
+	}
+}
+
+var forbiddenLoggingAndVocabImports = []string{
+	"github.com/c360studio/semstreams/pkg/logging",
+	"github.com/c360studio/semstreams/vocabulary/builtins",
+	"github.com/c360studio/semstreams/vocabulary/rulepacks",
+}
+
+func scanForbiddenLoggingAndVocab(root string) ([]string, error) {
+	var violations []string
+	fset := token.NewFileSet()
+
+	walkErr := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			relDir, relErr := filepath.Rel(root, path)
+			if relErr == nil && filepath.ToSlash(relDir) == "scripts" {
+				return filepath.SkipDir
+			}
+			switch d.Name() {
+			case ".git", ".worktrees", "vendor", "node_modules", ".svelte-kit":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(d.Name(), ".go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		fileViolations, err := checkFileForbiddenLoggingAndVocab(fset, path, filepath.ToSlash(rel))
+		if err != nil {
+			return err
+		}
+		violations = append(violations, fileViolations...)
+		return nil
+	})
+	if walkErr != nil {
+		return nil, walkErr
+	}
+	sort.Strings(violations)
+	return violations, nil
+}
+
+func checkFileForbiddenLoggingAndVocab(fset *token.FileSet, absPath, rel string) ([]string, error) {
+	src, err := os.ReadFile(absPath) //nolint:gosec // test-controlled repository walk
+	if err != nil {
+		return nil, err
+	}
+	fileAST, err := parser.ParseFile(fset, absPath, src, 0)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", rel, err)
+	}
+
+	var violations []string
+	vocabAliases := map[string]bool{}
+	dotImportedVocab := false
+
+	for _, imp := range fileAST.Imports {
+		impPath, unquoteErr := strconv.Unquote(imp.Path.Value)
+		if unquoteErr != nil {
+			return nil, fmt.Errorf("unquote import in %s: %w", rel, unquoteErr)
+		}
+		line := fset.Position(imp.Pos()).Line
+		for _, forbidden := range forbiddenLoggingAndVocabImports {
+			if matchesImportPrefix(impPath, forbidden) {
+				violations = append(violations, fmt.Sprintf("%s:%d: forbidden import %q", rel, line, impPath))
+			}
+		}
+		if impPath == "github.com/c360studio/semstreams/vocabulary" || impPath == "github.com/c360studio/semengine/vocabulary" {
+			switch {
+			case imp.Name == nil:
+				vocabAliases["vocabulary"] = true
+			case imp.Name.Name == ".":
+				dotImportedVocab = true
+			case imp.Name.Name != "_":
+				vocabAliases[imp.Name.Name] = true
+			}
+		}
+	}
+
+	if len(vocabAliases) == 0 && !dotImportedVocab {
+		return violations, nil
+	}
+
+	ast.Inspect(fileAST, func(n ast.Node) bool {
+		switch expr := n.(type) {
+		case *ast.SelectorExpr:
+			pkgIdent, ok := expr.X.(*ast.Ident)
+			if ok && vocabAliases[pkgIdent.Name] && expr.Sel.Name == "RegisterPredicate" {
+				line := fset.Position(expr.Pos()).Line
+				violations = append(violations, fmt.Sprintf("%s:%d: forbidden %s.RegisterPredicate reference (use vocabulary.Register)", rel, line, pkgIdent.Name))
+			}
+		case *ast.Ident:
+			if dotImportedVocab && expr.Name == "RegisterPredicate" {
+				line := fset.Position(expr.Pos()).Line
+				violations = append(violations, fmt.Sprintf("%s:%d: forbidden dot-imported vocabulary.RegisterPredicate reference (use vocabulary.Register)", rel, line))
+			}
+		}
+		return true
+	})
+	return violations, nil
+}
+
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Product-owned registration boundary
+func TestUnportedLoggingAndVocabBuiltinsAbsent(t *testing.T) {
+	repoRoot, err := findRepoRoot()
+	if err != nil {
+		t.Fatalf("findRepoRoot: %v", err)
+	}
+
+	t.Run("live_repository_has_zero_forbidden_logging_or_vocab_aggregator_imports", func(t *testing.T) {
+		violations, scanErr := scanForbiddenLoggingAndVocab(repoRoot)
+		if scanErr != nil {
+			t.Fatalf("scan live repository: %v", scanErr)
+		}
+		if len(violations) > 0 {
+			t.Fatalf("unported logging / vocabulary boundary violations (%d):\n  %s",
+				len(violations), strings.Join(violations, "\n  "))
+		}
+	})
+
+	t.Run("sensitivity_catches_forbidden_imports_and_register_predicate", func(t *testing.T) {
+		fixture := t.TempDir()
+		writeLedgerFixtureFiles(t, fixture, map[string]string{
+			"cmd/semteams/bad.go": `package main
+import (
+	_ "github.com/c360studio/semstreams/pkg/logging"
+	_ "github.com/c360studio/semstreams/vocabulary/builtins"
+	_ "github.com/c360studio/semstreams/vocabulary/rulepacks"
+	v "github.com/c360studio/semstreams/vocabulary"
+)
+func register() { v.RegisterPredicate(v.PredicateMetadata{}) }
+`,
+			"cmd/semteams/clean.go": `package main
+import (
+	"github.com/c360studio/semstreams/vocabulary"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
+)
+func ok() {
+	agvocab.Register()
+	vocabulary.Register("research.artifact.path")
+}
+`,
+			"scripts/table.go": `package main
+const s = "github.com/c360studio/semstreams/pkg/logging"
+`,
+			".worktrees/other/ignored.go": `package p
+import _ "github.com/c360studio/semstreams/pkg/logging"
+`,
+		})
+		violations, scanErr := scanForbiddenLoggingAndVocab(fixture)
+		if scanErr != nil {
+			t.Fatalf("scan synthetic fixture: %v", scanErr)
+		}
+		if len(violations) != 4 {
+			t.Fatalf("expected 4 violations (3 forbidden imports + 1 RegisterPredicate), got %d: %v",
+				len(violations), violations)
+		}
+	})
 }
