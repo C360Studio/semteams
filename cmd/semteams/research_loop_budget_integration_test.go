@@ -15,9 +15,9 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 )
@@ -26,8 +26,10 @@ import (
 // owner over real NATS, with deterministic model/tool responses. The small
 // component ceiling narrows a pack task's larger budget. No real model, tool
 // executor, rule matcher, run lifecycle, or user delivery runs in this fixture.
+//
+// spec: openspec/specs/research-containment/spec.md#Requirement: Explicit live-pack loop ceilings
 func TestResearchLoopBudgetTerminalBoundary(t *testing.T) {
-	testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+	testNATS := natstest.New(t)
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 90*time.Second)
 	t.Cleanup(cancel)
 	cfg := loadLoopBoundaryConfig(t, "../../configs/flow-bootstrap.json", testNATS.URL)
@@ -179,6 +181,8 @@ func (e *blockingCronActionExecutor) Execute(_ context.Context, _ rulepkg.Action
 //     while an earlier fire is still executing (no stacked runs).
 //  2. A cron rule's Cooldown suppresses subsequent ticks within the cooldown
 //     window and persists last_fired_at in the RULE_SCHEDULES KV bucket.
+//
+// spec: openspec/specs/research-containment/spec.md#Requirement: Scheduled cron inflight, cooldown, and Pattern-B kill-switch containment
 func TestScheduledCronInflightAndCooldownContainment(t *testing.T) {
 	t.Run("inflight_skips_overlapping_ticks", func(t *testing.T) {
 		exec := &blockingCronActionExecutor{
@@ -233,7 +237,7 @@ func TestScheduledCronInflightAndCooldownContainment(t *testing.T) {
 	})
 
 	t.Run("cooldown_suppresses_subsequent_ticks_and_persists_last_fired", func(t *testing.T) {
-		testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+		testNATS := natstest.New(t)
 		ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 		defer cancel()
 		logger := quietLogger()
@@ -316,8 +320,10 @@ func TestScheduledCronInflightAndCooldownContainment(t *testing.T) {
 // hot-reloads into the running rule.Processor without process restart,
 // deregisters future cron ticks while allowing in-flight work triggered by an
 // earlier tick to complete undisturbed.
+//
+// spec: openspec/specs/research-containment/spec.md#Requirement: Scheduled cron inflight, cooldown, and Pattern-B kill-switch containment
 func TestScheduledCronPatternBKillSwitch(t *testing.T) {
-	testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+	testNATS := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	logger := quietLogger()

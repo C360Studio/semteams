@@ -13,9 +13,9 @@ import (
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/service"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +29,8 @@ import (
 //   - Completed loop entities in ENTITY_STATES carry agent.loop.tokens-in,
 //     agent.loop.tokens-out, agent.loop.model-used, and agent.loop.cost-usd
 //     matching (tokensIn*inPrice + tokensOut*outPrice)/1_000_000.
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestLoopCostStampingAcrossBootstraps(t *testing.T) {
 	type loopCase struct {
 		name         string
@@ -121,7 +123,7 @@ func TestLoopCostStampingAcrossBootstraps(t *testing.T) {
 
 	for _, b := range bootstraps {
 		t.Run(b.file, func(t *testing.T) {
-			testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+			testNATS := natstest.New(t)
 			ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 90*time.Second)
 			t.Cleanup(cancel)
 

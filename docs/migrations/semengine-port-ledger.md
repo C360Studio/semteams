@@ -36,19 +36,19 @@ go test ./test/contract/... -run TestSemEnginePortLedger
 
 The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is produced directly by `go run ./scripts/measure-semengine-port-ledger.go`.
 
-- At baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa`, **56** distinct `github.com/c360studio/semstreams/...` import paths appeared in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message`, `payloadregistry`, and `agentic` in AST imports). Trimming `internal/runtimecatalog` in `#399` pruned **21** Group 4 paths down to **35** active repository import paths below.
+- At baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa`, **56** distinct `github.com/c360studio/semstreams/...` import paths appeared in AST `import` declarations across repository `.go` files (`56` distinct non-test `.go` files and `72` distinct `_test.go` files; `scripts/measure-framework-footprint.go` also imports `message`, `payloadregistry`, and `agentic` in AST imports). Trimming `internal/runtimecatalog` in `#399` pruned **21** Group 4 paths down to **35** active repository import paths below, and `#400` replaced `natsclient.NewTestClient` / `TestClient` across 11 `_test.go` files with `internal/natstest` (`57` distinct non-test `.go` files and `71` distinct `_test.go` files).
 - **2** additional `github.com/c360studio/semstreams*` strings appear only as string literals inside `scripts/` (`github.com/c360studio/semstreams` module root and synthetic test fixture `github.com/c360studio/semstreams/agentic-extra`), reconciling the **56** baseline Go package imports with the **58** raw `git grep` path matches across the tree at baseline `6581898e6a2d6bd78d0d21f6099a1819f18f2aaa` (excluding synthetic fixture literals in `test/contract/semengine_port_ledger_test.go`).
 
 <!-- BEGIN GENERATED CROSSWALK -->
 ### Summary counts
 
 - Active repository `.go` import paths (excluding `scripts/`): **35** of **56** baseline paths (**21** pruned)
-- Distinct importing files: **56** non-test `.go`, **72** `_test.go`, **1** `scripts/*.go`
+- Distinct importing files: **57** non-test `.go`, **71** `_test.go`, **1** `scripts/*.go`
 - `scripts/` string-literal-only SemStreams paths: **2** (total string-matched paths across repo + `scripts/`: **37**)
 
 | Group | Baseline paths | Active paths | Pruned paths | Non-test file imports | `_test.go` file imports | `scripts/` imports |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 1. SemEngine main | 20 | 20 | 0 | 94 | 153 | 2 |
+| 1. SemEngine main | 20 | 20 | 0 | 95 | 143 | 2 |
 | 2. SemEngine setup-04a-06 | 2 | 2 | 0 | 3 | 15 | 0 |
 | 3. SemTeams Milestone 2 absorb | 11 | 11 | 0 | 68 | 71 | 1 |
 | 4. Milestone 1 drop/decouple | 23 | 2 | 21 | 2 | 0 | 0 |
@@ -65,7 +65,7 @@ The section between `BEGIN GENERATED CROSSWALK` and `END GENERATED CROSSWALK` is
 | `message` | 22 | 36 | 1 | `adapt` | `semengine/message` | ADR-110 | M2 (#404, #407): rewire imports; stream-lane statements require Source and Timestamp |
 | `metric` | 1 | 0 | 0 | `adapt` | `semengine/metric` | semengine#69 | M2 (#407): rewire cmd/semteams/main.go import; core metrics use semengine_ namespace |
 | `model` | 0 | 2 | 0 | `adapt` | `semengine/model` | semengine#155 | M2 (#404, #407): rewire test/runtime imports; track semengine#155 reader/endpoint refactor before pin |
-| `natsclient` | 12 | 14 | 0 | `adapt` | `semengine/natsclient` | ADR-110, ADR-112 | M1 (#400): replace NewTestClient/TestClient in 11 _test.go files with internal/natstest; M2 (#404, #407): use pkg/retry.Config and WaitConsumerHandlers |
+| `natsclient` | 13 | 4 | 0 | `adapt` | `semengine/natsclient` | ADR-110, ADR-112 | M1 (#400, done): NewTestClient/TestClient replaced by internal/natstest; M2 (#404, #407): rewire imports (incl. internal/natstest), use pkg/retry.Config and WaitConsumerHandlers |
 | `payloadregistry` | 6 | 7 | 1 | `adapt` | `semengine/payloadregistry` | semengine#219 | M2 (#404, #407): rewire imports; GetRegistration/IndexingProfileFor take pkg/types.Type where called |
 | `pkg/errs` | 6 | 6 | 0 | `adapt` | `semengine/pkg/errs` | ADR-112, semengine#146, semengine#167 | M2 (#404, #407): rewire imports; Classify defaults unknown errors to fatal and classifies by sentinel/type only |
 | `pkg/lifecycle` | 3 | 6 | 0 | `adapt` | `semengine/pkg/lifecycle` | ADR-110, ADR-111, semengine#24 | M2 (#404, #405, #407): rewire imports; bind lifecycle.Manager onto rule processor at host construction; align with semengine#24 |
@@ -164,7 +164,7 @@ Comparing SemTeams's Group 1 symbol and wire usage against `C360Studio/semengine
 | `graph` | `graph.ReconcilePredicatesResponse` (`KVRevision` JSON `kvRevision`) and `ReconcilePredicatesRequest` without `Source` | Renamed `graph.EntityMutationResponse` (`kv_revision`); `ReconcilePredicatesRequest` (`graph/mutation_requests.go:28-36`) requires non-empty `Source` matching every desired `message.Triple.Source`, and every desired `message.Triple` requires non-empty `Source` and non-zero `Timestamp` (ADR-110 Decision 5) | `cmd/semteams/approvalpause/projection.go:103,124` (`#407`) |
 | `natsclient` | `natsclient.RetryConfig`, `natsclient.DefaultRetryConfig()` | Moved to `pkg/retry.Config` and `retry.DefaultConfig()` | `cmd/semteams/tools/addsource/executor.go:55,183` (`#407`) |
 | `natsclient` | `natsclient.FilteredKeys(ctx, kv, pattern)` over `ListKeysFiltered` | Parameter interface uses `WatchFiltered(ctx, filter, ...WatchOpt)` (`jetstream.KeyValue` implements both; verify test doubles) | `cmd/semteams/tools/emitartifact/derivation.go:979` (`#407`) |
-| `natsclient` | `NewTestClient`, `TestClient`, `CreateKVBucket`, `WithJetStream`, `WithKV`, `WithNATSVersion` | Removed from `semengine/natsclient` | 11 `_test.go` files (`10` under `cmd/semteams/**` + `test/contract/autoresearch_reply_integration_test.go`) → local `internal/natstest` helper (`#400`) |
+| `natsclient` | `NewTestClient`, `TestClient`, `CreateKVBucket`, `WithJetStream`, `WithKV`, `WithNATSVersion` | Removed from `semengine/natsclient` | 11 `_test.go` files (`10` under `cmd/semteams/**` + `test/contract/autoresearch_reply_integration_test.go`) → migrated to local `internal/natstest` helper (`#400`, done; Milestone 2 swaps `internal/natstest`'s `natsclient` import path) |
 | `service` | `service.NewBaseServiceWithOptions(name, cfg, opts...)` | Drops unused `cfg *config.Config` parameter → `NewBaseServiceWithOptions(name, opts...)` | `cmd/semteams/rule_config_service.go:41` (`#407`) |
 | `service` | `ComponentManager.Initialize()` | Removed; `NewComponentManager` constructs components directly | `cmd/semteams/loop_runtime_integration_test.go:76`, `cmd/semteams/loop_cost_stamp_integration_test.go:153`, `cmd/semteams/model_runtime_integration_test.go:104` (`#407`) |
 | `service` | `service.MaybeStartPProf(debug, port)` | `service.MaybeStartPProf(debug, port, logger)` returning `*service.PProfServer` (`Shutdown(ctx)`) | `cmd/semteams/main.go:93` (`#407`) |

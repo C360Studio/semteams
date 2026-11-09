@@ -18,12 +18,12 @@ import (
 	"github.com/c360studio/semstreams/agentic/agentrun"
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/lifecycle"
 	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/processor/rule/expression"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 )
@@ -50,7 +50,7 @@ type replyHarness struct {
 	revision  uint64
 }
 
-func newReplyHarness(t *testing.T, tc *natsclient.TestClient, phase string) *replyHarness {
+func newReplyHarness(t *testing.T, tc *natstest.Broker, phase string) *replyHarness {
 	t.Helper()
 	bucket, err := tc.CreateKVBucket(t.Context(), fmt.Sprintf("%s_%d", strings.ReplaceAll(t.Name(), "/", "_"), time.Now().UnixNano()))
 	require.NoError(t, err)
@@ -194,8 +194,9 @@ func requireReplyTask(t *testing.T, h *replyHarness, source, kind, phase string)
 	require.Len(t, h.runs, 1)
 }
 
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Autoresearch returns use the run's authoritative origin
 func TestAutoresearchReplyNativeOrigin(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"), natsclient.WithJetStream())
+	tc := natstest.New(t)
 	t.Run("reviewer waits for successful run", func(t *testing.T) {
 		h := newReplyHarness(t, tc, "executing")
 		h.evaluate(t, replyRule(t, "08-reviewer-approved-to-coordinator.json"), replySource, 1, false)
@@ -227,8 +228,9 @@ func TestAutoresearchReplyNativeOrigin(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Autoresearch returns use the run's authoritative origin
 func TestAutoresearchReplyPhaseAndOriginGuards(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"), natsclient.WithJetStream())
+	tc := natstest.New(t)
 	for _, phase := range []string{"dispatched", "executing", "awaiting_approval", "completed", "failed", "cancelled"} {
 		t.Run(phase, func(t *testing.T) {
 			for _, tt := range []struct{ file, predicate, phase string }{
@@ -271,8 +273,9 @@ func TestAutoresearchReplyPhaseAndOriginGuards(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Autoresearch returns use the run's authoritative origin
 func TestAutoresearchReplyExistingRunMint(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"), natsclient.WithJetStream())
+	tc := natstest.New(t)
 	for _, phase := range []string{"completed", "failed", "awaiting_approval"} {
 		t.Run(phase, func(t *testing.T) {
 			h := newReplyHarness(t, tc, phase)
@@ -291,8 +294,9 @@ func TestAutoresearchReplyExistingRunMint(t *testing.T) {
 	})
 }
 
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Autoresearch returns use the run's authoritative origin
 func TestAutoresearchIterationCapAboveDefaultActionLimit(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"), natsclient.WithJetStream())
+	tc := natstest.New(t)
 	h := newReplyHarness(t, tc, "executing")
 	h.seed(replyRun, map[string]any{
 		"autoresearch.run.status": "active", "autoresearch.run.cap": 5, "autoresearch.iteration.pending": "initial",
@@ -319,8 +323,9 @@ func TestAutoresearchIterationCapAboveDefaultActionLimit(t *testing.T) {
 	require.Len(t, h.tasks, 6, "stopped driver stays stopped across stale completion/restart")
 }
 
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Autoresearch returns use the run's authoritative origin
 func TestAutoresearchReplySourceBoundaries(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"), natsclient.WithJetStream())
+	tc := natstest.New(t)
 	for _, tt := range []struct {
 		name, file, role, outcome, decision, predicate string
 		want                                           bool
@@ -363,8 +368,9 @@ func TestAutoresearchReplySourceBoundaries(t *testing.T) {
 	})
 }
 
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Autoresearch returns use the run's authoritative origin
 func TestAutoresearchReplyAmbiguousSourceAnchor(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"), natsclient.WithJetStream())
+	tc := natstest.New(t)
 	for _, tt := range []struct{ name, file, role, outcome, decision, anchor, predicate string }{
 		{"clarification", "10b-descended-needs-clarification-replan.json", "autoresearch-propose", "success", "needs_clarification", "agent.lineage.run-loop-entity-id", "clarification"},
 		{"baseline failure", "12-baseline-loop-failed-run-outcome.json", "autoresearch-baseline", "failed", "", "agent.run.entity-id", "failed"},
@@ -384,8 +390,9 @@ func TestAutoresearchReplyAmbiguousSourceAnchor(t *testing.T) {
 	}
 }
 
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Autoresearch returns use the run's authoritative origin
 func TestAutoresearchReplyAdmitsChildOfTerminalRun(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithNATSVersion("2.14.4"), natsclient.WithJetStream())
+	tc := natstest.New(t)
 	for _, tt := range []struct{ phase, file, predicate string }{
 		{"completed", "15-origin-approved-result-to-coordinator.json", "autoresearch.reply.approved"},
 		{"failed", "19-origin-failed-to-coordinator.json", "autoresearch.reply.failed"},

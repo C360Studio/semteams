@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/processor/rule/expression"
+	"github.com/c360studio/semteams/internal/natstest"
 )
 
 // observedRuleProcessor is a real rule processor whose ApplyConfigUpdate also
@@ -118,8 +119,10 @@ func nextApplied(t *testing.T, applied <-chan map[string]any) map[string]any {
 // (service) proves the walk it uses.
 //
 // upstream spec: semstreams component-runtime-config / Config Manager delivers a registered key family to its owner
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestRootRuleManagerHotReloadsIntoTheProcessor(t *testing.T) {
-	testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
+	testNATS := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))

@@ -17,9 +17,9 @@ import (
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
-	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 )
@@ -28,6 +28,8 @@ import (
 // mock bootstrap. This exercises product registration and public composition,
 // rather than constructing the upstream model directly. Response publication
 // remains at least once; this test does not assert delivery deduplication.
+//
+// spec: openspec/specs/runtime-composition/spec.md#Requirement: Configured model retry qualification
 func TestConfiguredModelRetryBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
@@ -39,7 +41,7 @@ func TestConfiguredModelRetryBoundary(t *testing.T) {
 		{"mock", "../../configs/e2e-flow-bootstrap.json", 1, agentic.StatusError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			testNATS := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV(), natsclient.WithNATSVersion("2.14.4-alpine"))
+			testNATS := natstest.New(t)
 			// Keep Start's authority alive until owner cleanup finishes, including
 			// assertion failures: testing.T.Context is canceled before cleanups.
 			ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 30*time.Second)

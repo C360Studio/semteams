@@ -1,0 +1,5 @@
+# Single content-addressed NATS image pin for SemTeams integration tests (owner ruling on #400;
+# matches C360Studio/semengine internal/harness/natsfixture/nats-image, NATS_SERVER=2.15.0).
+# internal/natstest embeds this file and refuses any reference without a @sha256:<64-hex> digest
+# before making any Docker call.
+nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4

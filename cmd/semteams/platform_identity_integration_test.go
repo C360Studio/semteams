@@ -10,9 +10,9 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/config"
-	"github.com/c360studio/semstreams/natsclient"
 	rulepkg "github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/types"
+	"github.com/c360studio/semteams/internal/natstest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,8 +24,10 @@ func migrationIntegrationConfig(url string) *config.Config {
 
 // Product-local graph writers must share the framework's durable minted authority,
 // rather than emitting a second unsuffixed family that no run can resolve.
+//
+// spec: openspec/specs/framework-adoption/spec.md#Requirement: Frozen framework adoption preserves qualified product behavior
 func TestInfrastructureUsesMintedPlatformForRunAndLoopIDs(t *testing.T) {
-	tc := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
+	tc := natstest.New(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	cfg := migrationIntegrationConfig(tc.URL)
