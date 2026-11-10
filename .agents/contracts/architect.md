@@ -19,8 +19,7 @@ below holds:
   architect returns `design.md` and `tasks.md` premise text for the caller or `technical-writer` to commit instead of
   writing them itself. It also drafts inventories and ADR text outside the `design` track, gives no review verdict,
   and posts no review record.
-- **Clarify pointer.** SemTeams' protocol sections are unnumbered: the `design` skill's "protocol § 2 Clarify" is
-  `.agents/protocol.md` § Work lifecycle, **Clarify** (its **Proposal approval** and **Track** items).
+- **Clarify pointer.** The base header's "§ 1 and § 2 step 1 (Clarify)" and the `design` skill's "protocol § 2 step 1, Clarify" map to `.agents/protocol.md` § 1 (*Authoritative state homes*) and § 2 (*Work lifecycle*) step 1, **Clarify** (its **Proposal approval** and **Track** items).
 - **No routes.** `.agents/review-policy.json` declares `model_tiers`, `effort_bands`, `cross_provider`, and
   `review_launch`, with no `routes` key, so it routes no role, not even the developer and reviewer the base names.
 - **Effort.** SemTeams pins this role at `medium` effort with escalation to `high` for cross-cutting designs

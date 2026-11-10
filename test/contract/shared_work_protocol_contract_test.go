@@ -52,14 +52,17 @@ var (
 	ateamCanonicalSkills = []string{"design", "handoff", "pickup", "ponytail", "preflight", "review-pr"}
 )
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestAgentSetupParity(t *testing.T) {
 	requireNoAgentSetupViolations(t, "agent setup parity", agentSetupViolations("../.."))
 }
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestSharedWorkProtocolParity(t *testing.T) {
 	TestAgentSetupParity(t)
 }
 
+// spec: openspec/specs/repository-governance/spec.md#Requirement: Repository CI runs the obvious repository checks
 func TestAgentSetupParitySensitivity(t *testing.T) {
 	base := copyAgentSetupFixture(t, "../..")
 	edit := func(rel string, fn func(string) string) map[string]string {
@@ -141,6 +144,21 @@ func TestAgentSetupParitySensitivity(t *testing.T) {
 		{"codex effort mismatch", edit(".codex/agents/go-developer.toml", func(s string) string {
 			return strings.Replace(s, `model_reasoning_effort = "medium"`, `model_reasoning_effort = "high"`, 1)
 		}), []string{".codex/agents/go-developer.toml", "model_reasoning_effort", "medium"}},
+		{"contract mandates full protocol read", edit(".agents/contracts/developer.md", func(s string) string {
+			return "Read AGENTS.md and .agents/protocol.md fully.\n" + s
+		}), []string{".agents/contracts/developer.md", "full read"}},
+		{"skill references dangling numbered protocol section", edit(".agents/skills/pickup/SKILL.md", func(s string) string {
+			return strings.Replace(s, "read § 1", "read § 9", 1)
+		}), []string{".agents/skills/pickup/SKILL.md", "dangling § 9"}},
+		{"protocol missing numbered heading", edit(".agents/protocol.md", func(s string) string {
+			return strings.Replace(s, "## 4. Cross-agent review and known flakes", "## Cross-agent review and known flakes", 1)
+		}), []string{".agents/contracts/developer.md", "dangling § 4"}},
+		{"protocol missing Test-to-spec attribution heading", edit(".agents/protocol.md", func(s string) string {
+			return strings.Replace(s, "## Test-to-spec attribution", "### Test attribution", 1)
+		}), []string{".agents/contracts/developer.md", "dangling *Test-to-spec attribution*"}},
+		{"skill references absent Unattended and fan-out runs section", edit(".agents/skills/handoff/SKILL.md", func(s string) string {
+			return strings.Replace(s, "step 5 (Close).", "step 5 (Close); also read § 4 *Unattended and fan-out runs*.", 1)
+		}), []string{".agents/skills/handoff/SKILL.md", "dangling *Unattended and fan-out runs*"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := writeAgentSetupTree(t, tc.files)
@@ -210,6 +228,12 @@ func copyAgentSetupFixture(t *testing.T, root string) map[string]string {
 			".codex/agents/"+r.name+".toml",
 		)
 	}
+	for _, name := range ateamCanonicalSkills {
+		rels = append(rels,
+			".agents/skills/"+name+"/SKILL.md",
+			".claude/skills/"+name+"/SKILL.md",
+		)
+	}
 	for _, s := range discoverSkills(root) {
 		rels = append(rels,
 			".agents/skills/"+s.canonical+"/SKILL.md",
@@ -235,6 +259,72 @@ func agentSetupViolations(root string) []string {
 		out = append(out, checkCodexRoleAdapter(root, role)...)
 	}
 	out = append(out, checkSkillAdapters(root)...)
+	out = append(out, checkTaskScopedProtocolReads(root)...)
+	return out
+}
+
+var (
+	protocolPointerRe     = regexp.MustCompile(`(skill )?§ (\d+)`)
+	sentenceEndRe         = regexp.MustCompile(`[.;:]\s|\n`)
+	fullReadRe            = regexp.MustCompile(`(?i)\bread\b.*\b(first|fully)\b`)
+	namedProtocolHeadings = []string{"Test-to-spec attribution", "Unattended and fan-out runs"}
+)
+
+// readingViolations ports ateam v0.4.0's internal/bootstrap/reading_test.go check:
+// skills and contracts point at protocol sections instead of mandating a full read,
+// and every numbered (§ N) or named (*Section*) pointer into .agents/protocol.md resolves.
+func readingViolations(protocol, doc string) []string {
+	var out []string
+	for _, sentence := range sentenceEndRe.Split(doc, -1) {
+		if fullReadRe.MatchString(sentence) && strings.Contains(sentence, "protocol.md") && !strings.Contains(sentence, "§") {
+			out = append(out, "full read: "+strings.TrimSpace(sentence))
+		}
+	}
+	for _, m := range protocolPointerRe.FindAllStringSubmatch(doc, -1) {
+		if m[1] != "" {
+			continue // a skill's own section, e.g. "review-pr skill § 5"
+		}
+		if !strings.Contains(protocol, "\n## "+m[2]+". ") {
+			out = append(out, "dangling § "+m[2])
+		}
+	}
+	for _, name := range namedProtocolHeadings {
+		if strings.Contains(doc, "*"+name+"*") && !regexp.MustCompile(`(?m)^#+ `+regexp.QuoteMeta(name)+`$`).MatchString(protocol) {
+			out = append(out, "dangling *"+name+"*")
+		}
+	}
+	return out
+}
+
+func checkTaskScopedProtocolReads(root string) []string {
+	protocolBytes, err := os.ReadFile(filepath.Join(root, ".agents", "protocol.md"))
+	if err != nil {
+		return nil // missing .agents/protocol.md is already reported by checkRequiredAgentFiles
+	}
+	protocol := string(protocolBytes)
+	rels := []string{
+		".agents/contracts/developer.md",
+		".agents/contracts/reviewer.md",
+	}
+	for _, r := range agentRoleSpecs {
+		rels = append(rels, ".agents/contracts/"+r.name+".md")
+	}
+	for _, name := range ateamCanonicalSkills {
+		rels = append(rels, ".agents/skills/"+name+"/SKILL.md")
+	}
+	for _, s := range discoverSkills(root) {
+		rels = append(rels, ".agents/skills/"+s.canonical+"/SKILL.md")
+	}
+	var out []string
+	for _, rel := range rels {
+		doc, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+		if err != nil {
+			continue
+		}
+		for _, v := range readingViolations(protocol, string(doc)) {
+			out = append(out, fmt.Sprintf("%s: %s", rel, v))
+		}
+	}
 	return out
 }
 

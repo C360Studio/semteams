@@ -1,6 +1,6 @@
 # Adopt ATeam v0.4.0: `.agents/ateam.json` pin, digest-bound approval, and standing-pass probe
 
-Approved-by: Coby Leuschke (2026-11-10) sha256:df10fd8c42f8
+Approved-by: Coby Leuschke (2026-11-10) sha256:abe0ea81009d
 
 Track: design. This change edits gate workflows (`.github/workflows/ci.yml` and `.github/workflows/merge-check.yml`).
 
@@ -12,7 +12,7 @@ Track: design. This change edits gate workflows (`.github/workflows/ci.yml` and 
 
 - Add `.agents/ateam.json` (`{"version": 1, "ateam_version": "v0.4.0"}`) and bump `ateam@v0.3.9` → `ateam@v0.4.0` in `Taskfile.yml`, `scripts/doctor.sh`, `.github/workflows/ci.yml`, `.github/workflows/merge-check.yml`, `test/contract/workflow_gate_test.go`, `.agents/rules-index.md`, and `openspec/specs/repository-governance/spec.md`.
 - Grant `checks: read` to the `awaiting` probe job in `.github/workflows/merge-check.yml` and enforce it in `TestMergeCheckWorkflow` (`test/contract/workflow_gate_test.go`) so `ateam review gate --awaiting` can inspect whether a passing `Merge check` stands at `HEAD` (`C360Studio/ateam#359`).
-- Sync `.agents/contracts/{architect,developer,reviewer}.md` base headers, `.agents/skills/{design,handoff,pickup,ponytail,preflight,review-pr}/SKILL.md`, `.claude/skills/*/SKILL.md`, and `.agents/protocol.md` to `ateam v0.4.0`.
+- Sync `.agents/contracts/{architect,developer,reviewer}.md` base headers, `.agents/skills/{design,handoff,pickup,ponytail,preflight,review-pr}/SKILL.md` (plus `.agents/skills/handoff/t3-card.html`), and `.agents/protocol.md` to `ateam v0.4.0`.
 
 ## Non-goals
 

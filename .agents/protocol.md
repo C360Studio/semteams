@@ -19,7 +19,7 @@ SemTeams routes design and implementation through its project roles: `architect`
 conservative OpenSpec task truth. Role contracts, `.agents/review-policy.json`, and per-platform model routing live in
 [`.agents/README.md`](README.md).
 
-## Authoritative state homes
+## 1. Authoritative state homes
 
 | Question | Home | Rule |
 |---|---|---|
@@ -35,15 +35,7 @@ conservative OpenSpec task truth. Role contracts, `.agents/review-policy.json`, 
 OpenSpec changes are contract deltas or approval-gated proposals, not backlogs: a change either carries spec deltas or
 is proposal-only (Work lifecycle, Clarify). Sequencing, discovery, holds, and future work belong in GitHub issues.
 
-New and changed tests cite a spec Requirement: every Go or Vitest test a pull request adds or changes carries
-`// spec: openspec/specs/<capability>/spec.md#Requirement: <name>` (or `//aip:verifies <scenario-id>`) in the comment
-attached to it. `task test:spec` (`ateam test-spec --base`,
-[C360Studio/ateam#237](https://github.com/C360Studio/ateam/issues/237)) checks it in the Governance job of
-`Repository CI` against the pull request base, and in `task validate` against `origin/main`. Uncited legacy tests the
-diff does not touch are not reported; a malformed or dangling citation fails wherever it is. A citation of an in-flight
-change's spec moves to `openspec/specs/` in the archive commit (owner ruling on #386, lifting the #374 deferral).
-
-## Bounded port and extraction scope
+### Bounded port and extraction scope
 
 When extracting agent-runtime packages from the frozen SemStreams pin (`8b99efe9c66a4faa4fa509f9f62cc6bad8392128`) or
 adopting SemEngine contracts under ADR-061, a change implements the admitted surface and its accepted contract. A
@@ -54,92 +46,118 @@ alone (inherited duplication, naming, indirection) is optional: it cannot veto a
 and scheduling it needs an explicit owner decision. This never excuses a broken contract, a newly introduced defect, a
 rewired parked pack, or an unproved composition-root invariant.
 
-## Work lifecycle
+## 2. Work lifecycle
 
 - **Start:** `ateam state pickup` · `gh issue list --state open` · `gh pr list` (drafts are claims; skip them) ·
   `task spec:queue` · `gh run list --branch main --limit 3` · `gh issue list --label status:needs-decision`.
-- **Clarify:** before claiming work, mutating state, or spawning role subagents, read any named issue, PR, or file so
-  you never ask a question the repository already answers, then verify four boundaries are clear:
-  1. **Deliverable** (answer/audit, issue, OpenSpec design, docs-only PR, or code/UI PR),
-  2. **Scope and non-goals** (in-bounds packages/files and what must not change),
-  3. **Definition of Done and verification** (observable completion criteria and `task` gates), and
-  4. **Stop boundary** (pause after inventory/design for an owner decision vs. run through to a ready PR).
-  When a prompt leaves any of the four ambiguous, stop first, propose a concise 3–4 bullet recommended Definition of
-  Done the owner can approve or adjust in one reply, and ask at most 1–3 targeted questions; once set, run autonomously
-  to that stop boundary without pausing on routine steps.
-  - **Proposal approval** (owner ruling on #374): for non-trivial work the default Stop boundary is proposal approval:
-    a one-page OpenSpec `proposal.md` (≤ 60 lines; detail goes in `tasks.md` or `design.md`; `task spec:check` warns
-    past it) with an empty `Approved-by:` line, and a first task carrying `Hold: OPEN-Q proposal awaits owner approval`
-    until the owner fills `Approved-by: <name> (<YYYY-MM-DD>) sha256:<12 hex>` (the digest `task spec:queue` prints;
-    `ateam state spec-check` fails if `proposal.md` or `design.md` changes after approval) and removes the hold in the
-    same edit; the line may link the issue comment where the owner ruled. The agent stops at the hold and hands off.
-    Non-trivial work that changes
-    no Requirement carries a proposal-only change (`proposal.md` and `tasks.md`, no `specs/`) whose `.openspec.yaml`
-    sets `skip_specs: true`, as ATeam's own proposal-only changes do; `openspec validate --strict` rejects a change
-    with no delta otherwise.
-  - **Track:** a non-trivial change also declares its track: `design` when it adds a spec Requirement, touches more
-    than one capability under `openspec/specs/`, adds exported surface reachable from an adopting repository, or
-    touches a boot path, durability/ack behavior, or a gate file, otherwise `quick` with no `design.md`. On `design`,
-    the [design](skills/design/SKILL.md) skill drafts `design.md` in OpenSpec's `spec-driven` sections (≤ 120 lines;
-    `task spec:check` warns past it), and the one approval hold covers `proposal.md` and `design.md`. SemTeams runs no
-    `Gate files` check (#372); a gate file here is one that decides whether a pull request may merge or how its
-    reviewer is launched: `.agents/review-policy.json`, `.agents/hosts/`, `scripts/merge-check.sh`, and
-    `.github/workflows/`.
-- **Take work:** an unclaimed issue → a dedicated worktree on an agent-prefixed branch (`claude/<topic>`,
-  `codex/<topic>`, `gemini/<topic>`; the prefix names who claimed it) → push → draft PR with `Closes #n` (or
-  `Addresses #n` for an epic) → then implementation. One claimed PR owns one worktree. When multiple agents share a
-  host, the primary checkout is discovery-only and no agent commits from it. Verify the worktree path and branch before
-  every edit, commit, push, or PR mutation; a mismatch stops the operation. When pausing or transferring across
-  sessions, run `ateam state handoff` (see [handoff](skills/handoff/SKILL.md)).
-- **Worktree hygiene:** for standalone CLI sessions, the claim's worktree lives at a durable sibling path
-  (`git worktree add ../semteams-wt/<branch> -b <branch> origin/main`), never under `/private/tmp`. For Enjoy desktop
-  sessions, `move_to_worktree` creates and reuses the branch's worktree under `.worktrees/<branch>` inside the
-  repository root (ignored in `.gitignore` alongside `.ateam/` and `.enjoy-logs/`); run all commands and file edits
-  inside the path `move_to_worktree` returns. Pushed claim branches update by merging `origin/main`, never by rebase or
-  force-push: a review record names the commit SHA it read. Heavy local gates (`task test:integration`,
-  `task ui:test:e2e`, `task validate`) run one agent at a time on a shared host.
-- **Prove tests can fail:** state the correct behavior and one plausible wrong behavior, and compute expected outcomes
-  from an independent oracle, never by repeating production logic. Show non-trivial logic able to fail without a git
-  command that discards state: `task mutate:check -- -pkg <pkg> -test <Test> -file <file.go> -mutant <copy> -expect
-  <file_test.go:N>` (`ateam mutate`: `go test -overlay` against a mutant kept outside the repository; prefix
-  `GOFLAGS=-tags=integration` for an integration-tagged test), or `cp` + `shasum -a 256` before and after for Vitest
-  and anything `-overlay` cannot reach. Report `detection`, `survivor`, `invalid`, or `inconclusive`.
-- **File:** a defect in code in this repository that the active change does not fix is always filed as a GitHub issue,
-  whether the code was carried, extracted, or written here. Check for an existing issue first (`gh issue list --search`).
-  When the defect's code exists only on a pull request's branch, the issue is labelled `status:blocked` with that pull
-  request named as its blocker, and the pull request body links it without a closing keyword
-  (`Follow-up after this pull request merges: #n`). A defect in a sister repository is reported to its owner, not fixed
-  here.
+1. **Clarify:** before claiming work, mutating state, or spawning role subagents, read any named issue, PR, or file so
+   you never ask a question the repository already answers, then verify four boundaries are clear:
+   1. **Deliverable** (answer/audit, issue, OpenSpec design, docs-only PR, or code/UI PR),
+   2. **Scope and non-goals** (in-bounds packages/files and what must not change),
+   3. **Definition of Done and verification** (observable completion criteria and `task` gates), and
+   4. **Stop boundary** (pause after inventory/design for an owner decision vs. run through to a ready PR).
+   When a prompt leaves any of the four ambiguous, stop first, propose a concise 3–4 bullet recommended Definition of
+   Done the owner can approve or adjust in one reply, and ask at most 1–3 targeted questions; once set, run autonomously
+   to that stop boundary without pausing on routine steps.
+   - **Proposal approval** (owner ruling on #374): for non-trivial work the default Stop boundary is proposal approval:
+     a one-page OpenSpec `proposal.md` (≤ 60 lines; detail goes in `tasks.md` or `design.md`; `task spec:check` warns
+     past it) with an empty `Approved-by:` line, and a first task carrying `Hold: OPEN-Q proposal awaits owner approval`
+     until the owner fills `Approved-by: <name> (<YYYY-MM-DD>) sha256:<12 hex>` (the digest `task spec:queue` prints;
+     `ateam state spec-check` fails if `proposal.md` or `design.md` changes after approval) and removes the hold in the
+     same edit; the line may link the issue comment where the owner ruled. The agent stops at the hold and hands off.
+     Non-trivial work that changes no Requirement carries a proposal-only change (`proposal.md` and `tasks.md`, no
+     `specs/`) whose `.openspec.yaml` sets `skip_specs: true`, as ATeam's own proposal-only changes do;
+     `openspec validate --strict` rejects a change with no delta otherwise.
+   - **Track:** a non-trivial change also declares its track: `design` when it adds a spec Requirement, touches more
+     than one capability under `openspec/specs/`, adds exported surface reachable from an adopting repository, or
+     touches a boot path, durability/ack behavior, or a gate file, otherwise `quick` with no `design.md`. On `design`,
+     the [design](skills/design/SKILL.md) skill drafts `design.md` in OpenSpec's `spec-driven` sections (≤ 120 lines;
+     `task spec:check` warns past it), and the one approval hold covers `proposal.md` and `design.md`. SemTeams runs no
+     `Gate files` check (#372); a gate file here is one that decides whether a pull request may merge or how its
+     reviewer is launched: `.agents/review-policy.json`, `.agents/hosts/`, `scripts/merge-check.sh`, and
+     `.github/workflows/`.
+2. **Claim (Take work & Worktree hygiene):**
+   - **Take work:** an unclaimed issue → a dedicated worktree on an agent-prefixed branch (`claude/<topic>`,
+     `codex/<topic>`, `gemini/<topic>`; the prefix names who claimed it) → push → draft PR with `Closes #n` (or
+     `Addresses #n` for an epic) → then implementation. One claimed PR owns one worktree. When multiple agents share a
+     host, the primary checkout is discovery-only and no agent commits from it. Verify the worktree path and branch
+     before every edit, commit, push, or PR mutation; a mismatch stops the operation. When pausing or transferring
+     across sessions, run `ateam state handoff` (see [handoff](skills/handoff/SKILL.md)).
+   - **Worktree hygiene:** for standalone CLI sessions, the claim's worktree lives at a durable sibling path
+     (`git worktree add ../semteams-wt/<branch> -b <branch> origin/main`), never under `/private/tmp`. For Enjoy desktop
+     sessions, `move_to_worktree` creates and reuses the branch's worktree under `.worktrees/<branch>` inside the
+     repository root (ignored in `.gitignore` alongside `.ateam/` and `.enjoy-logs/`); run all commands and file edits
+     inside the path `move_to_worktree` returns. Pushed claim branches update by merging `origin/main`, never by rebase
+     or force-push: a review record names the commit SHA it read. Heavy local gates (`task test:integration`,
+     `task ui:test:e2e`, `task validate`) run one agent at a time on a shared host.
+3. **File:** a defect in code in this repository that the active change does not fix is always filed as a GitHub issue,
+   whether the code was carried, extracted, or written here. Check for an existing issue first (`gh issue list --search`).
+   When the defect's code exists only on a pull request's branch, the issue is labelled `status:blocked` with that pull
+   request named as its blocker, and the pull request body links it without a closing keyword
+   (`Follow-up after this pull request merges: #n`). A defect in a sister repository is reported to its owner, not fixed
+   here.
 
-  Route every other finding before opening an issue. A residual (a cost of a decision this change made deliberately)
-  belongs in a doc comment at the line or in the change's `design.md`. An unmeasured cost becomes a *Declared cost*
-  section in the design. Only an architectural finding (it crosses files, would need its evidence re-collected, or
-  changes what someone should not do next) becomes an issue. Developer notes on choices a task made that its design does
-  not spell out go in `openspec/changes/<id>/notes/<task>.md`, linked from a one-line PR comment; they archive with the
-  change.
-- **Land:** implementation review (`go-reviewer` for Go/packs, `svelte-reviewer` for `ui/`, or both for cross-stack,
-  and another agent's reviewer on code/UI pull requests: "Cross-agent review" below) → fixes and re-review → archive
-  (`openspec archive <id>`, moving the change into `openspec/changes/archive/` + spec sync) as the final content commit
-  → narrow reviewer check of the archive/spec sync (any agent's reviewer) → undraft → `task validate`,
-  `task merge:check -- <pr>`, `Required`, and `Merge check` green on a head up to date with `main` and with **no
-  known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (no skipped
-  check-run carries the name `Required` or `Merge check`), so undrafting starts the first run that checks it. On a non-draft code/UI PR,
-  `Merge check` (its own workflow, `merge-check.yml`) is skipped (under a name that is never `Merge check`) while
-  the PR has no `reviewed-by:` line in its description and no passing `Merge check` already stands at its head, so the
-  required context is absent and the merge stays blocked; once the line exists or a pass stands at the head it runs in
-  full and is red until both the approving record and the line exist. The
-  reviewer's description edit that adds `reviewed-by:` reruns it on the `edited` event, as
-  [review-pr](skills/review-pr/SKILL.md) § 5 says (never update the branch). That red is expected, not a flake, and it
-  never turns `Required` red. A correction after archive re-enters reconciliation and final review. State
-  `implemented-by: <agent> (<model>, <effort>)` in the PR body naming the implementing model family (`claude`, `codex`,
-  or `gemini`), resolved model, and reasoning effort (`implemented-by: gemini (gemini-4-argon, high)`), and
-  `reviewed-by: <agent> (<model>, <effort>)` once the reviewing agent's newest record approves. Never write unresolved
-  `inherit` in `implemented-by:` or `reviewed-by:`.
-  Once the squash merge has landed, the agent that claimed the branch removes its worktree (`git worktree remove
-  ../semteams-wt/<branch>` on the CLI, `.worktrees/<branch>` in Enjoy) and deletes the remote branch; a review checkout
-  is removed once its review record is posted. `ateam state pickup` labels every merged or PR-less worktree; a
-  finished worktree older than a day is the claimer's to explain or remove. Never remove a worktree you do not own,
-  and never one that is dirty or unpushed.
+   Route every other finding before opening an issue. A residual (a cost of a decision this change made deliberately)
+   belongs in a doc comment at the line or in the change's `design.md`. An unmeasured cost becomes a *Declared cost*
+   section in the design. Only an architectural finding (it crosses files, would need its evidence re-collected, or
+   changes what someone should not do next) becomes an issue. Developer notes on choices a task made that its design does
+   not spell out go in `openspec/changes/<id>/notes/<task>.md`, linked from a one-line PR comment; they archive with the
+   change.
+4. **Verify (Prove tests can fail):** state the correct behavior and one plausible wrong behavior, and compute expected
+   outcomes from an independent oracle, never by repeating production logic. Show non-trivial logic able to fail without
+   a git command that discards state: `task mutate:check -- -pkg <pkg> -test <Test> -file <file.go> -mutant <copy>
+   -expect <file_test.go:N>` (`ateam mutate`: `go test -overlay` against a mutant kept outside the repository; prefix
+   `GOFLAGS=-tags=integration` for an integration-tagged test), or `cp` + `shasum -a 256` before and after for Vitest
+   and anything `-overlay` cannot reach. Report `detection`, `survivor`, `invalid`, or `inconclusive`.
+5. **Close (Handoff or Land):**
+   - **Land:** implementation review (`go-reviewer` for Go/packs, `svelte-reviewer` for `ui/`, or both for cross-stack,
+     and another agent's reviewer on code/UI pull requests: "Cross-agent review" in § 4 below) → fixes and re-review →
+     archive (`openspec archive <id>`, moving the change into `openspec/changes/archive/` + spec sync) as the final
+     content commit → narrow reviewer check of the archive/spec sync (any agent's reviewer) → undraft → `task validate`,
+     `task merge:check -- <pr>`, `Required`, and `Merge check` green on a head up to date with `main` and with **no
+     known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (no skipped
+     check-run carries the name `Required` or `Merge check`), so undrafting starts the first run that checks it. On a
+     non-draft code/UI PR, `Merge check` (its own workflow, `merge-check.yml`) is skipped (under a name that is never
+     `Merge check`) while the PR has no `reviewed-by:` line in its description and no passing `Merge check` already
+     stands at its head, so the required context is absent and the merge stays blocked; once the line exists or a pass
+     stands at the head it runs in full and is red until both the approving record and the line exist. The reviewer's
+     description edit that adds `reviewed-by:` reruns it on the `edited` event, as
+     [review-pr](skills/review-pr/SKILL.md) § 5 says (never update the branch). That red is expected, not a flake, and it
+     never turns `Required` red. A correction after archive re-enters reconciliation and final review. State
+     `implemented-by: <agent> (<model>, <effort>)` in the PR body naming the implementing model family (`claude`, `codex`,
+     or `gemini`), resolved model, and reasoning effort (`implemented-by: gemini (gemini-4-argon, high)`), and
+     `reviewed-by: <agent> (<model>, <effort>)` once the reviewing agent's newest record approves. Never write unresolved
+     `inherit` in `implemented-by:` or `reviewed-by:`.
+     Once the squash merge has landed, the agent that claimed the branch removes its worktree (`git worktree remove
+     ../semteams-wt/<branch>` on the CLI, `.worktrees/<branch>` in Enjoy) and deletes the remote branch; a review checkout
+     is removed once its review record is posted. `ateam state pickup` labels every merged or PR-less worktree; a
+     finished worktree older than a day is the claimer's to explain or remove. Never remove a worktree you do not own,
+     and never one that is dirty or unpushed.
+   - **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` on the issue itself or the squash merge of
+     an approved PR that declared `Closes #n`. A PR that only `Addresses` an epic closes nothing. Approval of adjacent
+     work never widens into a close.
+
+## 3. Verification and CI baseline
+
+`.github/workflows/ci.yml` runs the Go, UI, and Governance/OpenSpec jobs for every non-draft pull request and push to
+`main`; all three feed the stable `Required` aggregate check-run. `.github/workflows/merge-check.yml` runs `Merge check`
+(`ateam review gate` from the base commit) as a second required check; the `main` ruleset requires both. Locally,
+`task validate` (`scripts/validate.sh`, alias `task verify`) mirrors all three lanes (including `task ateam:doctor`) in
+read-only mode without mutating tracked or untracked worktree files. Gate selection per diff and evidence recording live in [preflight](skills/preflight/SKILL.md).
+Publication is tag-only through `.github/workflows/publish.yml`; see [`docs/release.md`](../docs/release.md).
+
+## Test-to-spec attribution
+
+New and changed tests cite a spec Requirement: every Go or Vitest test a pull request adds or changes carries
+`// spec: openspec/specs/<capability>/spec.md#Requirement: <name>` (or `//aip:verifies <scenario-id>`) in the comment
+attached to it. `task test:spec` (`ateam test-spec --base`,
+[C360Studio/ateam#237](https://github.com/C360Studio/ateam/issues/237)) checks it in the Governance job of
+`Repository CI` against the pull request base, and in `task validate` against `origin/main`. Uncited legacy tests the
+diff does not touch are not reported; a malformed or dangling citation fails wherever it is. A citation of an in-flight
+change's spec moves to `openspec/specs/` in the archive commit (owner ruling on #386, lifting the #374 deferral).
+
+## 4. Cross-agent review and known flakes
+
 - **Cross-agent review:** on a code/UI pull request the implementation review, and the re-review of a fix that changes
   code or UI, are done by an agent that wrote none of the commits under review, enforced by `task merge:check -- <pr>`
   (`scripts/merge-check.sh` → `ateam review gate`) against `.agents/review-policy.json` (`cross_provider: true`,
@@ -184,15 +202,3 @@ rewired parked pack, or an unproved composition-root invariant.
   explain by your diff is filed before the next push. An open `class:flake` the PR does not close fails `Merge check`,
   not `Required`. A fresh green over an open `class:flake` in a required job is rerun-to-green, not a fix: fix the flake
   in a PR that closes the `class:flake` issue and shows the reproduction (command and failure rate before and after). A flake that comes back reopens its issue.
-- **Close:** no issue closes without the owner's explicit `CONFIRM-CLOSE` on the issue itself or the squash merge of an
-  approved PR that declared `Closes #n`. A PR that only `Addresses` an epic closes nothing. Approval of adjacent work
-  never widens into a close.
-
-## Verification and CI baseline
-
-`.github/workflows/ci.yml` runs the Go, UI, and Governance/OpenSpec jobs for every non-draft pull request and push to
-`main`; all three feed the stable `Required` aggregate check-run. `.github/workflows/merge-check.yml` runs `Merge check`
-(`ateam review gate` from the base commit) as a second required check; the `main` ruleset requires both. Locally,
-`task validate` (`scripts/validate.sh`, alias `task verify`) mirrors all three lanes (including `task ateam:doctor`) in
-read-only mode without mutating tracked or untracked worktree files. Gate selection per diff and evidence recording live in [preflight](skills/preflight/SKILL.md).
-Publication is tag-only through `.github/workflows/publish.yml`; see [`docs/release.md`](../docs/release.md).
