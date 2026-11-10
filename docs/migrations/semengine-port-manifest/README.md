@@ -161,23 +161,31 @@ All 21 absorbed units land under `internal/` so `github.com/c360studio/semteams`
    - In `internal/agentic/milestone/milestone_health_test.go` (from `service/milestone_health_test.go:42`), replace the intra-package `manager.handleSystemHealth` call with public `Service.Health()` and `/health` HTTP handler assertions.
 2. **Replacing `graph/llm` in `internal/agentic/loop` (`semengine#32`, `#484`):**
    - `semengine` excludes `graph/llm` at Tier 0. Rebind `LLMSummarizer` in `internal/agentic/loop/{component.go,summarizer.go}` onto `internal/agentic/modelwire.NewClient` + `semengine/model.NewHTTPClient` (the exact zero-`go-openai` pattern already proven in `processor/agentic-dispatch/intent_classifier.go:106-135`).
-3. **Graph mutation client seam (`semengine#69`, `#137`, ADR-110):**
-   - `semengine/internal/graphmutation` is module-private and registers `InterfaceType = "semengine.graph.mutation"` (`SubjectFamily = "graph.mutation.>"`).
+3. **Graph mutation client seam & port contract (`semengine#69`, `#137`, ADR-110, `v0.1.0-alpha.3`):**
+   - `semengine/internal/graphmutation` is module-private (`internal/graphmutation/port.go:27-35`) and classifies any port on `SubjectFamily = "graph.mutation.>"` as a graph-mutation port, refusing component validation unless `InterfaceType == "semengine.graph.mutation"` (`InterfaceVersion == "v1"`, `Required == true`).
    - Add `internal/agentic/graphmutation/client.go` (~90 LOC) exposing `MutationPortDef(name, description string)` (`Interface: "semengine.graph.mutation"`) and single-attempt `CreateEntity` / `AppendTriples` over `natsclient.RequestClassified` + `semengine/graph.{CreateEntityRequest,AppendTriplesRequest,EntityMutationResponse}` (`KVRevision` JSON `kv_revision`), enforcing non-empty ADR-110 `Source` and non-zero `Timestamp` on every `message.Triple`.
+   - In `#407`, update `"semstreams.graph.mutation"` to `"semengine.graph.mutation"` on `graph-ingest` (`inputs`) and `rule-processor` (`outputs`) in `configs/flow-bootstrap.json` and `configs/e2e-flow-bootstrap.json`, and replace `graph-query`'s `"query_timeout": 30000000000` + `"max_depth": 5` with `"query_timeout_ms": 30000` (`processor/graph-query/config.go:19-25` strict unknown-field refusal).
 4. **`publish_agent` rule action family (`semengine#25`–`#28`, `#405`) & durability (`semengine#24`):**
    - Once `setup-04a-06` pins, `internal/agentic/rulefamily` registers the `publish_agent` action executor/validator onto `semengine/processor/rule`'s `E1`–`E4` extension seam, reusing `internal/agentic` `TaskMessage` + `DispatchEnforcedMetadataKeys`.
    - `internal/agentic/loop` consumes `semengine/pkg/lifecycle` durability contracts delivered by `semengine#24` without inventing a competing SemTeams-local generic execution journal.
 5. **Absorbed `_test.go` helper rewires (`#404`, `#406`):**
    - `payloadbuiltins` (42 test files) -> `internal/runtimecatalog.RegisterPayloads`
    - `vocabulary/builtins` (3 test files) -> `internal/agentic/vocab.Register()`
-   - `natsclient.NewTestClient` / `TestClient` -> `internal/natstest` (landed in `#400`)
+   - `natsclient.NewTestClient` / `TestClient` -> `internal/natstest` (landed in `#400`, validated by `semengine#568`)
    - `processor/gated-dag` (`entity_ids_semantics_test.go`) -> inline string constant
    - `internal/semantictest` (`loop/graph_writer_test.go`) -> inline 6-part `EntityID` / 3-part `Predicate` helper
+6. **`semengine/vocabulary` symbol trims (`semengine#90`, `#234`) & `C360Studio/semvocab` boundary (`#404`):**
+   - `semengine/vocabulary/standards.go` keeps `ProvNamespace` (`"http://www.w3.org/ns/prov#"`), `ProvWasAttributedTo`, `ProvHadMember`, and `ProvGeneratedAtTime`, and drops `ProvWasDerivedFrom` (`semengine#90`). In `internal/agentic/vocab/{register.go:109,agentic_test.go:207,670}`, define `const provWasDerivedFrom = vocabulary.ProvNamespace + "wasDerivedFrom"` (W3C `prov:wasDerivedFrom`).
+   - `semengine/vocabulary` drops `PredicateRole`, `WithRole`, `RoleIdentity`, and `PredicateMetadata.Role` (retaining `InverseOf` and `Weight`). In `internal/agentic/tools/executors/{graph_query.go:581,graph_query_signal_test.go:255,280}`, drop `meta.Role` / `WithRole`.
+   - `github.com/c360studio/semvocab` is **not** added to `go.mod` in Milestone 2 (`0` `bfo`/`cco`/`fusion` imports in SemTeams or the 21 absorbed units); `internal/agentic/vocab` is absorbed 1:1 from `8b99efe9c66a` for the substrate cutover, while post-cutover vocabulary convergence across `semteams` and `semsource` (replacing unverified `https://w3id.org/agent-ontology/*` IRIs with W3C `PROV-O` / `SKOS` / `DCTERMS` + `semvocab`'s BFO 2020 + CCO v2.2 catalogs and a declared C360-local pack per `C360Studio/semvocab#33`, `semengine#350`, and `semvocab#24`) is tracked as a post-cutover follow-up.
 
-### D4 — Trimmed SemTeams `/graphql` and `TrajectoryPage` gateway contract (`#406`)
+### D4 — Trimmed SemTeams `/graphql` and `TrajectoryPage` gateway contract (`#406` & `semengine#567`)
 
 `internal/gateway/graphgateway` replaces the 292 KB frozen `gateway/graph-gateway` with a narrow product gateway tailored to SemTeams's UI and E2E contract:
 
+- **Reconciliation with upstream `C360Studio/semengine#567` (`v0.1.0-alpha.3` follow-up):** Upstream opened `semengine#567` on `2026-11-09` proposing to re-admit a trimmed `gateway/graph-gateway` into `semengine` (`entity`, `entitiesByPrefix`, `entitiesByPredicate`, `traverse`, `trajectory`, and `pathSearch`). When Milestone 2 opens:
+  - **Path A:** If `semengine#567` has landed in `semengine` with all 4 SemTeams queries below (including `trajectory` / `agentic.TrajectoryPage` decoding), wire `semengine/gateway/graph-gateway` in `internal/runtimecatalog` rather than carrying a duplicate local package.
+  - **Path B:** If `semengine#567` remains open or excludes `agentic_queries` / `trajectory` per ADR-061 layer-1 neutrality, execute this `internal/gateway/graphgateway` blueprint directly.
 - **HTTP & reverse-proxy contract:** Preserves factory/component name `"graph-gateway"` and `graphql_path: "/graphql"` mounted via `RegisterHTTPHandlers(prefix string, mux *http.ServeMux)` (`POST /graphql`, `GET /graphql` Playground disabled unless configured), keeping `ui/Caddyfile.dev:52-53` and `ui/Caddyfile.e2e:62-63` (`rewrite /graph-gateway/graphql`) unchanged.
 - **NATS port contract & strict bootstrap cleanup:** Declares exactly 2 NATS request-reply output ports:
   - `graph_queries` -> `graph.query.*`
