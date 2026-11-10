@@ -7,7 +7,7 @@ description: >-
 
 # Verify Changes (Preflight)
 
-Read [the shared protocol](../../protocol.md) first. One `Taskfile.yml` entrypoint serves local verification, MCP (`ateam_task`), and CI. This skill selects existing checks and records evidence; it grants no merge, tag, or cleanup authority.
+From [the shared protocol](../../protocol.md), read § 2 step 4 (Verify), § 3 and *Test-to-spec attribution*. One `Taskfile.yml` entrypoint serves local verification, MCP (`ateam_task`), and CI. This skill selects existing checks and records evidence; it grants no merge, tag, or cleanup authority.
 
 ## 1. Establish the Diff and Select Gates by Scope
 

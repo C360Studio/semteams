@@ -7,7 +7,7 @@ vars:
   # survives reboots, is shared by every linked worktree, and never collides with
   # a sister repo pinning another release in $(go env GOPATH)/bin or ~/.local/bin.
   # Hooks, MCP, and Taskfile targets reach it through scripts/ateam.
-  ATEAM_VERSION: v0.3.9
+  ATEAM_VERSION: v0.4.0
   ATEAM_BIN_DIR:
     sh: echo "$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.tools/bin"
   ATEAM: "{{.ATEAM_BIN_DIR}}/ateam"

@@ -16,7 +16,7 @@ import (
 // below has a sensitivity row that mutates the real workflow text and expects the violation.
 
 const (
-	ateamPin = "v0.3.9"
+	ateamPin = "v0.4.0"
 	// The job guard in ci.yml: push events run, draft pull requests skip.
 	ciDraftGuard = "github.event_name != 'pull_request' || !github.event.pull_request.draft"
 	// merge-check.yml has only pull_request events, so its guard is upstream's shorter form.
@@ -128,11 +128,12 @@ func mergeCheckWorkflowViolations(data []byte) []string {
 		bad("has %d jobs, want only awaiting and merge-check", len(wf.Jobs))
 	}
 	readOnly := map[string]string{"contents": "read", "issues": "read", "pull-requests": "read"}
+	probeReadOnly := map[string]string{"contents": "read", "issues": "read", "pull-requests": "read", "checks": "read"}
 	install := `GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@` + ateamPin
 	// Both jobs run ateam from the base commit's checkout with the pinned release, never the tree they judge.
-	baseJob := func(id string, job gateJob) {
-		if !mapsEqual(job.Permissions, readOnly) {
-			bad("%s permissions are %v, want read-only %v", id, job.Permissions, readOnly)
+	baseJob := func(id string, job gateJob, wantPerms map[string]string) {
+		if !mapsEqual(job.Permissions, wantPerms) {
+			bad("%s permissions are %v, want read-only %v", id, job.Permissions, wantPerms)
 		}
 		if len(job.Steps) == 0 || !strings.HasPrefix(job.Steps[0].Uses, "actions/checkout@") {
 			bad("%s does not start with a checkout", id)
@@ -159,7 +160,7 @@ func mergeCheckWorkflowViolations(data []byte) []string {
 		if probe.If != mergeCheckDraftGuard {
 			bad("awaiting if is %q, want the draft guard %q", probe.If, mergeCheckDraftGuard)
 		}
-		baseJob("awaiting", probe)
+		baseJob("awaiting", probe, probeReadOnly)
 		if !slices.ContainsFunc(probe.Steps, func(s gateStep) bool { return s.ID == "probe" && strings.TrimSpace(s.Run) == probeRun }) {
 			bad("awaiting has no step with id probe that runs %q", probeRun)
 		}
@@ -182,7 +183,7 @@ func mergeCheckWorkflowViolations(data []byte) []string {
 	if job.If != mergeCheckGuard {
 		bad("merge-check if is %q, want the draft and awaiting guard %q", job.If, mergeCheckGuard)
 	}
-	baseJob("merge-check", job)
+	baseJob("merge-check", job, readOnly)
 	var gate *gateStep
 	for i := range job.Steps {
 		if strings.TrimSpace(job.Steps[i].Run) == `scripts/merge-check.sh "$PR_NUMBER"` {
@@ -360,7 +361,8 @@ func TestMergeCheckWorkflow(t *testing.T) {
 		{"probe checks out the head", probeCheckout, strings.Replace(probeCheckout, "base.sha", "head.sha", 1), []string{"awaiting checkout ref"}},
 		{"probe checkout dropped", probeCheckout, "    steps:\n", []string{"awaiting does not start with a checkout"}},
 		{"probe persists credentials", probeCheckout, strings.Replace(probeCheckout, "persist-credentials: false", "persist-credentials: true", 1), []string{"awaiting checkout persist-credentials"}},
-		{"probe permission writes", "      pull-requests: read\n    outputs:", "      pull-requests: write\n    outputs:", []string{"awaiting permissions"}},
+		{"probe permission writes", "      pull-requests: read\n      # The head's Merge check check run (ateam #359).\n      checks: read\n    outputs:", "      pull-requests: write\n      # The head's Merge check check run (ateam #359).\n      checks: read\n    outputs:", []string{"awaiting permissions"}},
+		{"probe checks scope dropped", "      # The head's Merge check check run (ateam #359).\n      checks: read\n", "", []string{"awaiting permissions"}},
 		{"probe ateam pin drifts", "ateam@" + ateamPin + "\n\n      - name: Is the pull request", "ateam@v0.3.4\n\n      - name: Is the pull request", []string{"awaiting has no step"}},
 		{"probe does not ask --awaiting", `review gate --awaiting "$PR_NUMBER"`, `review gate "$PR_NUMBER"`, []string{"id probe"}},
 		{"probe output unwired", "awaiting: ${{ steps.probe.outputs.awaiting }}", "awaiting: ${{ steps.probe.outputs.result }}", []string{"awaiting output"}},

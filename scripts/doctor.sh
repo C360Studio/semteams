@@ -59,7 +59,7 @@ if command -v openspec >/dev/null; then
   if [ "$have_openspec" = "$want_openspec" ]; then ok openspec "$have_openspec"; else bad openspec "${have_openspec:-unknown} != $want_openspec"; fi
 else bad openspec "not found (npm install --global @fission-ai/openspec@1.7.0)"; fi
 
-# ateam: pinned in Taskfile.yml and .github/workflows/ci.yml (v0.3.9).
+# ateam: pinned in Taskfile.yml, .agents/ateam.json, and .github/workflows/ci.yml (v0.4.0).
 main_root="$PWD"
 if [ -f "$PWD/.git" ]; then
   read -r gitdir <"$PWD/.git"
@@ -70,7 +70,7 @@ for tools_bin in "$PWD/.tools/bin" "$main_root/.tools/bin"; do
   [ -d "$tools_bin" ] && PATH="$tools_bin:$PATH"
 done
 if command -v ateam >/dev/null; then
-  want_ateam="v0.3.9"
+  want_ateam="v0.4.0"
   have_ateam=$(ateam version 2>&1 | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
   if [ "$have_ateam" = "$want_ateam" ]; then ok ateam "$have_ateam"; else bad ateam "${have_ateam:-unknown} != $want_ateam (run 'task tools:ateam')"; fi
 else bad ateam "not found (run 'task tools:ateam')"; fi
