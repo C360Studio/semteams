@@ -1,6 +1,6 @@
 # Adopt ATeam v0.4.0: `.agents/ateam.json` pin, digest-bound approval, and standing-pass probe
 
-Approved-by: Coby Leuschke (2026-11-10)
+Approved-by: Coby Leuschke (2026-11-10) sha256:df10fd8c42f8
 
 Track: design. This change edits gate workflows (`.github/workflows/ci.yml` and `.github/workflows/merge-check.yml`).
 

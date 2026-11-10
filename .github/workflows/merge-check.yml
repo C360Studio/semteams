@@ -21,10 +21,10 @@ permissions:
   contents: read
 
 jobs:
-  # The awaiting probe (ateam #262): reads the pull request through the API, as the merge check does, and answers
-  # awaiting=true only for a code pull request with no reviewed-by: line and no review record comment. It reads the forge
-  # when it runs, so a rerun sees the description and records of that moment. Upstream builds ateam from the base
-  # commit; we install the pinned release, as the merge-check job does.
+  # The awaiting probe (ateam #262, #359): reads the pull request through the API, as the merge check does, and answers
+  # awaiting=true only for a code pull request with no reviewed-by: line and no successful Merge check already at its
+  # head, the one pass a skip could leave standing. It reads the forge when it runs, so a rerun sees that moment.
+  # Upstream builds ateam from the base commit; we install the pinned release, as the merge-check job does.
   awaiting:
     name: Merge check probe
     if: ${{ !github.event.pull_request.draft }}
@@ -34,6 +34,8 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
+      # The head's Merge check check run (ateam #359).
+      checks: read
     outputs:
       awaiting: ${{ steps.probe.outputs.awaiting }}
     steps:
@@ -52,7 +54,7 @@ jobs:
       - name: Install pinned ateam
         env:
           GOTOOLCHAIN: auto
-        run: GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@v0.3.9
+        run: GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@v0.4.0
 
       - name: Is the pull request awaiting its review record
         id: probe
@@ -69,9 +71,9 @@ jobs:
   # Up-to-date rule, review check and known-flake check (scripts/merge-check.sh). Skipped and renamed on a draft, so a
   # draft head carries no check run named Merge check for GitHub to count as passing (ateam #250).
   merge-check:
-    # Also skipped and renamed while the probe finds a code pull request with no reviewed-by: line and no review record
-    # (ateam #262): it is not yet judgeable, so the required context stays absent instead of failing, and the merge stays
-    # blocked. A failed probe leaves no answer, so the full check runs.
+    # Also skipped and renamed while the probe finds a code pull request with no reviewed-by: line and no passing Merge
+    # check at its head (ateam #262, #359): it is not yet judgeable, so the required context stays absent instead of
+    # failing, and the merge stays blocked. A failed probe leaves no answer, so the full check runs.
     needs: awaiting
     name: ${{ github.event.pull_request.draft && 'Merge check (draft, skipped)' || needs.awaiting.outputs.awaiting == 'true' && 'Merge check (awaiting review record, skipped)' || 'Merge check' }}
     if: ${{ always() && !github.event.pull_request.draft && needs.awaiting.outputs.awaiting != 'true' }}
@@ -99,7 +101,7 @@ jobs:
       - name: Install pinned ateam
         env:
           GOTOOLCHAIN: auto
-        run: GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@v0.3.9
+        run: GOBIN="$RUNNER_TEMP" go install github.com/c360studio/ateam/cmd/ateam@v0.4.0
 
       # Exit 1 is a rule failure, exit 2 means a forge read was unavailable; the gate's log names which.
       - name: Check the up-to-date rule, the review and its strength, and known flakes

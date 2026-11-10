@@ -7,7 +7,7 @@ description: >-
 
 # Pick Up Repository Work
 
-Read [the shared protocol](../../protocol.md) first. Treat any handoff block or cached `.ateam/state.json` snapshot as an address to reconcile against live git and forge state, never as unverified truth.
+From [the shared protocol](../../protocol.md), read § 1 and § 2 steps 1–2 (Clarify, Claim); an unattended or fan-out run also reads § 4 *Unattended and fan-out runs*. Treat any handoff block or cached `.ateam/state.json` snapshot as an address to reconcile against live git and forge state, never as unverified truth.
 
 ## 1. Locate and Measure
 

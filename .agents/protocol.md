@@ -70,8 +70,10 @@ rewired parked pack, or an unproved composition-root invariant.
   - **Proposal approval** (owner ruling on #374): for non-trivial work the default Stop boundary is proposal approval:
     a one-page OpenSpec `proposal.md` (≤ 60 lines; detail goes in `tasks.md` or `design.md`; `task spec:check` warns
     past it) with an empty `Approved-by:` line, and a first task carrying `Hold: OPEN-Q proposal awaits owner approval`
-    until the owner fills `Approved-by: <name> (<YYYY-MM-DD>)` and removes the hold in the same edit; the line may link
-    the issue comment where the owner ruled. The agent stops at the hold and hands off. Non-trivial work that changes
+    until the owner fills `Approved-by: <name> (<YYYY-MM-DD>) sha256:<12 hex>` (the digest `task spec:queue` prints;
+    `ateam state spec-check` fails if `proposal.md` or `design.md` changes after approval) and removes the hold in the
+    same edit; the line may link the issue comment where the owner ruled. The agent stops at the hold and hands off.
+    Non-trivial work that changes
     no Requirement carries a proposal-only change (`proposal.md` and `tasks.md`, no `specs/`) whose `.openspec.yaml`
     sets `skip_specs: true`, as ATeam's own proposal-only changes do; `openspec validate --strict` rejects a change
     with no delta otherwise.
@@ -123,8 +125,9 @@ rewired parked pack, or an unproved composition-root invariant.
   known flake open** → squash merge. A draft PR skips every `Repository CI` job and `Merge check` (no skipped
   check-run carries the name `Required` or `Merge check`), so undrafting starts the first run that checks it. On a non-draft code/UI PR,
   `Merge check` (its own workflow, `merge-check.yml`) is skipped (under a name that is never `Merge check`) while
-  the PR has no review record and no `reviewed-by:` line, so the required context is absent and the merge stays
-  blocked; once either exists it runs in full and is red until both the approving record and the line exist. The
+  the PR has no `reviewed-by:` line in its description and no passing `Merge check` already stands at its head, so the
+  required context is absent and the merge stays blocked; once the line exists or a pass stands at the head it runs in
+  full and is red until both the approving record and the line exist. The
   reviewer's description edit that adds `reviewed-by:` reruns it on the `edited` event, as
   [review-pr](skills/review-pr/SKILL.md) § 5 says (never update the branch). That red is expected, not a flake, and it
   never turns `Required` red. A correction after archive re-enters reconciliation and final review. State
