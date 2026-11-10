@@ -61,13 +61,13 @@ The repository SHALL run separate Go, UI, and governance jobs using repository c
 - AND it runs `task openspec:validate`, which runs `openspec validate --all --strict` and then `ateam state spec-check`, so a missing `openspec` fails rather than skips
 - AND it runs `task test:spec` against the pull request base, or the previous `main` commit on a push (`ateam test-spec --base`)
 - AND it runs `task publish:verify-test`, which proves the publication evidence gate fails closed
-- AND ATeam is v0.3.9, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
+- AND ATeam is v0.4.0, OpenSpec is 1.7.0, Task is 3.51.1, revive is 1.15.0, and Node is 22.20.0
 - AND setup-go reads the Go version from `go.mod`
 - AND official GitHub Actions use reviewed major-version tags rather than floating `latest` or a repository SHA policy
 
 #### Scenario: Local hooks and MCP resolve the repository-pinned ATeam install
 
-- GIVEN a primary checkout or linked `.worktrees/` checkout where `task tools:ateam` installed ATeam v0.3.9 into `<main-checkout>/.tools/bin/ateam`
+- GIVEN a primary checkout or linked `.worktrees/` checkout where `task tools:ateam` installed ATeam v0.4.0 into `<main-checkout>/.tools/bin/ateam`
 - WHEN `scripts/ateam` is invoked by an agent hook or MCP server registration
 - THEN it executes `<main-checkout>/.tools/bin/ateam` before any worktree-local `.tools/bin/ateam` or global `PATH` binary without forking `git`
 - AND when no `.tools/bin/ateam` or `PATH` binary exists it exits 127 naming `task tools:ateam`
@@ -177,7 +177,7 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 - GIVEN a non-draft pull request targets `main`
 - WHEN `Merge check` runs
 - THEN it checks out the base commit, not the pull request head, without persisted credentials
-- AND it installs ATeam v0.3.9 and runs `scripts/merge-check.sh` with the pull request number and
+- AND it installs ATeam v0.4.0 and runs `scripts/merge-check.sh` with the pull request number and
   `ATEAM_REQUIRED_CHECKS: Required,Merge check`
 - AND its token permissions are read-only for contents, issues, and pull requests
 - AND the workflow file itself is read from the pull request, so a change to it is caught by review only
@@ -219,11 +219,11 @@ both `Required` and `Merge check`, and `Required` SHALL NOT depend on `Merge che
 
 #### Scenario: A code pull request awaiting its review record carries no Merge check
 
-- GIVEN a non-draft code pull request with no `reviewed-by:` line in its description and no review record comment
+- GIVEN a non-draft code pull request with no `reviewed-by:` line in its description and no passing `Merge check` at its head
 - WHEN `merge-check.yml` runs
-- THEN the `Merge check probe` job, which runs ATeam from the base commit, answers `awaiting=true`
+- THEN the `Merge check probe` job, which runs ATeam from the base commit with read-only `contents`, `issues`, `pull-requests`, and `checks` permissions, answers `awaiting=true`
 - AND the `Merge check` job is skipped, so no check-run named `Merge check` exists and the merge stays blocked
-- AND a failed probe gives no answer and the full `Merge check` runs (ATeam v0.3.5, `C360Studio/ateam#262`)
+- AND a failed probe gives no answer and the full `Merge check` runs (ATeam v0.3.5 / v0.4.0, `C360Studio/ateam#262`, `#359`)
 
 ### Requirement: New and changed tests cite a spec Requirement
 
